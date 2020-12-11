@@ -1,54 +1,60 @@
 openapi: "3.0.0"
 info:
-  title: Video Transcoder
+  title: LBRY Video Transcoder
   version: "0.0.1"
+servers:
+  - url: https://api.example.com/api/v1
 
 paths:
-  /api/v1/tasks/{sd_hash}:
-    post:
-      summary: Create a transcoding task
-      responses:
-        "200":
-          description: transcoding task created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TranscodingTask"
-        "400":
-          description: parameter error
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TranscodingTask"
+  /video/{type}/{url}/{sdHash}:
     get:
-      summary: Get transcoding task details
+      summary: Get a video stream
       responses:
         "200":
-          description: transcoding task found
+          description: transcoded stream found and can be delivered
+          content:
+            application/x-mpegURL: {}
+        "202":
+          description: transcoding is underway
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TranscodingTask"
+                $ref: "#/components/schemas/TranscodingProgress"
+        "403":
+          description: transcoded stream was not found but will not be queued for processing
         "404":
-          description: transcoding task for this SD hash does not exist
-    parameters:
-      - name: sd_hash
+          description: stream not found
+      parameters:
+      - name: sdHash
         in: path
         required: true
         schema:
           type: string
           format: byte
           maxLength: 97
-  /api/v1/resources/pubkey.pem:
-    get:
-      summary: Retrieve a public key for this transcoder
-      responses:
-        "200":
-          description: returns a public key in a PEM format
-          content:
-            application/x-pem-file: {}
+      - name: url
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+           - dash
+           - hls
+           - range
+      - name: touch
+        in: query
+        required: false
+        description: >
+          if present in the query, will only return http/transcoding status,
+          omitting video data even if present
+        schema:
+          type: boolean
+          default: false
 
 components:
   schemas:
@@ -56,6 +62,19 @@ components:
       description: LBRY content URL
       type: string
       pattern: ^lbry://.+
+    TranscodingProgress:
+      type: object
+      properties:
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        speed:
+          type: number
+          minimum: 0
+        started:
+          type: string
+          format: date-time
     TranscodingTask:
       type: object
       required:
@@ -68,12 +87,8 @@ components:
           type: string
           format: byte
           maxLength: 41
-        signed_channel_address:
-          type: string
-          format: byte
-          description: |
-            Signed channel address should be a channel address signed by channel's key owner.
-            Transcoder will validate this signature against channel's public key to prevent unauthorized requests.
+        progress:
+         $ref: "#/components/schemas/TranscodingProgress"
         encoding_parameters:
           nullable: true
           type: object
@@ -94,7 +109,11 @@ components:
             - abandoned
             - encoding
             - done
-        progress:
-          type: integer
-          minimum: 0
-          maximum: 100
+        signed_channel_address:
+          type: string
+          format: byte
+          description: |
+            Signed channel address should be a channel address signed
+            by channel's key owner.
+            Transcoder will validate this signature against channel's public key 
+            to prevent unauthorized requests.

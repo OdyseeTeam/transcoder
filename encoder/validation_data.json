@@ -1,0 +1,112 @@
+{
+  "dataVersion" : 1.1000000000000001,
+  "independentSegments" : false,
+  "parsedSegmentsCount" : 4,
+  "hasDiscSequenceTag" : false,
+  "discontinuities" : [
+    {
+      "segments" : [
+        {
+          "mediaSequence" : 0,
+          "segmentDurationTag" : 6,
+          "hasSampleAuxInfo" : true,
+          "mimeType" : "application\/octet-stream",
+          "dataID" : 1,
+          "url" : "fileSequence.m4s",
+          "segmentByteRangeLength" : 1151886,
+          "videoStartsWithIDR" : true,
+          "segmentByteRangeOffset" : 1338,
+          "format" : "fragmentedMP4",
+          "videoFrameRate" : 28,
+          "startTime" : 0,
+          "discontinuityDomain" : 0
+        },
+        {
+          "mediaSequence" : 1,
+          "segmentDurationTag" : 6,
+          "hasSampleAuxInfo" : true,
+          "mimeType" : "application\/octet-stream",
+          "dataID" : 3,
+          "url" : "fileSequence.m4s",
+          "segmentByteRangeLength" : 1120573,
+          "videoStartsWithIDR" : true,
+          "segmentByteRangeOffset" : 1153224,
+          "format" : "fragmentedMP4",
+          "videoFrameRate" : 28,
+          "startTime" : 6,
+          "discontinuityDomain" : 0
+        },
+        {
+          "mediaSequence" : 2,
+          "segmentDurationTag" : 6,
+          "hasSampleAuxInfo" : true,
+          "mimeType" : "application\/octet-stream",
+          "dataID" : 4,
+          "url" : "fileSequence.m4s",
+          "segmentByteRangeLength" : 1207769,
+          "videoStartsWithIDR" : true,
+          "segmentByteRangeOffset" : 2273797,
+          "format" : "fragmentedMP4",
+          "videoFrameRate" : 28,
+          "startTime" : 12,
+          "discontinuityDomain" : 0
+        },
+        {
+          "mediaSequence" : 3,
+          "segmentDurationTag" : 5.1071429999999998,
+          "hasSampleAuxInfo" : true,
+          "mimeType" : "application\/octet-stream",
+          "dataID" : 5,
+          "url" : "fileSequence.m4s",
+          "segmentByteRangeLength" : 1107451,
+          "videoStartsWithIDR" : true,
+          "segmentByteRangeOffset" : 3481566,
+          "format" : "fragmentedMP4",
+          "videoFrameRate" : 28.000000000000004,
+          "startTime" : 18,
+          "discontinuityDomain" : 0
+        }
+      ],
+      "measurements" : {
+        "measuredMaxBitrate" : 1734748.3710559898,
+        "measuredMeanBitrate" : 1588315.4399485907,
+        "measuredSegments" : 4
+      },
+      "tracks" : [
+        {
+          "trackVideoIDRStandardDeviation" : 0,
+          "trackId" : 1,
+          "trackVideoWidth" : 480,
+          "trackVideoLevel" : 31,
+          "trackVideoHeight" : 848,
+          "trackMediaType" : "vide",
+          "trackVideoIDRInterval" : 2,
+          "trackVideoIsInterlaced" : false,
+          "trackVideoProfile" : 100,
+          "trackMediaSubType" : "avc1"
+        },
+        {
+          "trackMediaType" : "soun",
+          "trackAudioChannelCount" : 2,
+          "trackId" : 2,
+          "trackAudioSampleRate" : 44100,
+          "trackMediaSubType" : "aac ",
+          "trackAudioChannelLayout" : "Stereo (L R)"
+        }
+      ]
+    }
+  ],
+  "mimeType" : "audio\/mpegurl",
+  "measuredMaxBitrate" : 1734748,
+  "url" : "prog_index_single.m3u8",
+  "gzipEncoded" : false,
+  "playlistKind" : "media",
+  "validatorTimestamp" : "2020-10-22T13:37:09.587+07:00",
+  "validatorVersion" : "1.6 (479.24-200619)",
+  "dataID" : 0,
+  "processedSegmentsCount" : 4,
+  "playlistTargetDuration" : 6,
+  "hasEndTag" : true,
+  "playlistType" : "VOD",
+  "measuredMeanBitrate" : 1588315
+}
