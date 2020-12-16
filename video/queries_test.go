@@ -1,68 +1,81 @@
 package video
 
 import (
-	"context"
 	"database/sql"
-	"os"
+	"math/rand"
 	"testing"
+	"time"
 
+	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/formats"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-var testDB *sql.DB
+var testDB *db.DB
 
 func ns(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-func TestMain(m *testing.M) {
-	testDB = OpenDB()
-
-	code := m.Run()
-
-	dbCleanup()
-	os.Exit(code)
+type LibrarySuite struct {
+	suite.Suite
+	db *db.DB
 }
 
-func TestVideoAdd(t *testing.T) {
-	v := New(testDB)
+func TestLibrarySuite(t *testing.T) {
+	suite.Run(t, new(LibrarySuite))
+}
+
+func (s *LibrarySuite) SetupSuite() {
+	rand.Seed(time.Now().UTC().UnixNano())
+}
+
+func (s *LibrarySuite) SetupTest() {
+	s.db = db.OpenTestDB()
+	s.db.MigrateUp(InitialMigration)
+}
+
+func (s *LibrarySuite) TearDownTest() {
+	s.db.Cleanup()
+}
+
+func (s *LibrarySuite) TestVideoAdd() {
+	lib := NewLibrary(s.db)
 	params := AddParams{
 		URL:    "what",
 		SDHash: "string",
 		Type:   formats.TypeHLS,
 		Path:   "/tmp/test",
 	}
-	video, err := v.Add(context.Background(), params)
-	require.NoError(t, err)
-	assert.Equal(t, params.URL, video.URL)
-	assert.EqualValues(t, params.SDHash, video.SDHash)
-	assert.EqualValues(t, params.Type, video.Type)
-	assert.EqualValues(t, params.Path, video.Path)
+	video, err := lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	s.Require().NoError(err)
+	s.Equal(params.URL, video.URL)
+	s.EqualValues(params.SDHash, video.SDHash)
+	s.EqualValues(params.Type, video.Type)
+	s.EqualValues(params.Path, video.Path)
 
-	video, err = v.Add(context.Background(), params)
-	require.Error(t, err, "UNIQUE constraint failed")
+	video, err = lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	s.Require().Error(err, "UNIQUE constraint failed")
 }
 
-func TestVideoGet(t *testing.T) {
-	v := New(testDB)
+func (s *LibrarySuite) TestVideoGet() {
+	lib := NewLibrary(s.db)
 	params := AddParams{
 		URL:    "what",
 		SDHash: "string",
 		Type:   formats.TypeHLS,
 		Path:   "/tmp/test",
 	}
-	video, err := v.Get(context.Background(), params.SDHash)
-	assert.Error(t, err, sql.ErrNoRows)
-	assert.Nil(t, video)
+	video, err := lib.Get(params.SDHash)
+	s.Error(err, sql.ErrNoRows)
+	s.Nil(video)
 
-	_, err = v.Add(context.Background(), params)
-	require.NoError(t, err)
+	_, err = lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	s.Require().NoError(err)
 
-	video, err = v.Get(context.Background(), params.SDHash)
-	assert.EqualValues(t, params.URL, video.URL)
-	assert.EqualValues(t, params.SDHash, video.SDHash)
-	assert.EqualValues(t, params.Type, video.Type)
-	assert.EqualValues(t, params.Path, video.Path)
+	video, err = lib.Get(params.SDHash)
+	s.EqualValues(params.URL, video.URL)
+	s.EqualValues(params.SDHash, video.SDHash)
+	s.EqualValues(params.Type, video.Type)
+	s.EqualValues(params.Path, video.Path)
 }

@@ -28,6 +28,7 @@ func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
 		ProgressEnabled: true,
 		// Verbose:         true,
 	}
+	ll := logger.With("in", in)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -55,7 +56,7 @@ func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
 		return nil, err
 	}
 
-	logger.Debugw("encoding start", "args", strings.Join(args.GetStrArguments(), " "))
+	ll.Debugw("encoding started", "args", strings.Join(args.GetStrArguments(), " "))
 
 	return ffmpeg.New(ffmpegConf).
 		Input(in).

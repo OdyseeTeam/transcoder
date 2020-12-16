@@ -2,9 +2,11 @@ package queue
 
 import (
 	"context"
+	"time"
 
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/pkg/worker"
 	_ "github.com/mattn/go-sqlite3" // sqlite
 	"go.uber.org/zap"
 )
@@ -50,4 +52,14 @@ func (q Queue) Reject(id uint32) error {
 
 func (q Queue) Complete(id uint32) error {
 	return q.queries.updateStatus(context.Background(), id, StatusCompleted)
+}
+
+func (q *Queue) StartPoller() *Poller {
+	p := &Poller{
+		queue:         q,
+		incomingTasks: make(chan *Task, 1000),
+	}
+	w := worker.NewTicker(p, 100*time.Millisecond)
+	w.Start()
+	return p
 }

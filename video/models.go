@@ -7,3 +7,7 @@ type Video struct {
 	Path      string
 	Type      string
 }
+
+func (v Video) GetPath() string {
+	return v.Path
+}

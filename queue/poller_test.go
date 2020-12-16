@@ -21,7 +21,7 @@ type PollerSuite struct {
 
 func (s *PollerSuite) SetupSuite() {
 	s.db = db.OpenTestDB()
-	s.db.MigrateUp("schema.sql")
+	s.db.MigrateUp(InitialMigration)
 }
 
 func (s *PollerSuite) TearDownTest() {
@@ -37,7 +37,7 @@ func (s *PollerSuite) StartPollerWorker(p *Poller, q *Queue, wf func(*Task)) {
 
 func (s *PollerSuite) TestStartPoller() {
 	q := NewQueue(s.db)
-	p := StartPoller(q)
+	p := q.StartPoller()
 	for range [5]bool{} {
 		go s.StartPollerWorker(p, q, func(_ *Task) {})
 	}

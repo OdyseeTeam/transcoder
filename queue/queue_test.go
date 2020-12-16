@@ -14,16 +14,11 @@ import (
 
 type QueueSuite struct {
 	suite.Suite
-	db        *db.DB
-	dbCleanup func()
+	db *db.DB
 }
 
 func TestQueueSuite(t *testing.T) {
 	suite.Run(t, new(QueueSuite))
-}
-
-func (s *QueueSuite) TearDownTest() {
-	s.db.Cleanup()
 }
 
 func (s *QueueSuite) SetupSuite() {
@@ -32,7 +27,11 @@ func (s *QueueSuite) SetupSuite() {
 
 func (s *QueueSuite) SetupTest() {
 	s.db = db.OpenTestDB()
-	s.db.MigrateUp("schema.sql")
+	s.db.MigrateUp(InitialMigration)
+}
+
+func (s *QueueSuite) TearDownTest() {
+	s.db.Cleanup()
 }
 
 func (s *QueueSuite) TestQueueAdd() {

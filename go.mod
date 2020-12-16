@@ -6,10 +6,15 @@ require (
 	github.com/alecthomas/kong v0.2.12
 	github.com/fasthttp/router v1.3.3
 	github.com/floostack/transcoder v1.1.1
+	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/lbryio/lbry.go/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.4
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
+	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/stretchr/testify v1.6.1
 	github.com/valyala/fasthttp v1.17.0
 	go.uber.org/zap v1.16.0
+	golang.org/x/sys v0.0.0-20201015000850-e3ed0017c211 // indirect
+	golang.org/x/tools v0.0.0-20200103221440-774c71fcf114 // indirect
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 )

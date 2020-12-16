@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lbryio/transcoder/video"
+	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -21,14 +21,14 @@ func TestEncoderSuite(t *testing.T) {
 }
 
 func (s *EncoderSuite) SetupSuite() {
-	s.out = "testout"
+	s.out = path.Join(os.TempDir(), "encoder_test_out")
 
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := video.Resolve(url)
+	c, err := claim.Resolve(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download()
+	s.file, _, err = c.Download(path.Join(os.TempDir(), "transcoder_test"))
 	if err != nil {
 		panic(err)
 	}
@@ -52,16 +52,16 @@ func (s *EncoderSuite) TestEncode() {
 		progress = p.GetProgress()
 	}
 
-	s.GreaterOrEqual(progress, 100.0)
+	s.Require().GreaterOrEqual(progress, 100.0)
 
 	outFiles := []string{
 		"master.m3u8",
 		"stream_0.m3u8",
-		"sеg_0_000000.ts",
-		"sеg_1_000000.ts",
-		"sеg_2_000000.ts",
-		"sеg_3_000000.ts",
-		"sеg_4_000000.ts",
+		"seg_0_000000.ts",
+		"seg_1_000000.ts",
+		"seg_2_000000.ts",
+		"seg_3_000000.ts",
+		"seg_4_000000.ts",
 	}
 	for _, f := range outFiles {
 		_, err = os.Stat(path.Join(s.out, f))

@@ -2,7 +2,8 @@ package video
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/lbryio/transcoder/db"
 
 	"go.uber.org/zap"
 )
@@ -14,7 +15,7 @@ type Library struct {
 	queries Queries
 }
 
-func NewLibrary(db *sql.DB) *Library {
+func NewLibrary(db *db.DB) *Library {
 	return &Library{queries: Queries{db}}
 }
 

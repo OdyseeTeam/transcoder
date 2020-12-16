@@ -30,10 +30,17 @@ func OpenDB(file string) *DB {
 	logger.Infow("opening sqlite database", "file", file)
 
 	stdDB, err := sql.Open("sqlite3", file)
-	db := &DB{stdDB, file, func() error { return nil }}
 	if err != nil {
 		logger.Panic(err)
 	}
+
+	db := &DB{stdDB, file, func() error { return nil }}
+
+	_, err = db.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		logger.Panic(err)
+	}
+
 	return db
 }
 
@@ -42,14 +49,16 @@ func OpenTestDB() *DB {
 	file := fmt.Sprintf("%v.sqlite", RandomString(16))
 	db := OpenDB(file)
 	db.cleanup = func() error {
+		os.Remove(file + "-shm")
+		os.Remove(file + "-wal")
 		return os.Remove(file)
 	}
 	return db
 }
 
-func (db *DB) MigrateUp(file string) error {
-	s, err := ioutil.ReadFile(file)
-	schemaBits := strings.Split(string(s), "-- +migrate Down")
+func (db *DB) MigrateUp(s string) error {
+	logger.Infow("migrating up", "db", db.file)
+	schemaBits := strings.Split(s, "-- +migrate Down")
 	stmt, err := db.Prepare(schemaBits[0])
 	if err != nil {
 		return err
@@ -58,15 +67,31 @@ func (db *DB) MigrateUp(file string) error {
 	return err
 }
 
-func (db *DB) MigrateDown(file string) error {
+func (db *DB) MigrateUpFromFile(file string) error {
 	s, err := ioutil.ReadFile(file)
-	schemaBits := strings.Split(string(s), "-- +migrate Down")
+	if err != nil {
+		return err
+	}
+	return db.MigrateUp(string(s))
+}
+
+func (db *DB) MigrateDown(s string) error {
+	logger.Infow("migrating down", "db", db.file)
+	schemaBits := strings.Split(s, "-- +migrate Down")
 	stmt, err := db.Prepare(schemaBits[1])
 	if err != nil {
 		return err
 	}
 	_, err = stmt.Exec()
 	return err
+}
+
+func (db *DB) MigrateDownFromFile(file string) error {
+	s, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	return db.MigrateDown(string(s))
 }
 
 func (db *DB) Cleanup() error {

@@ -1,42 +1,25 @@
 package video
 
-import (
-	"database/sql"
-	"io/ioutil"
-	"os"
-	"strings"
-)
-
 const dbFile = "video.db"
 
-func OpenDB() *sql.DB {
-	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
-		file, err := os.Create(dbFile)
-		if err != nil {
-			logger.Fatal(err)
-		}
-		file.Close()
-	}
+var InitialMigration = `
+-- +migrate Up
 
-	db, err := sql.Open("sqlite3", dbFile)
-	if err != nil {
-		logger.Fatal(err)
-	}
+-- +migrate StatementBegin
+CREATE TABLE IF NOT EXISTS video (
+    "sd_hash" TEXT PRIMARY KEY,
 
-	s, err := ioutil.ReadFile("schema.sql")
-	schemaBits := strings.Split(string(s), "-- +migrate Down")
-	stmt, err := db.Prepare(schemaBits[0])
-	if err != nil {
-		logger.Fatal(err)
-	}
-	_, err = stmt.Exec()
-	if err != nil {
-		logger.Fatal(err)
-	}
+    "created_at" TEXT NOT NULL,
 
-	return db
-}
+    "url" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "type" TEXT NOT NULL
+);
+-- +migrate StatementEnd
 
-func dbCleanup() {
-	os.Remove(dbFile)
-}
+-- +migrate Down
+
+-- +migrate StatementBegin
+DROP TABLE video;
+-- +migrate StatementEnd
+`

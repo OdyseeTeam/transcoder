@@ -1,3 +1,6 @@
+package queue
+
+var InitialMigration = `
 -- +migrate Up
 
 -- +migrate StatementBegin
@@ -20,3 +23,4 @@ CREATE TABLE IF NOT EXISTS tasks  (
 -- +migrate StatementBegin
 DROP TABLE tasks;
 -- +migrate StatementEnd
+`

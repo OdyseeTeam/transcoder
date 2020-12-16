@@ -89,7 +89,7 @@ func (a Arguments) GetStrArguments() []string {
 	}
 
 	opts = append(opts[:6], append(formatOpts, opts[6:]...)...)
-	opts = append(opts, Argument{"hls_segment_filename", "sеg_%v_%06d.ts"})
+	opts = append(opts, Argument{"hls_segment_filename", "seg_%v_%06d.ts"})
 	opts = append(opts, Argument{"var_stream_map", strings.Join(varStream, " ")})
 
 	for _, v := range opts {

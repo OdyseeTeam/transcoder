@@ -64,10 +64,11 @@ func (q *Queries) Add(ctx context.Context, arg AddParams) (*Task, error) {
 	return q.Get(ctx, uint32(lastID))
 }
 
+// Poll pops an unprocessed task from the queue and marks it as started. It is assumed that task poller
+// will eventually mark task as rejected, completed or failed.
 func (q *Queries) Poll(ctx context.Context) (*Task, error) {
 	var i Task
 
-	logger.Debugw("transaction enter")
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -84,12 +85,8 @@ func (q *Queries) Poll(ctx context.Context) (*Task, error) {
 		&i.Status,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			logger.Debugw("empty")
-			return nil, err
-		}
 		tx.Rollback()
-		return &i, err
+		return nil, err
 	}
 	_, err = tx.ExecContext(ctx, queryTaskStart, i.ID)
 	if err != nil {
@@ -97,7 +94,6 @@ func (q *Queries) Poll(ctx context.Context) (*Task, error) {
 		return &i, err
 	}
 	err = tx.Commit()
-	logger.Debugw("transaction commit", "id", i.ID)
 	if err != nil {
 		return &i, err
 	}
@@ -140,6 +136,7 @@ func (q *Queries) updateStatus(ctx context.Context, id uint32, status string) er
 		return err
 	}
 	if n == 0 {
+		tx.Rollback()
 		return fmt.Errorf("task %v not found", id)
 	}
 	tx.Commit()

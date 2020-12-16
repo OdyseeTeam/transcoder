@@ -6,7 +6,7 @@ servers:
   - url: https://api.example.com/api/v1
 
 paths:
-  /video/{type}/{url}/{sdHash}:
+  /video/{type}/{url}:
     get:
       summary: Get a video stream
       responses:
@@ -25,13 +25,6 @@ paths:
         "404":
           description: stream not found
       parameters:
-      - name: sdHash
-        in: path
-        required: true
-        schema:
-          type: string
-          format: byte
-          maxLength: 97
       - name: url
         in: path
         required: true

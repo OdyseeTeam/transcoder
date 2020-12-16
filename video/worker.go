@@ -5,20 +5,20 @@ import (
 	"os"
 	"path"
 
-	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/queue"
 )
 
-var tempStreamPath = path.Join(os.TempDir(), "transcoder")
-
-func SpawnProcessing(videoPath string) {
-	p := queue.StartPoller(queue.NewQueue(db.OpenDB("video.sqlite")))
-	lib := NewLibrary(OpenDB())
+func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library) {
+	p := q.StartPoller()
+	logger.Info("started video processor")
 	for t := range p.IncomingTasks() {
-		c, err := ValidateIncomingVideo(t.URL)
 		ll := logger.With("url", t.URL)
+		ll.Infow("incoming task")
+
+		c, err := ValidateIncomingVideo(t.URL)
 		if err != nil {
 			if err == ErrChannelNotEnabled {
 				p.RejectTask(t)
@@ -30,42 +30,49 @@ func SpawnProcessing(videoPath string) {
 			continue
 		}
 
-		fh, _, err := c.Download()
+		sfh, _, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
 
 		if err != nil {
-			p.RejectTask(t)
 			ll.Errorw("download failed", "err", err)
+			tErr := p.RejectTask(t)
+			if tErr != nil {
+				ll.Errorw("rejecting task failed", "tid", t.ID, "err", tErr)
+			}
 			continue
 		}
 
-		ll = ll.With("file", fh.Name())
+		ll = ll.With("file", sfh.Name())
 
-		if err := fh.Close(); err != nil {
+		if err := sfh.Close(); err != nil {
 			p.RejectTask(t)
 			ll.Errorw("closing downloaded file failed", "err", err)
 			continue
 		}
 
-		streamPath := fmt.Sprintf("%v_%v", c.NormalizedName, c.sdHash[:6])
+		tmr := timer.Start()
+
+		streamPath := fmt.Sprintf("%v_%v", c.NormalizedName, c.SDHash[:6])
 		out := path.Join(videoPath, streamPath)
-		e, err := encoder.Encode(fh.Name(), out)
+		e, err := encoder.Encode(sfh.Name(), out)
 		if err != nil {
-			ll.Errorw("encode failed", "err", err)
+			ll.Errorw("encoding failure", "err", err)
 			p.ReleaseTask(t)
 			continue
 		}
 
 		for i := range e {
-			if i.GetProgress() >= 100.0 {
-				ll.Infow("encode complete", "out", out)
-				_, err := lib.Add(t.URL, t.SDHash, formats.TypeHLS, streamPath)
-				if err != nil {
-					logger.Errorw("adding to video library failed", "err", err)
-				}
+			ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
+			if i.GetProgress() >= 99.9 {
+				ll.Infow("encoding complete", "out", out, "duration", tmr.String())
 				p.CompleteTask(t)
+				break
 			}
 		}
-		err = os.Remove(fh.Name())
+		_, err = lib.Add(t.URL, t.SDHash, formats.TypeHLS, streamPath)
+		if err != nil {
+			logger.Errorw("adding to video library failed", "err", err)
+		}
+		err = os.Remove(sfh.Name())
 		if err != nil {
 			logger.Errorw("cleanup failed", "err", err)
 		}

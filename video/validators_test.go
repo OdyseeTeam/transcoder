@@ -14,6 +14,7 @@ func TestValidateIncomingVideo(t *testing.T) {
 	urlsDisabled := []string{
 		"lbry://@TRUTH#2/what-do-you-know-what-do-you-believe#2",
 		"lbry://@samtime#1/airpods-max-parody-ehh-pods-max#7",
+		"lbry://what#1",
 	}
 	for _, u := range urlsEnabled {
 		_, err := ValidateIncomingVideo(u)
