@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // sqlite
@@ -18,8 +17,7 @@ const defaultDBFile = "db.sqlite"
 
 type DB struct {
 	*sql.DB
-	file    string
-	cleanup func() error
+	file string
 }
 
 // OpenDB opens sqlite database file.
@@ -29,31 +27,22 @@ func OpenDB(file string) *DB {
 	}
 	logger.Infow("opening sqlite database", "file", file)
 
-	stdDB, err := sql.Open("sqlite3", file)
+	stdDB, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_journal_mode=WAL", file))
 	if err != nil {
 		logger.Panic(err)
 	}
 
-	db := &DB{stdDB, file, func() error { return nil }}
-
-	_, err = db.Exec("PRAGMA journal_mode=WAL;")
-	if err != nil {
-		logger.Panic(err)
-	}
-
-	return db
+	return &DB{stdDB, file}
 }
 
-// OpenTestDB generates a random database file name and opens it, returning cleanup function for use in tests.
+// OpenTestDB opens an in-memory sqlite database for use in tests.
 func OpenTestDB() *DB {
-	file := fmt.Sprintf("%v.sqlite", RandomString(16))
-	db := OpenDB(file)
-	db.cleanup = func() error {
-		os.Remove(file + "-shm")
-		os.Remove(file + "-wal")
-		return os.Remove(file)
+	stdDB, err := sql.Open("sqlite3", "file:x?mode=memory&_journal_mode=WAL")
+	if err != nil {
+		logger.Panic(err)
 	}
-	return db
+
+	return &DB{DB: stdDB}
 }
 
 func (db *DB) MigrateUp(s string) error {
@@ -92,10 +81,6 @@ func (db *DB) MigrateDownFromFile(file string) error {
 		return err
 	}
 	return db.MigrateDown(string(s))
-}
-
-func (db *DB) Cleanup() error {
-	return db.cleanup()
 }
 
 // RandomString generates a random string of length `n`.

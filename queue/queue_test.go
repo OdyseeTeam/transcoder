@@ -30,10 +30,6 @@ func (s *QueueSuite) SetupTest() {
 	s.db.MigrateUp(InitialMigration)
 }
 
-func (s *QueueSuite) TearDownTest() {
-	s.db.Cleanup()
-}
-
 func (s *QueueSuite) TestQueueAdd() {
 	q := NewQueue(s.db)
 	url := "lbry://" + db.RandomString(32)

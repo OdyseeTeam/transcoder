@@ -11,9 +11,14 @@ type Poller struct {
 	queue               *Queue
 	incomingTasks       chan *Task
 	incomingTaskCounter uint64
+	isShutdown          bool
 }
 
 func (p *Poller) Process() error {
+	if p.IsShutdown() {
+		return worker.ErrShutdown
+	}
+
 	t, err := p.queue.Poll()
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -26,8 +31,12 @@ func (p *Poller) Process() error {
 	return nil
 }
 
-func (p Poller) Shutdown() {
-	close(p.incomingTasks)
+func (p *Poller) Shutdown() {
+	p.isShutdown = true
+}
+
+func (p *Poller) IsShutdown() bool {
+	return p.isShutdown
 }
 
 func (p Poller) IncomingTasks() <-chan *Task {

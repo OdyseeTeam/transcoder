@@ -19,13 +19,9 @@ type PollerSuite struct {
 	db *db.DB
 }
 
-func (s *PollerSuite) SetupSuite() {
+func (s *PollerSuite) SetupTest() {
 	s.db = db.OpenTestDB()
 	s.db.MigrateUp(InitialMigration)
-}
-
-func (s *PollerSuite) TearDownTest() {
-	s.db.Cleanup()
 }
 
 func (s *PollerSuite) StartPollerWorker(p *Poller, q *Queue, wf func(*Task)) {
@@ -58,6 +54,45 @@ func (s *PollerSuite) TestStartPoller() {
 	s.Require().Len(ts, 10)
 
 	for _, t := range ts {
+		s.Equal(StatusStarted, t.Status)
+	}
+}
+
+func (s *PollerSuite) TestPollerShutdown() {
+	q := NewQueue(s.db)
+	p := q.StartPoller()
+	for range [5]bool{} {
+		go s.StartPollerWorker(p, q, func(_ *Task) {})
+	}
+
+	for range [20]int{} {
+		_, err := q.Add(fmt.Sprintf("lbry://%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
+		s.Require().NoError(err)
+	}
+
+	for {
+		if p.incomingTaskCounter == 10 {
+			p.Shutdown()
+			break
+		}
+	}
+
+	ts, err := q.List()
+	s.Require().NoError(err)
+	s.Require().Len(ts, 20)
+
+	var started, new int
+	for _, t := range ts {
+		if t.Status == StatusStarted {
+			started++
+		} else {
+			new++
+		}
+	}
+	for _, t := range ts[:10] {
+		s.Equal(StatusNew, t.Status)
+	}
+	for _, t := range ts[10:] {
 		s.Equal(StatusStarted, t.Status)
 	}
 }

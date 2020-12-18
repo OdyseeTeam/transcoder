@@ -6,6 +6,7 @@ import (
 )
 
 var FatalError = errors.New("workload error")
+var ErrShutdown = errors.New("worker shut down")
 
 type Ticker struct {
 	Interval time.Duration
@@ -16,6 +17,7 @@ type Ticker struct {
 type Workload interface {
 	Process() error
 	Shutdown()
+	IsShutdown() bool
 }
 
 func NewTicker(l Workload, i time.Duration) *Ticker {
@@ -38,13 +40,11 @@ func (w *Ticker) Start() {
 				return
 			case <-ticker.C:
 				err := w.workload.Process()
-				if err != nil {
-					if errors.Is(err, FatalError) {
-						w.Stop()
-						go func() {
-							w.workload.Shutdown()
-						}()
-					}
+				if errors.Is(err, FatalError) || errors.Is(err, ErrShutdown) {
+					w.Stop()
+					go func() {
+						w.workload.Shutdown()
+					}()
 				}
 			}
 		}

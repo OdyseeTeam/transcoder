@@ -35,10 +35,6 @@ func (s *LibrarySuite) SetupTest() {
 	s.db.MigrateUp(InitialMigration)
 }
 
-func (s *LibrarySuite) TearDownTest() {
-	s.db.Cleanup()
-}
-
 func (s *LibrarySuite) TestVideoAdd() {
 	lib := NewLibrary(s.db)
 	params := AddParams{
