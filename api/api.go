@@ -47,6 +47,10 @@ func NewManager(q *queue.Queue, l *video.Library) *VideoManager {
 // If neither, it validates and adds video for later processing.
 func (m *VideoManager) GetVideoOrCreateTask(uri, kind string) (Video, error) {
 	claim, err := video.ValidateIncomingVideo(uri)
+	if err != nil {
+		return nil, err
+	}
+
 	v, err := m.library.Get(claim.SDHash)
 	if v == nil || err == sql.ErrNoRows {
 		t, err := m.queue.GetBySDHash(claim.SDHash)
@@ -55,11 +59,6 @@ func (m *VideoManager) GetVideoOrCreateTask(uri, kind string) (Video, error) {
 		}
 		if t != nil {
 			return nil, video.ErrTranscodingUnderway
-		}
-
-		_, err = video.ValidateIncomingVideo(uri)
-		if err != nil {
-			return nil, err
 		}
 		_, err = m.queue.Add(uri, claim.SDHash, kind)
 		if err != nil {

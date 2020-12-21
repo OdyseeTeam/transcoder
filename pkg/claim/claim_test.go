@@ -1,25 +1,24 @@
-package video
+package claim
 
 import (
 	"os"
 	"path"
 	"testing"
 
-	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClaimResolve(t *testing.T) {
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := claim.Resolve(url)
+	c, err := Resolve(url)
 	require.NoError(t, err)
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
 }
 
 func TestClaimDownload(t *testing.T) {
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := claim.Resolve(url)
+	c, err := Resolve(url)
 	require.NoError(t, err)
 	f, n, err := c.Download(path.Join(os.TempDir(), "transcoder_test"))
 	require.NoError(t, err)

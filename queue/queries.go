@@ -40,8 +40,6 @@ type GetParams struct {
 }
 
 func (q *Queries) Add(ctx context.Context, arg AddParams) (*Task, error) {
-	var i *Task
-
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -49,16 +47,16 @@ func (q *Queries) Add(ctx context.Context, arg AddParams) (*Task, error) {
 	res, err := tx.ExecContext(ctx, queryTaskAdd, arg.URL, arg.SDHash, arg.Type)
 	if err != nil {
 		tx.Rollback()
-		return i, err
+		return nil, err
 	}
 	lastID, err := res.LastInsertId()
 	if err != nil {
 		tx.Rollback()
-		return i, err
+		return nil, err
 	}
 	err = tx.Commit()
 	if err != nil {
-		return i, err
+		return nil, err
 	}
 
 	return q.Get(ctx, uint32(lastID))

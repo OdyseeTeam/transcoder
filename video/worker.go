@@ -34,9 +34,9 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library) {
 
 		if err != nil {
 			ll.Errorw("download failed", "err", err)
-			tErr := p.RejectTask(t)
+			tErr := p.ReleaseTask(t)
 			if tErr != nil {
-				ll.Errorw("rejecting task failed", "tid", t.ID, "err", tErr)
+				ll.Errorw("error releasing task", "tid", t.ID, "err", tErr)
 			}
 			continue
 		}

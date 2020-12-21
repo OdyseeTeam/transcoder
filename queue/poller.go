@@ -47,8 +47,8 @@ func (p Poller) RejectTask(t *Task) error {
 	return p.queue.Reject(t.ID)
 }
 
-func (p Poller) ReleaseTask(t *Task) {
-	p.queue.Release(t.ID)
+func (p Poller) ReleaseTask(t *Task) error {
+	return p.queue.Release(t.ID)
 }
 
 func (p Poller) CompleteTask(t *Task) {
