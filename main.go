@@ -37,7 +37,13 @@ func main() {
 		q := queue.NewQueue(qdb)
 
 		go video.SpawnProcessing(CLI.Serve.VideoPath, q, lib)
-		api.InitHTTP(CLI.Serve.Bind, CLI.Serve.VideoPath, CLI.Serve.Debug, api.NewManager(q, lib))
+		api.NewServer(
+			api.Configure().
+				Debug(CLI.Serve.Debug).
+				Addr(CLI.Serve.Bind).
+				VideoPath(CLI.Serve.VideoPath).
+				VideoManager(api.NewManager(q, lib)),
+		).Start()
 	default:
 		panic(ctx.Command())
 	}

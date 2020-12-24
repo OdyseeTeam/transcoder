@@ -7,6 +7,8 @@ require (
 	github.com/fasthttp/router v1.3.3
 	github.com/floostack/transcoder v1.1.1
 	github.com/golang/protobuf v1.4.3 // indirect
+	github.com/grafov/m3u8 v0.11.1
+	github.com/karlseguin/ccache/v2 v2.0.7
 	github.com/lbryio/lbry.go/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/pkg/errors v0.9.1

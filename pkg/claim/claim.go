@@ -50,10 +50,10 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 	n := len(p)
 	wc.Loaded += uint64(n)
 	progress := float64(wc.Loaded) / float64(wc.Size) * 100.0
-	// if uint64(progress)%5 == 0 {
-	speed := float64(wc.Loaded) / time.Since(wc.Started).Seconds()
-	logger.Debugw("download progress", "url", wc.URL, "size", wc.Size, "percent", fmt.Sprintf("%.2f", progress), "rate", fmt.Sprintf("%.2f", speed))
-	// }
+	if uint64(progress)%20 == 0 {
+		speed := float64(wc.Loaded) / time.Since(wc.Started).Seconds()
+		logger.Debugw("download progress", "url", wc.URL, "size", wc.Size, "percent", fmt.Sprintf("%.2f", progress), "rate", fmt.Sprintf("%.2f", speed))
+	}
 	return n, nil
 }
 
