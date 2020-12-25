@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const hlsURLTemplate = "http://%v/api/v1/video/hls/%v"
+const hlsURLTemplate = "%v/api/v1/video/hls/%v"
 
 var logger = zap.NewExample().Sugar().Named("transcoder_client")
 

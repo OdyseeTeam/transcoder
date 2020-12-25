@@ -104,7 +104,7 @@ func (s HLSStream) retrieveFile(rawurl string) (io.ReadCloser, int64, error) {
 }
 
 func (s HLSStream) Download() error {
-	logger.Debugw("stream download", "url", s.rootURL())
+	logger.Debugw("stream download requested", "url", s.rootURL())
 	res, err := s.fetch(s.rootURL())
 	if err != nil {
 		return err
