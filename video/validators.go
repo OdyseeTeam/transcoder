@@ -59,7 +59,7 @@ func ValidateByClaim(c *claim.Claim) error {
 		return ErrNoSigningChannel
 	}
 	for _, cn := range enabledChannels {
-		if c.SigningChannel.CanonicalURL == strings.ToLower("lbry://"+cn) {
+		if strings.ToLower(c.SigningChannel.CanonicalURL) == strings.ToLower("lbry://"+cn) {
 			channelEnabled = true
 			break
 		}

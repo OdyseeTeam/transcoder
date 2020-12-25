@@ -75,7 +75,7 @@ func (c *Configuration) HTTPClient(httpClient HTTPRequester) *Configuration {
 }
 
 func New(cfg *Configuration) Client {
-	return Client{
+	c := Client{
 		Configuration: cfg,
 		cache: ccache.New(ccache.
 			Configure().
@@ -84,6 +84,7 @@ func New(cfg *Configuration) Client {
 			OnDelete(deleteCachedVideo),
 		),
 	}
+	return c
 }
 
 func hlsCacheKey(lbryURL, sdHash string) string {
