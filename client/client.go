@@ -5,7 +5,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"path"
 	"time"
 
 	"github.com/karlseguin/ccache/v2"
@@ -99,6 +98,6 @@ func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
 	}
 	logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(lbryURL, sdHash))
 
-	stream := newHLSStream(lbryURL, sdHash, path.Join(c.videoPath, sdHash), &c)
+	stream := newHLSStream(lbryURL, sdHash, &c)
 	return nil, stream
 }

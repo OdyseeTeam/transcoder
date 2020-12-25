@@ -95,9 +95,8 @@ func (s *ClientSuite) TestGet() {
 
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Nil(dl)
-	s.FileExists(path.Join(cv.rootPath, "master.m3u8"))
 
-	f, err := os.Open(path.Join(cv.rootPath, encoder.MasterPlaylist))
+	f, err := os.Open(path.Join(s.assetsPath, "client", cv.LocalPath(), encoder.MasterPlaylist))
 	s.NoError(err)
 	p, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
@@ -105,7 +104,7 @@ func (s *ClientSuite) TestGet() {
 
 	masterpl := p.(*m3u8.MasterPlaylist)
 	for _, plv := range masterpl.Variants {
-		f, err := os.Open(path.Join(cv.rootPath, plv.URI))
+		f, err := os.Open(path.Join(s.assetsPath, "client", cv.localPath, plv.URI))
 		s.NoError(err)
 		p, _, err := m3u8.DecodeFrom(f, true)
 		s.NoError(err)
@@ -115,7 +114,7 @@ func (s *ClientSuite) TestGet() {
 			if seg == nil {
 				continue
 			}
-			s.FileExists(path.Join(cv.rootPath, seg.URI))
+			s.FileExists(path.Join(s.assetsPath, "client", cv.localPath, seg.URI))
 		}
 	}
 }

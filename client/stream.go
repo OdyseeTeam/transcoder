@@ -18,9 +18,9 @@ import (
 )
 
 type CachedVideo struct {
-	URL      string
-	rootPath string
-	size     int64
+	URL       string
+	localPath string
+	size      int64
 }
 
 type Downloadable interface {
@@ -37,7 +37,6 @@ type Progress struct {
 type HLSStream struct {
 	URL          string
 	size         int64
-	rootPath     string
 	SDHash       string
 	client       *Client
 	progress     chan Progress
@@ -48,8 +47,12 @@ func (v *CachedVideo) Size() int64 {
 	return v.size
 }
 
+func (v *CachedVideo) LocalPath() string {
+	return v.localPath
+}
+
 func (v CachedVideo) delete() error {
-	return os.RemoveAll(v.rootPath)
+	return os.RemoveAll(v.localPath)
 }
 
 func deleteCachedVideo(i *ccache.Item) {
@@ -60,8 +63,8 @@ func deleteCachedVideo(i *ccache.Item) {
 	}
 }
 
-func newHLSStream(url, sdHash, rootPath string, client *Client) *HLSStream {
-	return &HLSStream{URL: url, rootPath: rootPath, progress: make(chan Progress, 20000), client: client, SDHash: sdHash}
+func newHLSStream(url, sdHash string, client *Client) *HLSStream {
+	return &HLSStream{URL: url, progress: make(chan Progress, 20000), client: client, SDHash: sdHash}
 }
 
 func (s HLSStream) fetch(url string) (*http.Response, error) {
@@ -86,7 +89,7 @@ func (s HLSStream) retrieveFile(rawurl string) (io.ReadCloser, int64, error) {
 		return nil, 0, err
 	}
 
-	out, err := os.Create(path.Join(s.rootPath, path.Base(parsedurl.Path)))
+	out, err := os.Create(path.Join(s.LocalPath(), path.Base(parsedurl.Path)))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -141,8 +144,8 @@ func (s HLSStream) makeProgress() {
 	s.progress <- Progress{stage: s.filesFetched}
 }
 
-func (s HLSStream) storeInCache(key, url, rootPath string, size int64) {
-	cv := &CachedVideo{URL: s.URL, size: size, rootPath: s.rootPath}
+func (s HLSStream) storeInCache(key, rootPath string, size int64) {
+	cv := &CachedVideo{URL: s.URL, size: size, localPath: s.SDHash}
 	s.client.cache.Set(hlsCacheKey(s.URL, s.SDHash), cv, 24*30*12*time.Hour)
 }
 
@@ -151,7 +154,7 @@ func (s HLSStream) startDownload(playlistURL string) error {
 
 	basePath := strings.Replace(playlistURL, "/master.m3u8", "", 1)
 
-	if err := os.MkdirAll(s.rootPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(s.LocalPath(), os.ModePerm); err != nil {
 		return err
 	}
 
@@ -203,10 +206,10 @@ func (s HLSStream) startDownload(playlistURL string) error {
 	logger.Debugw("got all files, saving to cache",
 		"url", s.URL,
 		"size", streamSize,
-		"path", s.rootPath,
+		"path", s.LocalPath(),
 		"key", hlsCacheKey(s.URL, s.SDHash),
 	)
-	s.storeInCache(hlsCacheKey(s.URL, s.SDHash), s.URL, s.rootPath, streamSize)
+	s.storeInCache(hlsCacheKey(s.URL, s.SDHash), s.LocalPath(), streamSize)
 
 	s.progress <- Progress{Done: true}
 	close(s.progress)
@@ -214,5 +217,13 @@ func (s HLSStream) startDownload(playlistURL string) error {
 }
 
 func (s HLSStream) rootURL() string {
-	return fmt.Sprintf(hlsURLTemplate, s.client.server, url.PathEscape(s.URL))
+	return fmt.Sprintf(hlsURLTemplate, s.client.server, s.SafeURL())
+}
+
+func (s HLSStream) SafeURL() string {
+	return url.PathEscape(s.URL)
+}
+
+func (s HLSStream) LocalPath() string {
+	return path.Join(s.client.videoPath, s.SDHash)
 }
