@@ -156,7 +156,7 @@ func (s APIServer) Addr() string {
 }
 
 func (s APIServer) Start() error {
-	logger.Infow("started listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
+	logger.Infow("listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
 	return s.httpServer.ListenAndServe(s.addr)
 }
 

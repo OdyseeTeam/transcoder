@@ -6,38 +6,11 @@ import (
 	"github.com/lbryio/transcoder/pkg/claim"
 )
 
-var enabledChannels = []string{
-	"@davidpakman#7",
-	"@specialoperationstest#3",
-	"@EarthTitan#0",
-	"@deqodeurs#8",
-	"@Vivresainement#f",
-	"@SaltyCracker#a",
-	"@filsdepangolin#e",
-	"@SilvanoTrotta#f",
-	"@eevblog#7",
-	"@DollarVigilante#b",
-	"@radio-quebec#a",
-	"@NiceChord#5",
-	"@AgoraTVNEWS#5",
-	"@samueleckert#4",
-	"@TranslatedPressDE#b",
-	"@oliverjanich#b",
-	"@NTDFrancais#5",
-	"@corbettreport#0",
-	"@Miniver#4",
-	"@Bombards_Body_Language#f",
-	"@sarahwestall#0",
-	"@kouki#2",
-	"@LBRY-Español#8",
-	"@thecrowhouse#2",
-	"@bitcoin#9f",
-	"@timcast#c9",
-	"@Styxhexenhammer666#2",
-	"@JoeySaladinoShow#e",
-	"@The-S#2",
-	"@JIGGYTOM#4",
-	"@ComputingForever#9",
+var enabledChannels = []string{}
+
+func LoadEnabledChannels(channels []string) {
+	enabledChannels = channels
+	logger.Infow("loaded enabled channels", "count", len(enabledChannels))
 }
 
 // ValidateIncomingVideo checks if supplied video can be accepted for processing.

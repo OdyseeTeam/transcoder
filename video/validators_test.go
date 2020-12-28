@@ -7,6 +7,11 @@ import (
 )
 
 func TestValidateIncomingVideo(t *testing.T) {
+	LoadEnabledChannels(
+		[]string{
+			"@davidpakman#7",
+			"@specialoperationstest#3",
+		})
 	urlsEnabled := []string{
 		"lbry://@davidpakman#7/vaccination-delays-and-more-biden-picks#8",
 		"lbry://@specialoperationstest#3/fear-of-death-inspirational#a",
