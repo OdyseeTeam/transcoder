@@ -15,12 +15,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
         with:
           go-version: ^1.15
         id: go
-
+      - name: Install ffmpeg
+            curl -sLO https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+            tar xvf ffmpeg-release-amd64-static.tar.xz
+            mkdir -p /usr/local/bin/
+            mv ffmpeg-*/ffmpeg ffmpeg-*/ffprobe /usr/local/bin/
       - name: Test
         run: go test -covermode=count -coverprofile=coverage.out ./...
