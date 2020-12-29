@@ -38,7 +38,7 @@ var (
 	ErrStreamNotFound = errors.New("could not resolve stream URI")
 )
 
-var logger = zap.NewExample().Sugar().Named("video")
+var logger = zap.NewExample().Sugar().Named("claim")
 
 type WriteCounter struct {
 	Loaded, Size uint64
@@ -49,10 +49,16 @@ type WriteCounter struct {
 func (wc *WriteCounter) Write(p []byte) (int, error) {
 	n := len(p)
 	wc.Loaded += uint64(n)
-	progress := float64(wc.Loaded) / float64(wc.Size) * 100.0
-	if uint64(progress)%20 == 0 {
+	progress := int(float64(wc.Loaded) / float64(wc.Size) * 100)
+
+	progressLogged := map[int]bool{}
+	if progress%20 == 0 && !progressLogged[int(progress)] {
+		progressLogged[progress] = true
 		speed := float64(wc.Loaded) / time.Since(wc.Started).Seconds()
-		logger.Debugw("download progress", "url", wc.URL, "size", wc.Size, "percent", fmt.Sprintf("%.2f", progress), "rate", fmt.Sprintf("%.2f", speed))
+		logger.Debugw(
+			"download progress",
+			"url", wc.URL,
+			"size", wc.Size, "percent", fmt.Sprintf("%v", progress), "rate", fmt.Sprintf("%.2f", speed))
 	}
 	return n, nil
 }
@@ -136,5 +142,5 @@ func (c *Claim) getSDHash() (string, error) {
 }
 
 func (c *Claim) streamFileName() string {
-	return fmt.Sprintf("%s_%s", c.ChannelName, c.SDHash[:6])
+	return fmt.Sprintf(c.SDHash)
 }

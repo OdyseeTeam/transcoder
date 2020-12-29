@@ -1,7 +1,6 @@
 package client
 
 import (
-	"fmt"
 	"math"
 	"net"
 	"net/http"
@@ -88,7 +87,8 @@ func New(cfg *Configuration) Client {
 }
 
 func hlsCacheKey(lbryURL, sdHash string) string {
-	return fmt.Sprintf("hls::%v::%v", lbryURL, sdHash)
+	// return fmt.Sprintf("hls::%v::%v", lbryURL, sdHash)
+	return "hls::" + sdHash
 }
 
 func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
@@ -101,4 +101,8 @@ func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
 
 	stream := newHLSStream(lbryURL, sdHash, &c)
 	return nil, stream
+}
+
+func (c Client) restoreCache() error {
+	return nil
 }

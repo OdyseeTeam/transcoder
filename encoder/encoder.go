@@ -15,10 +15,28 @@ import (
 	"go.uber.org/zap"
 )
 
-const binFFProbe = "/usr/local/bin/ffprobe"
-const binFFMpeg = "/usr/local/bin/ffmpeg"
+var binFFMpeg, binFFProbe string
 
 var logger = zap.NewExample().Sugar().Named("encoder")
+
+func init() {
+	binFFMpeg = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
+	binFFProbe = firstExistingFile([]string{"/usr/local/bin/ffprobe", "/usr/bin/ffprobe"})
+
+	if binFFMpeg == "" || binFFProbe == "" {
+		panic("ffmpeg/ffprobe not found")
+	}
+}
+
+func firstExistingFile(paths []string) string {
+	for _, p := range paths {
+		_, err := os.Stat(p)
+		if !os.IsNotExist(err) {
+			return p
+		}
+	}
+	return ""
+}
 
 // Encode does transcoding of `in` video file into a series of HLS stream video files.
 func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
@@ -26,7 +44,7 @@ func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
 		FfmpegBinPath:   binFFMpeg,
 		FfprobeBinPath:  binFFProbe,
 		ProgressEnabled: true,
-		// Verbose:         true,
+		Verbose:         false,
 	}
 	ll := logger.With("in", in)
 
@@ -56,8 +74,7 @@ func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
 		return nil, err
 	}
 
-	ll.Debugw("encoding started", "args", strings.Join(args.GetStrArguments(), " "))
-
+	ll.Debugw("encoding requested", "args", strings.Join(args.GetStrArguments(), " "))
 	return ffmpeg.New(ffmpegConf).
 		Input(in).
 		Output("stream_%v.m3u8").

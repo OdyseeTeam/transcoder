@@ -11,9 +11,9 @@ import (
 	"github.com/lbryio/transcoder/queue"
 )
 
-func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library) {
-	p := q.StartPoller()
+func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Poller) {
 	logger.Info("started video processor")
+	defer logger.Info("quit video processor")
 	for t := range p.IncomingTasks() {
 		ll := logger.With("url", t.URL)
 		ll.Infow("incoming task")
@@ -44,7 +44,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library) {
 		ll = ll.With("file", sfh.Name())
 
 		if err := sfh.Close(); err != nil {
-			p.RejectTask(t)
+			p.ReleaseTask(t)
 			ll.Errorw("closing downloaded file failed", "err", err)
 			continue
 		}
@@ -61,7 +61,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library) {
 		}
 
 		for i := range e {
-			ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
+			ll.Infow("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
 			if i.GetProgress() >= 99.9 {
 				ll.Infow("encoding complete", "out", out, "duration", tmr.String())
 				p.CompleteTask(t)

@@ -15,11 +15,29 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var httpVideoPath = "/streams"
-var logger = zap.NewExample().Sugar().Named("api")
-var httpLogger = zap.NewExample().Sugar().Named("http")
+
+var loggerName = "api"
+var logger = zap.NewExample().Sugar().Named(loggerName)
+
+func InitDebugLogger() {
+	l, _ := zap.NewDevelopment()
+	l = l.Named(loggerName)
+	logger = l.Sugar()
+	logger.Debugw("logger configured", "mode", "debug")
+}
+
+func InitProductionLogger() {
+	cfg := zap.NewProductionConfig()
+	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	l, _ := cfg.Build()
+	l = l.Named(loggerName)
+	logger = l.Sugar()
+	logger.Infow("logger configured", "mode", "production")
+}
 
 // APIServer ties HTTP API together and allows to start/shutdown the web server.
 type APIServer struct {
@@ -63,12 +81,6 @@ func (c *Configuration) VideoManager(videoManager *VideoManager) *Configuration 
 	return c
 }
 
-func initDebugLogger() {
-	l, _ := zap.NewDevelopment()
-	l = l.Named("http")
-	logger = l.Sugar()
-}
-
 func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	urlQ := ctx.UserValue("url").(string)
 	kind := ctx.UserValue("kind").(string)
@@ -87,15 +99,15 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 
 	if err == video.ErrChannelNotEnabled || err == video.ErrNoSigningChannel {
 		ctx.SetStatusCode(http.StatusForbidden)
-		ll.Infow("forbidden")
+		ll.Debugw("forbidden")
 		return
 	} else if err == video.ErrTranscodingUnderway {
 		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Infow("accepted")
+		ll.Debugw("trancoding underway")
 		return
 	} else if err == claim.ErrStreamNotFound {
 		ctx.SetStatusCode(http.StatusNotFound)
-		ll.Infow("stream not found")
+		ll.Debugw("stream not found")
 		return
 	} else if err != nil {
 		ctx.SetStatusCode(http.StatusInternalServerError)
@@ -105,7 +117,7 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	}
 
 	path := fmt.Sprintf("%v/%v/%v", httpVideoPath, v.GetPath(), encoder.MasterPlaylist)
-	ll.Infow("found", "path", path)
+	ll.Debugw("found", "path", path)
 	ctx.Redirect(path, http.StatusSeeOther)
 }
 
@@ -123,7 +135,7 @@ func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 func loggingMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		httpLogger.Debug(fmt.Sprintf("%s %s", ctx.Method(), ctx.Path()))
+		logger.Debugw("http request", "get", ctx.Method(), "path", ctx.Path())
 		h(ctx)
 	}
 }
@@ -143,8 +155,9 @@ func NewServer(cfg *Configuration) *APIServer {
 	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
 
 	if s.debug {
-		initDebugLogger()
+		InitDebugLogger()
 	} else {
+		InitProductionLogger()
 		r.PanicHandler = handlePanic
 	}
 
@@ -153,6 +166,10 @@ func NewServer(cfg *Configuration) *APIServer {
 
 func (s APIServer) Addr() string {
 	return s.addr
+}
+
+func (s APIServer) URL() string {
+	return "http://" + s.addr
 }
 
 func (s APIServer) Start() error {

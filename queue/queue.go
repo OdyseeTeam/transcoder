@@ -54,10 +54,10 @@ func (q Queue) Complete(id uint32) error {
 	return q.queries.updateStatus(context.Background(), id, StatusCompleted)
 }
 
-func (q *Queue) StartPoller() *Poller {
+func (q *Queue) StartPoller(workers int) *Poller {
 	p := &Poller{
 		queue:         q,
-		incomingTasks: make(chan *Task, 1000),
+		incomingTasks: make(chan *Task, workers),
 	}
 	w := worker.NewTicker(p, 100*time.Millisecond)
 	w.Start()

@@ -24,6 +24,7 @@ var CLI struct {
 		Bind      string `optional name:"bind" help:"Address to listen on." default:":8080"`
 		DataPath  string `optional name:"data-path" help:"Path to store database files and configs." type:"existingdir" default:"."`
 		VideoPath string `optional name:"video-path" help:"Path to store video." type:"existingdir" default:"."`
+		Workers   int    `optional name:"workers" help:"Number of workers to start." type:"int" default:"10"`
 		Debug     bool   `optional name:"debug" help:"Debug mode."`
 	} `cmd help:"Start transcoding server."`
 }
@@ -34,6 +35,11 @@ func main() {
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
 	case "serve":
+		if CLI.Serve.Debug {
+			video.InitDebugLogger()
+		} else {
+			video.InitProductionLogger()
+		}
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
 		vdb.MigrateUp(video.InitialMigration)
 		qdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "queue.sqlite"))
@@ -55,7 +61,10 @@ func main() {
 		logger.Debugw("found channels", "channels", fmt.Sprintf("%v", channels))
 		video.LoadEnabledChannels(channels)
 
-		go video.SpawnProcessing(CLI.Serve.VideoPath, q, lib)
+		poller := q.StartPoller(CLI.Serve.Workers)
+		for i := 0; i < CLI.Serve.Workers; i++ {
+			go video.SpawnProcessing(CLI.Serve.VideoPath, q, lib, poller)
+		}
 		err = api.NewServer(
 			api.Configure().
 				Debug(CLI.Serve.Debug).

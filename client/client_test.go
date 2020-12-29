@@ -43,7 +43,8 @@ func (s *ClientSuite) SetupSuite() {
 	lib := video.NewLibrary(vdb)
 	q := queue.NewQueue(qdb)
 
-	go video.SpawnProcessing(path.Join(s.assetsPath, "videos"), q, lib)
+	poller := q.StartPoller(1)
+	go video.SpawnProcessing(path.Join(s.assetsPath, "videos"), q, lib, poller)
 	s.apiServer = api.NewServer(
 		api.Configure().
 			Debug(true).
@@ -52,14 +53,25 @@ func (s *ClientSuite) SetupSuite() {
 			VideoManager(api.NewManager(q, lib)),
 	)
 	go s.apiServer.Start()
+
+	video.LoadEnabledChannels(
+		[]string{
+			"@specialoperationstest#3",
+		})
 }
 
 func (s *ClientSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
+func (s *ClientSuite) Test_restoreCache() {
+	c := New(Configure().VideoPath(path.Join(s.assetsPath, "client")).Server(s.apiServer.URL()))
+	err := c.restoreCache()
+	s.Require().NoError(err)
+}
+
 func (s *ClientSuite) TestGet() {
-	c := New(Configure().VideoPath(path.Join(s.assetsPath, "client")).Server(s.apiServer.Addr()))
+	c := New(Configure().VideoPath(path.Join(s.assetsPath, "client")).Server(s.apiServer.URL()))
 	s.Require().NotNil(c.httpClient)
 
 	cv, dl := c.Get("hls", streamURL, streamSDHash)
