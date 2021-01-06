@@ -96,7 +96,7 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	}
 
 	path := fmt.Sprintf("%v/%v/%v", httpVideoPath, v.GetPath(), encoder.MasterPlaylist)
-	ll.Debugw("found", "path", path)
+	ll.Debugw("found", "path", fmt.Sprintf("%v", path))
 	ctx.Redirect(path, http.StatusSeeOther)
 }
 
@@ -114,7 +114,7 @@ func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 func loggingMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		logger.Debugw("http request", "path", fmt.Sprintf("%v", ctx.Path()))
+		logger.Debugw("http request", "path", string(ctx.Path()))
 		h(ctx)
 	}
 }

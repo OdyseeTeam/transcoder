@@ -79,30 +79,40 @@ func (s *ClientSuite) TestGet() {
 
 	time.Sleep(100 * time.Millisecond)
 	err := dl.Download()
-	s.T().Log("getting")
 	s.Require().EqualError(err, "encoding underway")
 
 	s.T().Log("waiting for transcoder to ready up the stream")
+
 	for {
 		cv, dl = c.Get("hls", streamURL, streamSDHash)
 		s.Require().Nil(cv)
 		if dl != nil {
 			err := dl.Download()
-			s.T().Log("error is", err)
 			if err == nil {
 				break
 			}
 		}
 		time.Sleep(1000 * time.Millisecond)
 	}
-	s.T().Log("transcoder is ready")
-	s.T().Log("stream download started")
+
+	s.T().Log("transcoder is ready, HLSStream.startDownload is working")
+	time.Sleep(1000 * time.Millisecond)
+
+	cv, dl2 := c.Get("hls", streamURL, streamSDHash)
+	s.Nil(cv)
+	err = dl2.Download()
+	s.Nil(err)
+
+	p := <-dl2.Progress()
+	s.T().Logf("got dl2 progress: %+v", p)
+	s.EqualError(p.Error, "download already in progress")
+
 	for p := range dl.Progress() {
-		s.Require().NoError(p.err)
+		s.T().Logf("got download progress: %+v", p)
+		s.Require().NoError(p.Error)
 		if p.Done {
 			break
 		}
-		s.T().Log("got download progress:", p.stage)
 	}
 
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
@@ -110,11 +120,11 @@ func (s *ClientSuite) TestGet() {
 
 	f, err := os.Open(path.Join(s.assetsPath, "client", cv.LocalPath(), encoder.MasterPlaylist))
 	s.NoError(err)
-	p, _, err := m3u8.DecodeFrom(f, true)
+	rawpl, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
 	f.Close()
 
-	masterpl := p.(*m3u8.MasterPlaylist)
+	masterpl := rawpl.(*m3u8.MasterPlaylist)
 	for _, plv := range masterpl.Variants {
 		f, err := os.Open(path.Join(s.assetsPath, "client", cv.localPath, plv.URI))
 		s.NoError(err)

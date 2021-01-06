@@ -7,9 +7,13 @@ import (
 	"time"
 
 	"github.com/karlseguin/ccache/v2"
+	cmap "github.com/orcaman/concurrent-map"
 )
 
-const hlsURLTemplate = "%v/api/v1/video/hls/%v"
+const (
+	hlsURLTemplate = "%v/api/v1/video/hls/%v"
+	dlStarted      = iota
+)
 
 type HTTPRequester interface {
 	Do(req *http.Request) (res *http.Response, err error)
@@ -17,7 +21,8 @@ type HTTPRequester interface {
 
 type Client struct {
 	*Configuration
-	cache *ccache.Cache
+	cache     *ccache.Cache
+	downloads cmap.ConcurrentMap
 }
 
 type Configuration struct {
@@ -79,7 +84,9 @@ func New(cfg *Configuration) Client {
 			ItemsToPrune(20).
 			OnDelete(deleteCachedVideo),
 		),
+		downloads: cmap.New(),
 	}
+
 	return c
 }
 
@@ -88,6 +95,7 @@ func hlsCacheKey(lbryURL, sdHash string) string {
 	return "hls::" + sdHash
 }
 
+// Get returns either a cached video or downloadable instance for further processing.
 func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
 	logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(lbryURL, sdHash))
 	item := c.cache.Get(hlsCacheKey(lbryURL, sdHash))
@@ -98,6 +106,19 @@ func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
 
 	stream := newHLSStream(lbryURL, sdHash, &c)
 	return nil, stream
+}
+
+// func (c Client) downloadExists(sdHash string) bool {
+// 	return c.downloads.Has(sdHash)
+// }
+
+func (c Client) canStartDownload(key string) bool {
+	ok := c.downloads.SetIfAbsent(key, dlStarted)
+	return ok
+}
+
+func (c Client) releaseDownload(key string) {
+	c.downloads.Remove(key)
 }
 
 func (c Client) restoreCache() error {

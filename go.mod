@@ -11,6 +11,7 @@ require (
 	github.com/karlseguin/ccache/v2 v2.0.7
 	github.com/lbryio/lbry.go/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.4
+	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/stretchr/testify v1.6.1

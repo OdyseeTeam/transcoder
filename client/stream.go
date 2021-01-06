@@ -12,9 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lbryio/transcoder/video"
+
 	"github.com/grafov/m3u8"
 	"github.com/karlseguin/ccache/v2"
-	"github.com/lbryio/transcoder/video"
 )
 
 type CachedVideo struct {
@@ -29,8 +30,8 @@ type Downloadable interface {
 }
 
 type Progress struct {
-	err   error
-	stage int
+	Error error
+	Stage int
 	Done  bool
 }
 
@@ -64,7 +65,8 @@ func deleteCachedVideo(i *ccache.Item) {
 }
 
 func newHLSStream(url, sdHash string, client *Client) *HLSStream {
-	return &HLSStream{URL: url, progress: make(chan Progress, 20000), client: client, SDHash: sdHash}
+	s := &HLSStream{URL: url, progress: make(chan Progress, 1), client: client, SDHash: sdHash}
+	return s
 }
 
 func (s HLSStream) fetch(url string) (*http.Response, error) {
@@ -72,7 +74,6 @@ func (s HLSStream) fetch(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	// s.makeProgress()
 	return s.client.httpClient.Do(req)
 }
 
@@ -100,6 +101,8 @@ func (s HLSStream) retrieveFile(rawurl string) (io.ReadCloser, int64, error) {
 	if err != nil {
 		return nil, bytesRead, err
 	}
+
+	s.makeProgress()
 	return out, bytesRead, nil
 }
 
@@ -126,7 +129,7 @@ func (s HLSStream) Download() error {
 		go func() {
 			err := s.startDownload(loc.String())
 			if err != nil {
-				s.progress <- Progress{err: err}
+				s.progress <- Progress{Error: err}
 			}
 		}()
 		return nil
@@ -139,9 +142,9 @@ func (s HLSStream) Progress() <-chan Progress {
 	return s.progress
 }
 
-func (s HLSStream) makeProgress() {
+func (s *HLSStream) makeProgress() {
 	s.filesFetched++
-	s.progress <- Progress{stage: s.filesFetched}
+	s.progress <- Progress{Stage: s.filesFetched}
 }
 
 func (s HLSStream) storeInCache(key, rootPath string, size int64) {
@@ -149,8 +152,12 @@ func (s HLSStream) storeInCache(key, rootPath string, size int64) {
 	s.client.cache.Set(hlsCacheKey(s.URL, s.SDHash), cv, 24*30*12*time.Hour)
 }
 
-func (s HLSStream) startDownload(playlistURL string) error {
+func (s *HLSStream) startDownload(playlistURL string) error {
 	var streamSize int64
+
+	if !s.client.canStartDownload(s.rootURL()) {
+		return errors.New("download already in progress")
+	}
 
 	basePath := strings.Replace(playlistURL, "/master.m3u8", "", 1)
 
@@ -203,6 +210,9 @@ func (s HLSStream) startDownload(playlistURL string) error {
 		}
 	}
 
+	s.progress <- Progress{Stage: 999999}
+
+	// Download complete
 	logger.Debugw("got all files, saving to cache",
 		"url", s.URL,
 		"size", streamSize,
@@ -210,6 +220,7 @@ func (s HLSStream) startDownload(playlistURL string) error {
 		"key", hlsCacheKey(s.URL, s.SDHash),
 	)
 	s.storeInCache(hlsCacheKey(s.URL, s.SDHash), s.LocalPath(), streamSize)
+	s.client.releaseDownload(s.rootURL())
 
 	s.progress <- Progress{Done: true}
 	close(s.progress)
