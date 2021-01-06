@@ -30,7 +30,8 @@ type Arguments struct {
 func HLSArguments() Arguments {
 	return Arguments{
 		defaultArgs: []Argument{
-			{"preset", "veryfast"},
+			{"threads", "2"},
+			{"preset", "superfast"},
 			{"keyint_min", keyint},
 			{"g", keyint},
 			{"sc_threshold", "0"},
