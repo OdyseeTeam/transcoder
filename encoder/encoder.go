@@ -12,12 +12,14 @@ import (
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
-	"go.uber.org/zap"
 )
 
 var binFFMpeg, binFFProbe string
 
-var logger = zap.NewExample().Sugar().Named("encoder")
+type Encoder struct {
+	in, out string
+	Meta    *ffmpeg.Metadata
+}
 
 func init() {
 	binFFMpeg = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
@@ -38,24 +40,34 @@ func firstExistingFile(paths []string) string {
 	return ""
 }
 
-// Encode does transcoding of `in` video file into a series of HLS stream video files.
-func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
+func NewEncoder(in, out string) (*Encoder, error) {
+	e := &Encoder{in: in, out: out}
+	meta, err := GetMetadata(e.in)
+	if err != nil {
+		return nil, err
+	}
+	e.Meta = meta
+	return e, nil
+}
+
+// Encode does transcoding of specified video file into a series of HLS streams.
+func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 	ffmpegConf := &ffmpeg.Config{
 		FfmpegBinPath:   binFFMpeg,
 		FfprobeBinPath:  binFFProbe,
 		ProgressEnabled: true,
 		Verbose:         false,
 	}
-	ll := logger.With("in", in)
+	ll := logger.With("in", e.in)
 
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get working dir: %v", err)
 	}
-	if err := os.MkdirAll(out, os.ModePerm); err != nil {
+	if err := os.MkdirAll(e.out, os.ModePerm); err != nil {
 		return nil, err
 	}
-	if err := os.Chdir(out); err != nil {
+	if err := os.Chdir(e.out); err != nil {
 		return nil, err
 	}
 	if err != nil {
@@ -63,20 +75,32 @@ func Encode(in, out string) (<-chan ffmpegt.Progress, error) {
 	}
 	defer os.Chdir(wd)
 
-	meta, err := GetMetadata(in)
-	if err != nil {
-		return nil, err
-	}
-	vs := meta.GetStreams()[0]
-	fs := formats.TargetFormats(formats.H264, vs.GetWidth(), vs.GetHeight())
-	args, err := NewArguments(out, fs)
+	targetFormats, err := formats.TargetFormats(formats.H264, e.Meta)
 	if err != nil {
 		return nil, err
 	}
 
-	ll.Debugw("encoding requested", "args", strings.Join(args.GetStrArguments(), " "))
+	fps, err := formats.DetectFPS(e.Meta)
+	if err != nil {
+		return nil, err
+	}
+
+	args, err := NewArguments(e.out, targetFormats, fps)
+	if err != nil {
+		return nil, err
+	}
+
+	vs := e.Meta.GetStreams()[0]
+	ll.Debugw(
+		"starting encoding",
+		"args", strings.Join(args.GetStrArguments(), " "),
+		"media_duration", e.Meta.GetFormat().GetDuration(),
+		"media_bitrate", e.Meta.GetFormat().GetBitRate(),
+		"media_width", vs.GetWidth(),
+		"media_height", vs.GetHeight(),
+	)
 	return ffmpeg.New(ffmpegConf).
-		Input(in).
+		Input(e.in).
 		Output("stream_%v.m3u8").
 		Start(args)
 }

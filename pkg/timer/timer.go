@@ -28,6 +28,13 @@ func (t *Timer) Duration() float64 {
 	return t.duration
 }
 
+func (t *Timer) DurationInt() int64 {
+	if t.duration == 0 {
+		return int64(time.Since(t.Started).Seconds())
+	}
+	return int64(t.duration)
+}
+
 func (t *Timer) String() string {
 	return fmt.Sprintf("%.2f", t.Duration())
 }

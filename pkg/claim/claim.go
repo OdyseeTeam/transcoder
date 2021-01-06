@@ -12,8 +12,7 @@ import (
 	"time"
 
 	ljsonrpc "github.com/lbryio/lbry.go/v2/extras/jsonrpc"
-
-	"go.uber.org/zap"
+	"github.com/lbryio/transcoder/pkg/timer"
 )
 
 const (
@@ -38,12 +37,11 @@ var (
 	ErrStreamNotFound = errors.New("could not resolve stream URI")
 )
 
-var logger = zap.NewExample().Sugar().Named("claim")
-
 type WriteCounter struct {
-	Loaded, Size uint64
-	Started      time.Time
-	URL          string
+	Loaded, Size   uint64
+	Started        time.Time
+	URL            string
+	progressLogged map[int]bool
 }
 
 func (wc *WriteCounter) Write(p []byte) (int, error) {
@@ -51,14 +49,13 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 	wc.Loaded += uint64(n)
 	progress := int(float64(wc.Loaded) / float64(wc.Size) * 100)
 
-	progressLogged := map[int]bool{}
-	if progress%20 == 0 && !progressLogged[int(progress)] {
-		progressLogged[progress] = true
-		speed := float64(wc.Loaded) / time.Since(wc.Started).Seconds()
+	if progress%25 == 0 && !wc.progressLogged[progress] {
+		wc.progressLogged[progress] = true
+		rate := int64(float64(wc.Loaded) / time.Since(wc.Started).Seconds())
 		logger.Debugw(
 			"download progress",
 			"url", wc.URL,
-			"size", wc.Size, "percent", fmt.Sprintf("%v", progress), "rate", fmt.Sprintf("%.2f", speed))
+			"size", wc.Size, "progress", int(progress), "rate", rate)
 	}
 	return n, nil
 }
@@ -100,7 +97,9 @@ func (c *Claim) Download(dest string) (*os.File, int64, error) {
 	var readLen int64
 
 	req, err := http.NewRequest("GET", c.cdnURL(), nil)
-	logger.Debugw("download stream", "url", c.cdnURL())
+	logger.Debugw("downloading stream", "url", c.cdnURL())
+
+	tmr := timer.Start()
 
 	resp, err := downloadClient.Do(req)
 	if err != nil {
@@ -120,12 +119,20 @@ func (c *Claim) Download(dest string) (*os.File, int64, error) {
 		return nil, readLen, err
 	}
 
-	counter := &WriteCounter{Size: uint64(resp.ContentLength), Started: time.Now(), URL: c.cdnURL()}
-	if readLen, err = io.Copy(out, io.TeeReader(resp.Body, counter)); err != nil {
+	wc := &WriteCounter{
+		Size:           uint64(resp.ContentLength),
+		Started:        time.Now(),
+		URL:            c.cdnURL(),
+		progressLogged: map[int]bool{},
+	}
+	if readLen, err = io.Copy(out, io.TeeReader(resp.Body, wc)); err != nil {
 		out.Close()
 		os.Remove(out.Name())
 		return nil, readLen, err
 	}
+	tmr.Stop()
+	rate := readLen / tmr.DurationInt()
+	logger.Infow("stream downloaded", "url", c.cdnURL(), "rate", rate, "size", readLen, "seconds_spent", tmr.DurationInt())
 	return out, readLen, nil
 }
 
@@ -142,5 +149,5 @@ func (c *Claim) getSDHash() (string, error) {
 }
 
 func (c *Claim) streamFileName() string {
-	return fmt.Sprintf(c.SDHash)
+	return fmt.Sprintf("%s_%s", c.ChannelName, c.SDHash[:6])
 }

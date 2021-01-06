@@ -10,14 +10,15 @@ import (
 
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/alecthomas/kong"
-	"go.uber.org/zap"
 )
 
-var logger = zap.NewExample().Sugar()
+var logger = logging.Create("main", logging.Dev)
 
 var CLI struct {
 	Serve struct {
@@ -36,9 +37,11 @@ func main() {
 	switch ctx.Command() {
 	case "serve":
 		if CLI.Serve.Debug {
-			video.InitDebugLogger()
-		} else {
-			video.InitProductionLogger()
+			api.SetLogger(logging.Create("api", logging.Prod))
+			db.SetLogger(logging.Create("db", logging.Prod))
+			queue.SetLogger(logging.Create("queue", logging.Prod))
+			encoder.SetLogger(logging.Create("encoder", logging.Prod))
+			video.SetLogger(logging.Create("video", logging.Prod))
 		}
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
 		vdb.MigrateUp(video.InitialMigration)

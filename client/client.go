@@ -7,12 +7,9 @@ import (
 	"time"
 
 	"github.com/karlseguin/ccache/v2"
-	"go.uber.org/zap"
 )
 
 const hlsURLTemplate = "%v/api/v1/video/hls/%v"
-
-var logger = zap.NewExample().Sugar().Named("transcoder_client")
 
 type HTTPRequester interface {
 	Do(req *http.Request) (res *http.Response, err error)

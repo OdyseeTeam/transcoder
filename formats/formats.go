@@ -1,9 +1,21 @@
 package formats
 
+import (
+	"fmt"
+	"regexp"
+	"strconv"
+
+	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/pkg/errors"
+)
+
 const (
 	TypeHLS   = "hls"
 	TypeDASH  = "dash"
 	TypeRange = "range"
+
+	FPS30 = 30
+	FPS60 = 60
 )
 
 type Format struct {
@@ -45,48 +57,84 @@ var H264 = Codec{
 	Format{HD720, Bitrate{FPS30: 1400, FPS60: 2200}},
 	Format{SD480, Bitrate{FPS30: 1100, FPS60: 1700}},
 	Format{SD360, Bitrate{FPS30: 525, FPS60: 800}},
-	Format{SD240, Bitrate{FPS30: 250, FPS60: 380}},
-}
-
-var TargetResolutions = map[Resolution][]Resolution{
-	UHD4K:  {UHD4K, QHD2K, HD1080, HD720, SD480},
-	QHD2K:  {QHD2K, HD1080, HD720, SD480},
-	HD1080: {HD1080, HD720, SD480, SD360},
-	HD720:  {HD720, SD480, SD240},
-	SD480:  {SD480, SD240},
-	SD360:  {SD360},
-	SD240:  {SD240},
+	// Format{SD240, Bitrate{FPS30: 250, FPS60: 380}},
 }
 
 var brResolutionFactor = 800
+var fpsPattern = regexp.MustCompile(`^(\d+)?.+`)
 
-func TargetFormats(codec Codec, w, h int) []Format {
-	res := Resolution{Height: h}
+func (f Format) GetBitrateForFPS(fps int) int {
+	if fps == FPS60 {
+		return f.Bitrate.FPS60
+	}
+	return f.Bitrate.FPS30
+}
+
+func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
+	var (
+		origFPS, origBitrate int
+		err                  error
+	)
+
+	vs := meta.GetStreams()[0]
+	w, h := vs.GetWidth(), vs.GetHeight()
+
+	origFPS, err = DetectFPS(meta)
+	if err != nil {
+		return nil, err
+	}
+
+	origRes := Resolution{Height: h}
 	for _, r := range Resolutions {
 		if h == r.Height {
-			res = r
+			origRes = r
 		}
 	}
 
+	origBitrate, err = strconv.Atoi(meta.GetFormat().GetBitRate())
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot determine bitrate")
+	}
+	origBitrate = origBitrate / 1000
+
+	// Adding all resolutions that are equal or lower in height than the original media.
 	formats := []Format{}
-	// for _, tr := range TargetResolutions[res] {
-	// 	fs = append(fs, codec[tr])
-	// }
 	for _, f := range codec {
-		if res.Height >= f.Resolution.Height {
+		if origRes.Height >= f.Resolution.Height {
 			formats = append(formats, f)
 		}
 	}
+
 	hasSelf := false
 	for _, f := range formats {
-		if f.Resolution == res {
+		if f.Resolution == origRes {
 			hasSelf = true
+			break
 		}
 	}
 	if !hasSelf {
 		formats = append(formats, codec.Format(Resolution{Width: w, Height: h}))
 	}
-	return formats
+
+	// Excluding all target resolutions that have bitrate higher than the original media.
+	formatsFinal := []Format{}
+	for _, f := range formats {
+		targetBitrate := f.GetBitrateForFPS(origFPS)
+		cutoffBitrate := targetBitrate + int(float32(targetBitrate)*.4)
+		if origBitrate > cutoffBitrate {
+			formatsFinal = append(formatsFinal, f)
+		} else {
+			logger.Debugw(
+				"extraneous format",
+				"format", f,
+				"orig_bitrate", origBitrate,
+				"target_bitrate", targetBitrate,
+				"cutoff_bitrate", cutoffBitrate,
+			)
+		}
+	}
+
+	return formatsFinal, nil
 }
 
 func (c Codec) Format(r Resolution) Format {
@@ -100,4 +148,28 @@ func (c Codec) Format(r Resolution) Format {
 		FPS60: int((float32(r.Width) * float32(r.Height) * 1.56) / float32(brResolutionFactor)),
 	}
 	return Format{Resolution: r, Bitrate: br}
+}
+
+func DetectFPS(meta *ffmpeg.Metadata) (int, error) {
+	var (
+		err error
+		fps int
+	)
+	vs := meta.GetStreams()[0]
+	fpsMatch := fpsPattern.FindStringSubmatch(vs.GetAvgFrameRate())
+	if len(fpsMatch) > 0 {
+		fps, err = strconv.Atoi(fpsMatch[1])
+		if err != nil {
+			return fps, errors.Wrap(err, "cannot determine FPS")
+		}
+
+		if fps > 40 {
+			fps = FPS60
+		} else {
+			fps = FPS30
+		}
+	} else {
+		return fps, fmt.Errorf("cannot determine FPS from `%v`", vs.GetAvgFrameRate())
+	}
+	return fps, nil
 }

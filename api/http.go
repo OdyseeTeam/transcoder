@@ -14,30 +14,9 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var httpVideoPath = "/streams"
-
-var loggerName = "api"
-var logger = zap.NewExample().Sugar().Named(loggerName)
-
-func InitDebugLogger() {
-	l, _ := zap.NewDevelopment()
-	l = l.Named(loggerName)
-	logger = l.Sugar()
-	logger.Debugw("logger configured", "mode", "debug")
-}
-
-func InitProductionLogger() {
-	cfg := zap.NewProductionConfig()
-	cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	l, _ := cfg.Build()
-	l = l.Named(loggerName)
-	logger = l.Sugar()
-	logger.Infow("logger configured", "mode", "production")
-}
 
 // APIServer ties HTTP API together and allows to start/shutdown the web server.
 type APIServer struct {
@@ -135,7 +114,7 @@ func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 
 func loggingMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		logger.Debugw("http request", "get", ctx.Method(), "path", ctx.Path())
+		logger.Debugw("http request", "path", fmt.Sprintf("%v", ctx.Path()))
 		h(ctx)
 	}
 }
@@ -154,13 +133,9 @@ func NewServer(cfg *Configuration) *APIServer {
 	r.GET("/api/v1/video/{kind:hls}/{url}", s.handleVideo)
 	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
 
-	if s.debug {
-		InitDebugLogger()
-	} else {
-		InitProductionLogger()
+	if !s.debug {
 		r.PanicHandler = handlePanic
 	}
-
 	return s
 }
 

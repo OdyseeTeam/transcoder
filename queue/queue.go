@@ -7,11 +7,9 @@ import (
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/pkg/worker"
-	_ "github.com/mattn/go-sqlite3" // sqlite
-	"go.uber.org/zap"
-)
 
-var logger = zap.NewExample().Sugar().Named("queue")
+	_ "github.com/mattn/go-sqlite3" // sqlite
+)
 
 type Queue struct {
 	queries Queries

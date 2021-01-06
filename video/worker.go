@@ -15,7 +15,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 	logger.Info("started video processor")
 	defer logger.Info("quit video processor")
 	for t := range p.IncomingTasks() {
-		ll := logger.With("url", t.URL)
+		ll := logger.With("url", t.URL, "task_id", t.ID)
 		ll.Infow("incoming task")
 
 		c, err := ValidateIncomingVideo(t.URL)
@@ -53,18 +53,33 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 
 		streamPath := fmt.Sprintf("%v_%v", c.NormalizedName, c.SDHash[:6])
 		out := path.Join(videoPath, streamPath)
-		e, err := encoder.Encode(sfh.Name(), out)
+
+		enc, err := encoder.NewEncoder(sfh.Name(), out)
 		if err != nil {
-			ll.Errorw("encoding failure", "err", err)
 			p.ReleaseTask(t)
+			ll.Errorw("encoding failure", "err", err)
+			continue
+		}
+
+		ll.Infow("starting encoding")
+		e, err := enc.Encode()
+		if err != nil {
+			p.RejectTask(t)
+			ll.Errorw("encoding failure", "err", err)
 			continue
 		}
 
 		for i := range e {
-			ll.Infow("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
+			ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
 			if i.GetProgress() >= 99.9 {
-				ll.Infow("encoding complete", "out", out, "duration", tmr.String())
 				p.CompleteTask(t)
+				ll.Infow(
+					"encoding complete",
+					"out", out,
+					"seconds_spent", tmr.String(),
+					"duration", enc.Meta.Format.Duration,
+					"bitrate", enc.Meta.Format.GetBitRate(),
+				)
 				break
 			}
 		}
