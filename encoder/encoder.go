@@ -3,6 +3,7 @@ package encoder
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,10 +25,6 @@ type Encoder struct {
 func init() {
 	binFFMpeg = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
 	binFFProbe = firstExistingFile([]string{"/usr/local/bin/ffprobe", "/usr/bin/ffprobe"})
-
-	if binFFMpeg == "" || binFFProbe == "" {
-		panic("ffmpeg/ffprobe not found")
-	}
 }
 
 func firstExistingFile(paths []string) string {
@@ -41,6 +38,9 @@ func firstExistingFile(paths []string) string {
 }
 
 func NewEncoder(in, out string) (*Encoder, error) {
+	if binFFMpeg == "" || binFFProbe == "" {
+		return nil, errors.New("ffmpeg/ffprobe not found")
+	}
 	e := &Encoder{in: in, out: out}
 	meta, err := GetMetadata(e.in)
 	if err != nil {

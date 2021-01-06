@@ -36,7 +36,7 @@ func main() {
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
 	case "serve":
-		if CLI.Serve.Debug {
+		if !CLI.Serve.Debug {
 			api.SetLogger(logging.Create("api", logging.Prod))
 			db.SetLogger(logging.Create("db", logging.Prod))
 			queue.SetLogger(logging.Create("queue", logging.Prod))

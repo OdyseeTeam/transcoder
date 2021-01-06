@@ -49,7 +49,7 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 	wc.Loaded += uint64(n)
 	progress := int(float64(wc.Loaded) / float64(wc.Size) * 100)
 
-	if progress%25 == 0 && !wc.progressLogged[progress] {
+	if progress > 0 && progress%25 == 0 && !wc.progressLogged[progress] {
 		wc.progressLogged[progress] = true
 		rate := int64(float64(wc.Loaded) / time.Since(wc.Started).Seconds())
 		logger.Debugw(
