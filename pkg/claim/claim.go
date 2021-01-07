@@ -97,7 +97,7 @@ func (c *Claim) Download(dest string) (*os.File, int64, error) {
 	var readLen int64
 
 	req, err := http.NewRequest("GET", c.cdnURL(), nil)
-	logger.Debugw("downloading stream", "url", c.cdnURL())
+	logger.Infow("downloading stream", "url", c.cdnURL())
 
 	tmr := timer.Start()
 

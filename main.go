@@ -11,6 +11,7 @@ import (
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
@@ -42,6 +43,7 @@ func main() {
 			queue.SetLogger(logging.Create("queue", logging.Prod))
 			encoder.SetLogger(logging.Create("encoder", logging.Prod))
 			video.SetLogger(logging.Create("video", logging.Prod))
+			claim.SetLogger(logging.Create("video", logging.Prod))
 		}
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
 		vdb.MigrateUp(video.InitialMigration)
