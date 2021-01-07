@@ -10,18 +10,15 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/grafov/m3u8"
-	"github.com/karlseguin/ccache/v2"
 )
 
 type CachedVideo struct {
-	URL       string
-	localPath string
-	size      int64
+	dirName string
+	size    int64
 }
 
 type Downloadable interface {
@@ -48,20 +45,12 @@ func (v *CachedVideo) Size() int64 {
 	return v.size
 }
 
-func (v *CachedVideo) LocalPath() string {
-	return v.localPath
+func (v *CachedVideo) DirName() string {
+	return v.dirName
 }
 
 func (v CachedVideo) delete() error {
-	return os.RemoveAll(v.localPath)
-}
-
-func deleteCachedVideo(i *ccache.Item) {
-	cv := i.Value().(*CachedVideo)
-	err := cv.delete()
-	if err != nil {
-		// log
-	}
+	return os.RemoveAll(v.DirName())
 }
 
 func newHLSStream(url, sdHash string, client *Client) *HLSStream {
@@ -147,11 +136,6 @@ func (s *HLSStream) makeProgress() {
 	s.progress <- Progress{Stage: s.filesFetched}
 }
 
-func (s HLSStream) storeInCache(key, rootPath string, size int64) {
-	cv := &CachedVideo{URL: s.URL, size: size, localPath: s.SDHash}
-	s.client.cache.Set(hlsCacheKey(s.URL, s.SDHash), cv, 24*30*12*time.Hour)
-}
-
 func (s *HLSStream) startDownload(playlistURL string) error {
 	var streamSize int64
 
@@ -217,9 +201,10 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 		"url", s.URL,
 		"size", streamSize,
 		"path", s.LocalPath(),
-		"key", hlsCacheKey(s.URL, s.SDHash),
+		"key", hlsCacheKey(s.SDHash),
 	)
-	s.storeInCache(hlsCacheKey(s.URL, s.SDHash), s.LocalPath(), streamSize)
+	s.client.CacheVideo(s.DirName(), streamSize)
+
 	s.client.releaseDownload(s.rootURL())
 
 	s.progress <- Progress{Done: true}
@@ -236,5 +221,9 @@ func (s HLSStream) SafeURL() string {
 }
 
 func (s HLSStream) LocalPath() string {
-	return path.Join(s.client.videoPath, s.SDHash)
+	return path.Join(s.client.videoPath, s.DirName())
+}
+
+func (s HLSStream) DirName() string {
+	return s.SDHash
 }

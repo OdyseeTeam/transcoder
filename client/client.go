@@ -4,10 +4,14 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
+	"path"
 	"time"
 
 	"github.com/karlseguin/ccache/v2"
+	"github.com/karrick/godirwalk"
 	cmap "github.com/orcaman/concurrent-map"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -78,31 +82,42 @@ func (c *Configuration) HTTPClient(httpClient HTTPRequester) *Configuration {
 func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
-		cache: ccache.New(ccache.
-			Configure().
-			MaxSize(cfg.cacheSize).
-			ItemsToPrune(20).
-			OnDelete(deleteCachedVideo),
-		),
-		downloads: cmap.New(),
+		downloads:     cmap.New(),
 	}
+	c.cache = ccache.New(ccache.
+		Configure().
+		MaxSize(cfg.cacheSize).
+		ItemsToPrune(20).
+		OnDelete(c.deleteCachedVideo),
+	)
 
 	return c
 }
 
-func hlsCacheKey(lbryURL, sdHash string) string {
-	// return fmt.Sprintf("hls::%v::%v", lbryURL, sdHash)
+func hlsCacheKey(sdHash string) string {
 	return "hls::" + sdHash
+}
+
+func (c Client) deleteCachedVideo(i *ccache.Item) {
+	cv := i.Value().(*CachedVideo)
+	path := path.Join(c.videoPath, cv.DirName())
+	err := os.RemoveAll(path)
+	if err != nil {
+		logger.Errorw(
+			"unable to delete cached video",
+			"path", path, "err", err,
+		)
+	}
 }
 
 // Get returns either a cached video or downloadable instance for further processing.
 func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
-	logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(lbryURL, sdHash))
-	item := c.cache.Get(hlsCacheKey(lbryURL, sdHash))
-	if item != nil {
-		return item.Value().(*CachedVideo), nil
+	logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(sdHash))
+	cv := c.GetCachedVideo(sdHash)
+	if cv != nil {
+		return cv, nil
 	}
-	logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(lbryURL, sdHash))
+	logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(sdHash))
 
 	stream := newHLSStream(lbryURL, sdHash, &c)
 	return nil, stream
@@ -121,6 +136,51 @@ func (c Client) releaseDownload(key string) {
 	c.downloads.Remove(key)
 }
 
-func (c Client) restoreCache() error {
-	return nil
+func (c Client) GetCachedVideo(sdHash string) *CachedVideo {
+	item := c.cache.Get(hlsCacheKey(sdHash))
+	if item == nil {
+		return nil
+	}
+	cv, _ := item.Value().(*CachedVideo)
+	return cv
+}
+
+func (c Client) CacheVideo(path string, size int64) {
+	cv := &CachedVideo{size: size, dirName: path}
+	c.cache.Set(hlsCacheKey(path), cv, 24*30*12*time.Hour)
+}
+
+func (c Client) RestoreCache() (int64, error) {
+	var streamsRestored int64
+	cvs, err := godirwalk.ReadDirnames(c.videoPath, nil)
+
+	if err != nil {
+		return streamsRestored, errors.Wrap(err, "cannot restore cache")
+	}
+
+	for _, cvPath := range cvs {
+		var cvSize int64
+
+		// Skip non-sdHashes
+		if len(cvPath) != 96 {
+			continue
+		}
+
+		cvFiles, err := godirwalk.ReadDirnames(path.Join(c.videoPath, cvPath), nil)
+		if err != nil {
+			return streamsRestored, errors.Wrap(err, "cannot restore cache")
+		}
+
+		for _, f := range cvFiles {
+			s, err := os.Stat(path.Join(c.videoPath, cvPath, f))
+			if err != nil {
+				return streamsRestored, errors.Wrap(err, "cannot restore cache")
+			}
+			cvSize += s.Size()
+		}
+		c.CacheVideo(cvPath, cvSize)
+		streamsRestored++
+	}
+
+	return streamsRestored, nil
 }

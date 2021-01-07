@@ -9,6 +9,7 @@ require (
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/grafov/m3u8 v0.11.1
 	github.com/karlseguin/ccache/v2 v2.0.7
+	github.com/karrick/godirwalk v1.16.1
 	github.com/lbryio/lbry.go/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6

@@ -131,7 +131,7 @@ func (c *Claim) Download(dest string) (*os.File, int64, error) {
 		return nil, readLen, err
 	}
 	tmr.Stop()
-	rate := readLen / tmr.DurationInt()
+	rate := int64(float64(readLen) / tmr.Duration())
 	logger.Infow("stream downloaded", "url", c.cdnURL(), "rate", rate, "size", readLen, "seconds_spent", tmr.DurationInt())
 	return out, readLen, nil
 }

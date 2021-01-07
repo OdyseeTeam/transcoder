@@ -1,6 +1,8 @@
 package client
 
 import (
+	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"testing"
@@ -64,14 +66,38 @@ func (s *ClientSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
-func (s *ClientSuite) Test_restoreCache() {
-	c := New(Configure().VideoPath(path.Join(s.assetsPath, "client")).Server(s.apiServer.URL()))
-	err := c.restoreCache()
+func (s *ClientSuite) TestCache() {
+	vPath := path.Join(s.assetsPath, "TestCache")
+
+	c := New(Configure().VideoPath(vPath))
+
+	cvDirs := []string{}
+	for range [10]int{} {
+		dir := randomString(96)
+		cvDirs = append(cvDirs, dir)
+		os.MkdirAll(path.Join(vPath, dir), os.ModePerm)
+		ioutil.WriteFile(path.Join(vPath, dir, "master.m3u8"), []byte("12345"), os.ModePerm)
+		c.CacheVideo(dir, 5)
+
+		cv := c.GetCachedVideo(dir)
+		s.Require().NotNil(cv)
+	}
+
+	c = New(Configure().VideoPath(vPath))
+	n, err := c.RestoreCache()
 	s.Require().NoError(err)
+	s.EqualValues(10, n)
+
+	for _, dir := range cvDirs {
+		cv := c.GetCachedVideo(dir)
+		s.Require().NotNil(cv)
+		s.EqualValues(5, cv.Size())
+	}
 }
 
 func (s *ClientSuite) TestGet() {
-	c := New(Configure().VideoPath(path.Join(s.assetsPath, "client")).Server(s.apiServer.URL()))
+	vPath := path.Join(s.assetsPath, "Test_restoreCache")
+	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
 	s.Require().NotNil(c.httpClient)
 
 	cv, dl := c.Get("hls", streamURL, streamSDHash)
@@ -118,7 +144,7 @@ func (s *ClientSuite) TestGet() {
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Nil(dl)
 
-	f, err := os.Open(path.Join(s.assetsPath, "client", cv.LocalPath(), encoder.MasterPlaylist))
+	f, err := os.Open(path.Join(vPath, cv.DirName(), encoder.MasterPlaylist))
 	s.NoError(err)
 	rawpl, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
@@ -126,7 +152,7 @@ func (s *ClientSuite) TestGet() {
 
 	masterpl := rawpl.(*m3u8.MasterPlaylist)
 	for _, plv := range masterpl.Variants {
-		f, err := os.Open(path.Join(s.assetsPath, "client", cv.localPath, plv.URI))
+		f, err := os.Open(path.Join(vPath, cv.DirName(), plv.URI))
 		s.NoError(err)
 		p, _, err := m3u8.DecodeFrom(f, true)
 		s.NoError(err)
@@ -136,7 +162,17 @@ func (s *ClientSuite) TestGet() {
 			if seg == nil {
 				continue
 			}
-			s.FileExists(path.Join(s.assetsPath, "client", cv.localPath, seg.URI))
+			s.FileExists(path.Join(vPath, cv.DirName(), seg.URI))
 		}
 	}
+}
+
+func randomString(n int) string {
+	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letter[rand.Intn(len(letter))]
+	}
+	return string(b)
 }
