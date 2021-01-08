@@ -14,26 +14,23 @@ import (
 func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Poller) {
 	logger.Info("started video processor")
 	defer logger.Info("quit video processor")
+
 	for t := range p.IncomingTasks() {
-		ll := logger.With("url", t.URL, "task_id", t.ID)
+		ll := logger.Named("worker").With("url", t.URL, "task_id", t.ID)
 		ll.Infow("incoming task")
 
 		c, err := ValidateIncomingVideo(t.URL)
 		if err != nil {
-			if err == ErrChannelNotEnabled {
-				p.RejectTask(t)
-				ll.Errorw("validation failed", "err", err)
-				continue
-			}
+			ll.Errorw("task rejected", "reason", "validation failed", "err", err)
 			p.RejectTask(t)
-			ll.Errorw("resolve failed", "err", err)
 			continue
 		}
 
-		sfh, _, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
+		p.StartTask(t)
+		streamFH, _, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
 
 		if err != nil {
-			ll.Errorw("download failed", "err", err)
+			ll.Errorw("task released", "reason", "download failed", "err", err)
 			tErr := p.ReleaseTask(t)
 			if tErr != nil {
 				ll.Errorw("error releasing task", "tid", t.ID, "err", tErr)
@@ -41,11 +38,11 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 			continue
 		}
 
-		ll = ll.With("file", sfh.Name())
+		ll = ll.With("file", streamFH.Name())
 
-		if err := sfh.Close(); err != nil {
+		if err := streamFH.Close(); err != nil {
+			ll.Errorw("task released", "reason", "closing downloaded file failed", "err", err)
 			p.ReleaseTask(t)
-			ll.Errorw("closing downloaded file failed", "err", err)
 			continue
 		}
 
@@ -54,23 +51,25 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 		streamPath := fmt.Sprintf("%v_%v", c.NormalizedName, c.SDHash[:6])
 		out := path.Join(videoPath, streamPath)
 
-		enc, err := encoder.NewEncoder(sfh.Name(), out)
+		enc, err := encoder.NewEncoder(streamFH.Name(), out)
 		if err != nil {
-			p.ReleaseTask(t)
-			ll.Errorw("encoding failure", "err", err)
+			ll.Errorw("task rejected", "reason", "encoder initialization failure", "err", err)
+			p.RejectTask(t)
 			continue
 		}
 
 		ll.Infow("starting encoding")
 		e, err := enc.Encode()
 		if err != nil {
+			ll.Errorw("task rejected", "reason", "encoding failure", "err", err)
 			p.RejectTask(t)
-			ll.Errorw("encoding failure", "err", err)
 			continue
 		}
 
 		for i := range e {
 			ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
+			p.ProgressTask(t, i.GetProgress())
+
 			if i.GetProgress() >= 99.9 {
 				p.CompleteTask(t)
 				ll.Infow(
@@ -87,7 +86,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 		if err != nil {
 			logger.Errorw("adding to video library failed", "err", err)
 		}
-		err = os.Remove(sfh.Name())
+		err = os.Remove(streamFH.Name())
 		if err != nil {
 			logger.Errorw("cleanup failed", "err", err)
 		}

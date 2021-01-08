@@ -32,6 +32,7 @@ func (p *Poller) Process() error {
 }
 
 func (p *Poller) Shutdown() {
+	logger.Infow("poller shutting down, no more tasks will be sent to the workers")
 	p.isShutdown = true
 }
 
@@ -41,6 +42,14 @@ func (p *Poller) IsShutdown() bool {
 
 func (p Poller) IncomingTasks() <-chan *Task {
 	return p.incomingTasks
+}
+
+func (p Poller) StartTask(t *Task) error {
+	return p.queue.Start(t.ID)
+}
+
+func (p Poller) ProgressTask(t *Task, progress float64) error {
+	return p.queue.UpdateProgress(t.ID, progress)
 }
 
 func (p Poller) RejectTask(t *Task) error {

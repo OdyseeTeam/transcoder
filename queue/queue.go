@@ -62,10 +62,22 @@ func (q Queue) Reject(id uint32) error {
 	return q.queries.updateStatus(ctx, id, StatusRejected)
 }
 
+func (q Queue) Start(id uint32) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.updateStatus(ctx, id, StatusStarted)
+}
+
 func (q Queue) Complete(id uint32) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return q.queries.updateStatus(ctx, id, StatusCompleted)
+}
+
+func (q Queue) UpdateProgress(id uint32, progress float64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.updateProgress(ctx, id, progress)
 }
 
 func (q *Queue) StartPoller(workers int) *Poller {

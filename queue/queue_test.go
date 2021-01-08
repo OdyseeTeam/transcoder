@@ -73,17 +73,29 @@ func (s *QueueSuite) TestQueuePoll() {
 	for i := range [100]int{} {
 		task, err := q.Poll()
 		s.Require().NoError(err)
-		s.Equal(task.ID, lastTask.ID-uint32(i))
-		s.EqualValues(sql.NullFloat64{Float64: 0, Valid: true}, task.Progress)
-		s.Equal(StatusStarted, task.Status)
+		s.Require().Equal(task.ID, lastTask.ID-uint32(i))
+		s.Require().Equal(StatusPending, task.Status)
+
+		t, err := q.Get(task.ID)
+		s.Require().NoError(err)
+		s.Require().Equal(t.ID, lastTask.ID-uint32(i))
+		s.Require().Equal(StatusPending, t.Status)
 	}
 
 	ts, err := q.List()
 	s.Require().NoError(err)
 	s.Require().Len(ts, 100)
 	for _, t := range ts {
-		s.EqualValues(sql.NullFloat64{Float64: 0, Valid: true}, t.Progress)
-		s.Equal(StatusStarted, t.Status)
+		s.Require().Equal(StatusPending, t.Status)
+	}
+
+	for _, t := range ts {
+		err := q.Start(t.ID)
+		s.Require().NoError(err)
+		t, err := q.Get(t.ID)
+		s.Require().NoError(err)
+		s.Require().EqualValues(sql.NullFloat64{Float64: 0, Valid: false}, t.Progress)
+		s.Require().Equal(StatusStarted, t.Status)
 	}
 
 	task, err := q.Poll()
@@ -108,12 +120,15 @@ func (s *QueueSuite) TestQueueRelease() {
 	pTask2, err := q.Poll()
 	s.Require().NoError(err)
 	s.Equal(pTask.ID, pTask2.ID)
-	s.Equal(StatusStarted, pTask2.Status)
+	s.Equal(StatusPending, pTask2.Status)
 }
 
 func (s *QueueSuite) TestQueueReject() {
 	q := NewQueue(s.db)
-	_, err := q.Add(db.RandomString(32), db.RandomString(96), formats.TypeHLS)
+	task, err := q.Add(db.RandomString(32), db.RandomString(96), formats.TypeHLS)
+	s.Require().NoError(err)
+
+	_, err = q.Get(task.ID)
 	s.Require().NoError(err)
 
 	pTask, err := q.Poll()
@@ -128,4 +143,28 @@ func (s *QueueSuite) TestQueueReject() {
 
 	_, err = q.Poll()
 	s.Require().Equal(sql.ErrNoRows, err)
+}
+
+func (s *QueueSuite) TestQueueUpdateProgress() {
+	q := NewQueue(s.db)
+	_, err := q.Add(db.RandomString(32), db.RandomString(96), formats.TypeHLS)
+	s.Require().NoError(err)
+
+	pTask, err := q.Poll()
+	s.Require().NoError(err)
+
+	err = q.UpdateProgress(pTask.ID, 55.4)
+	s.EqualError(err, "wrong status for progressing task: pending")
+
+	err = q.Start(pTask.ID)
+	s.Require().NoError(err)
+
+	pTask, err = q.Get(pTask.ID)
+	err = q.UpdateProgress(pTask.ID, 12.4)
+	s.Require().NoError(err, pTask.Status)
+
+	pTask, err = q.Get(pTask.ID)
+
+	s.EqualValues(12.4, pTask.Progress.Float64)
+	s.Require().NotNil(pTask)
 }

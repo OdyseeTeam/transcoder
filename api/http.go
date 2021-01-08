@@ -152,7 +152,7 @@ func (s APIServer) Start() error {
 	return s.httpServer.ListenAndServe(s.addr)
 }
 
-func (s APIServer) Stop() error {
+func (s APIServer) Shutdown() error {
 	logger.Info("shutting down...")
 	return s.httpServer.Shutdown()
 }

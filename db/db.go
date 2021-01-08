@@ -8,6 +8,10 @@ import (
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // sqlite
+	sqldblogger "github.com/simukti/sqldb-logger"
+	"github.com/simukti/sqldb-logger/logadapter/zapadapter"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const defaultDBFile = "db.sqlite"
@@ -34,7 +38,18 @@ func OpenDB(file string) *DB {
 
 // OpenTestDB opens an in-memory sqlite database for use in tests.
 func OpenTestDB() *DB {
-	stdDB, err := sql.Open("sqlite3", "file:x?mode=memory&_journal_mode=WAL")
+	dsn := "file:x?mode=memory&_journal_mode=WAL"
+
+	// Remove IncreaseLevel call to unleash SQL logs.
+	ll := logger.Desugar().WithOptions(zap.IncreaseLevel(zapcore.ErrorLevel))
+
+	stdDB, err := sql.Open("sqlite3", dsn)
+	stdDB = sqldblogger.OpenDriver(
+		dsn,
+		stdDB.Driver(),
+		zapadapter.New(ll),
+	)
+	stdDB.Ping()
 	if err != nil {
 		logger.Panic(err)
 	}

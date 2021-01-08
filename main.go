@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
 	"path"
+	"syscall"
 	"time"
 
 	"github.com/lbryio/transcoder/api"
@@ -33,6 +35,8 @@ var CLI struct {
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
+
+	stopChan := make(chan os.Signal)
 
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
@@ -70,16 +74,26 @@ func main() {
 		for i := 0; i < CLI.Serve.Workers; i++ {
 			go video.SpawnProcessing(CLI.Serve.VideoPath, q, lib, poller)
 		}
-		err = api.NewServer(
+
+		apiServer := api.NewServer(
 			api.Configure().
 				Debug(CLI.Serve.Debug).
 				Addr(CLI.Serve.Bind).
 				VideoPath(CLI.Serve.VideoPath).
 				VideoManager(api.NewManager(q, lib)),
-		).Start()
-		if err != nil {
-			logger.Fatal(err)
-		}
+		)
+		go func() {
+			err := apiServer.Start()
+			if err != nil {
+				logger.Fatal(err)
+			}
+		}()
+
+		signal.Notify(stopChan, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
+		sig := <-stopChan
+		logger.Infof("caught an %v signal, shutting down", sig)
+		apiServer.Shutdown()
+		poller.Shutdown()
 	default:
 		logger.Fatal(ctx.Command())
 	}

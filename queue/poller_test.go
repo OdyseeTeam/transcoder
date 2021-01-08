@@ -54,7 +54,7 @@ func (s *PollerSuite) TestStartPoller() {
 	s.Require().Len(ts, 10)
 
 	for _, t := range ts {
-		s.Equal(StatusStarted, t.Status)
+		s.Equal(StatusPending, t.Status)
 	}
 }
 
@@ -83,7 +83,7 @@ func (s *PollerSuite) TestPollerShutdown() {
 
 	var started, new int
 	for _, t := range ts {
-		if t.Status == StatusStarted {
+		if t.Status == StatusPending {
 			started++
 		} else {
 			new++
@@ -93,6 +93,6 @@ func (s *PollerSuite) TestPollerShutdown() {
 		s.Equal(StatusNew, t.Status)
 	}
 	for _, t := range ts[10:] {
-		s.Equal(StatusStarted, t.Status)
+		s.Equal(StatusPending, t.Status)
 	}
 }
