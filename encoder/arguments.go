@@ -23,13 +23,15 @@ type Arguments struct {
 	defaultArgs []Argument
 	formats     []formats.Format
 	out         string
+	fps         int
 }
 
 // HLSArguments creates a default set of arguments for ffmpeg HLS encoding.
 func HLSArguments() Arguments {
 	return Arguments{
 		defaultArgs: []Argument{
-			{"preset", "veryfast"},
+			{"threads", "2"},
+			{"preset", "superfast"},
 			{"keyint_min", keyint},
 			{"g", keyint},
 			{"sc_threshold", "0"},
@@ -53,13 +55,14 @@ func HLSArguments() Arguments {
 	}
 }
 
-func NewArguments(out string, formats []formats.Format) (Arguments, error) {
+func NewArguments(out string, formats []formats.Format, fps int) (Arguments, error) {
 	a := HLSArguments()
 	if len(formats) == 0 {
 		return a, errors.New("no target formats supplied")
 	}
 	a.formats = formats
 	a.out = out
+	a.fps = fps
 
 	return a, nil
 }
@@ -80,9 +83,8 @@ func (a Arguments) GetStrArguments() []string {
 		// Instead of using a encoding quality factor "-crf" I have to use a set bitrate with "-b:v:X" for every stream
 		// and omit the "-crf" statement. To fine-tune the we can change the -bufsize:v:X between 150% of the set bitrate
 		// to 200% of the set bitrate. I took 175%. The bufsize is the area in witch the bitrate is calculated and adjusted by the encoder.
-		// TODO: set correct FPS
-		formatOpts = append(formatOpts, Argument{fmt.Sprintf("maxrate:%v", i), fmt.Sprintf("%vk", f.Bitrate.FPS30)})
-		formatOpts = append(formatOpts, Argument{fmt.Sprintf("bufsize:%v", i), fmt.Sprintf("%vk", f.Bitrate.FPS30*2)})
+		formatOpts = append(formatOpts, Argument{fmt.Sprintf("maxrate:%v", i), fmt.Sprintf("%vk", f.GetBitrateForFPS(a.fps))})
+		formatOpts = append(formatOpts, Argument{fmt.Sprintf("bufsize:%v", i), fmt.Sprintf("%vk", f.GetBitrateForFPS(a.fps)*2)})
 	}
 	for range a.formats {
 		formatOpts = append(formatOpts, Argument{"map", "a:0"})

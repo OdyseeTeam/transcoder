@@ -2,33 +2,65 @@ package api
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"time"
 
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
-	"go.uber.org/zap"
 )
 
 var httpVideoPath = "/streams"
-var logger = zap.NewExample().Sugar().Named("http")
 
-type handler struct {
-	manager *VideoManager
+// APIServer ties HTTP API together and allows to start/shutdown the web server.
+type APIServer struct {
+	*Configuration
+	httpServer *fasthttp.Server
+	stopChan   chan os.Signal
+	stopWait   time.Duration
 }
 
-func initDebugLogger() {
-	l, _ := zap.NewDevelopment()
-	l = l.Named("http")
-	logger = l.Sugar()
+type Configuration struct {
+	debug        bool
+	videoPath    string
+	addr         string
+	videoManager *VideoManager
 }
 
-func (h *handler) handleVideo(ctx *fasthttp.RequestCtx) {
+func Configure() *Configuration {
+	return &Configuration{
+		addr:      ":8080",
+		videoPath: path.Join(os.TempDir(), "transcoder"),
+	}
+}
+
+func (c *Configuration) Debug(debug bool) *Configuration {
+	c.debug = debug
+	return c
+}
+
+func (c *Configuration) Addr(addr string) *Configuration {
+	c.addr = addr
+	return c
+}
+
+func (c *Configuration) VideoPath(videoPath string) *Configuration {
+	c.videoPath = videoPath
+	return c
+}
+
+func (c *Configuration) VideoManager(videoManager *VideoManager) *Configuration {
+	c.videoManager = videoManager
+	return c
+}
+
+func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	urlQ := ctx.UserValue("url").(string)
 	kind := ctx.UserValue("kind").(string)
 
@@ -42,15 +74,19 @@ func (h *handler) handleVideo(ctx *fasthttp.RequestCtx) {
 
 	ll := logger.With("url", url)
 
-	v, err := h.manager.GetVideoOrCreateTask(url, kind)
+	v, err := h.videoManager.GetVideoOrCreateTask(url, kind)
 
 	if err == video.ErrChannelNotEnabled || err == video.ErrNoSigningChannel {
 		ctx.SetStatusCode(http.StatusForbidden)
-		ll.Infow("forbidden")
+		ll.Debugw("forbidden")
 		return
 	} else if err == video.ErrTranscodingUnderway {
 		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Infow("accepted")
+		ll.Debugw("trancoding underway")
+		return
+	} else if err == claim.ErrStreamNotFound {
+		ctx.SetStatusCode(http.StatusNotFound)
+		ll.Debugw("stream not found")
 		return
 	} else if err != nil {
 		ctx.SetStatusCode(http.StatusInternalServerError)
@@ -60,8 +96,8 @@ func (h *handler) handleVideo(ctx *fasthttp.RequestCtx) {
 	}
 
 	path := fmt.Sprintf("%v/%v/%v", httpVideoPath, v.GetPath(), encoder.MasterPlaylist)
-	ll.Infow("found", "path", path)
-	ctx.Redirect(path, http.StatusPermanentRedirect)
+	ll.Debugw("found", "path", fmt.Sprintf("%v", path))
+	ctx.Redirect(path, http.StatusSeeOther)
 }
 
 func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {
@@ -69,19 +105,54 @@ func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {
 	logger.Errorw("panicked", "url", ctx.Request.URI(), "panic", p)
 }
 
-func InitHTTP(bind, videoDir string, debug bool, m *VideoManager) {
-	r := router.New()
-	h := handler{manager: m}
-	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:^[a-z0-9]{96}$}", h.handleVideo)
-	r.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
-	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), videoDir)
+func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
+		h(ctx)
+	}
+}
 
-	if debug {
-		initDebugLogger()
-	} else {
-		r.PanicHandler = handlePanic
+func loggingMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
+		logger.Debugw("http request", "path", string(ctx.Path()))
+		h(ctx)
+	}
+}
+
+func NewServer(cfg *Configuration) *APIServer {
+	r := router.New()
+
+	s := &APIServer{
+		Configuration: cfg,
+		httpServer: &fasthttp.Server{
+			Handler: loggingMiddleware(corsMiddleware(r.Handler)),
+		},
 	}
 
-	logger.Infow("started listening", "bind", bind, "video_dir", videoDir, "debug", debug)
-	log.Fatal(fasthttp.ListenAndServe(bind, r.Handler))
+	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:^[a-z0-9]{96}$}", h.handleVideo)
+	r.GET("/api/v1/video/{kind:hls}/{url}", s.handleVideo)
+	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
+
+	if !s.debug {
+		r.PanicHandler = handlePanic
+	}
+	return s
+}
+
+func (s APIServer) Addr() string {
+	return s.addr
+}
+
+func (s APIServer) URL() string {
+	return "http://" + s.addr
+}
+
+func (s APIServer) Start() error {
+	logger.Infow("listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
+	return s.httpServer.ListenAndServe(s.addr)
+}
+
+func (s APIServer) Stop() error {
+	logger.Info("shutting down...")
+	return s.httpServer.Shutdown()
 }

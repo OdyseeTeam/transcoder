@@ -33,7 +33,7 @@ func (s *PollerSuite) StartPollerWorker(p *Poller, q *Queue, wf func(*Task)) {
 
 func (s *PollerSuite) TestStartPoller() {
 	q := NewQueue(s.db)
-	p := q.StartPoller()
+	p := q.StartPoller(5)
 	for range [5]bool{} {
 		go s.StartPollerWorker(p, q, func(_ *Task) {})
 	}
@@ -60,7 +60,7 @@ func (s *PollerSuite) TestStartPoller() {
 
 func (s *PollerSuite) TestPollerShutdown() {
 	q := NewQueue(s.db)
-	p := q.StartPoller()
+	p := q.StartPoller(5)
 	for range [5]bool{} {
 		go s.StartPollerWorker(p, q, func(_ *Task) {})
 	}

@@ -7,11 +7,9 @@ import (
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/pkg/worker"
-	_ "github.com/mattn/go-sqlite3" // sqlite
-	"go.uber.org/zap"
-)
 
-var logger = zap.NewExample().Sugar().Named("queue")
+	_ "github.com/mattn/go-sqlite3" // sqlite
+)
 
 type Queue struct {
 	queries Queries
@@ -23,41 +21,57 @@ func NewQueue(db *db.DB) *Queue {
 
 func (q Queue) Add(url, sdHash, _type string) (*Task, error) {
 	tp := AddParams{URL: url, SDHash: sdHash, Type: formats.TypeHLS}
-	return q.queries.Add(context.Background(), tp)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.Add(ctx, tp)
 }
 
 func (q Queue) Poll() (*Task, error) {
-	return q.queries.Poll(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.Poll(ctx)
 }
 
 func (q Queue) Release(id uint32) error {
-	return q.queries.Release(context.Background(), id)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.Release(ctx, id)
 }
 
 func (q Queue) Get(id uint32) (*Task, error) {
-	return q.queries.Get(context.Background(), id)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.Get(ctx, id)
 }
 
 func (q Queue) GetBySDHash(sdHash string) (*Task, error) {
-	return q.queries.GetBySDHash(context.Background(), sdHash)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.GetBySDHash(ctx, sdHash)
 }
 
 func (q Queue) List() ([]*Task, error) {
-	return q.queries.List(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.List(ctx)
 }
 
 func (q Queue) Reject(id uint32) error {
-	return q.queries.updateStatus(context.Background(), id, StatusRejected)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.updateStatus(ctx, id, StatusRejected)
 }
 
 func (q Queue) Complete(id uint32) error {
-	return q.queries.updateStatus(context.Background(), id, StatusCompleted)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return q.queries.updateStatus(ctx, id, StatusCompleted)
 }
 
-func (q *Queue) StartPoller() *Poller {
+func (q *Queue) StartPoller(workers int) *Poller {
 	p := &Poller{
 		queue:         q,
-		incomingTasks: make(chan *Task, 1000),
+		incomingTasks: make(chan *Task, workers),
 	}
 	w := worker.NewTicker(p, 100*time.Millisecond)
 	w.Start()

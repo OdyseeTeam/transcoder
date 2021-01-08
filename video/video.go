@@ -4,11 +4,7 @@ import (
 	"context"
 
 	"github.com/lbryio/transcoder/db"
-
-	"go.uber.org/zap"
 )
-
-var logger = zap.NewExample().Sugar().Named("video")
 
 // Library contains methods for accessing videos database.
 type Library struct {

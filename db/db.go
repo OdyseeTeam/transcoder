@@ -8,10 +8,7 @@ import (
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // sqlite
-	"go.uber.org/zap"
 )
-
-var logger = zap.NewExample().Sugar().Named("db")
 
 const defaultDBFile = "db.sqlite"
 
