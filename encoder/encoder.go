@@ -15,7 +15,12 @@ import (
 	"github.com/floostack/transcoder/ffmpeg"
 )
 
-var binFFMpeg, binFFProbe string
+var ffmpegConf = &ffmpeg.Config{
+	FfmpegBinPath:   "",
+	FfprobeBinPath:  "",
+	ProgressEnabled: true,
+	Verbose:         false,
+}
 
 type Encoder struct {
 	in, out string
@@ -23,8 +28,16 @@ type Encoder struct {
 }
 
 func init() {
-	binFFMpeg = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
-	binFFProbe = firstExistingFile([]string{"/usr/local/bin/ffprobe", "/usr/bin/ffprobe"})
+	var err error
+	ffmpegConf.FfmpegBinPath, err = exec.LookPath("ffmpeg")
+	if err != nil {
+		ffmpegConf.FfmpegBinPath = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
+	}
+	ffmpegConf.FfprobeBinPath, err = exec.LookPath("ffprobe")
+	if err != nil {
+		ffmpegConf.FfprobeBinPath = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
+	}
+	logger.Infow("ffmpeg configuration", "conf", ffmpegConf)
 }
 
 func firstExistingFile(paths []string) string {
@@ -38,7 +51,7 @@ func firstExistingFile(paths []string) string {
 }
 
 func NewEncoder(in, out string) (*Encoder, error) {
-	if binFFMpeg == "" || binFFProbe == "" {
+	if ffmpegConf.FfmpegBinPath == "" || ffmpegConf.FfprobeBinPath == "" {
 		return nil, errors.New("ffmpeg/ffprobe not found")
 	}
 	e := &Encoder{in: in, out: out}
@@ -52,12 +65,6 @@ func NewEncoder(in, out string) (*Encoder, error) {
 
 // Encode does transcoding of specified video file into a series of HLS streams.
 func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
-	ffmpegConf := &ffmpeg.Config{
-		FfmpegBinPath:   binFFMpeg,
-		FfprobeBinPath:  binFFProbe,
-		ProgressEnabled: true,
-		Verbose:         false,
-	}
 	ll := logger.With("in", e.in)
 
 	wd, err := os.Getwd()
@@ -113,13 +120,15 @@ func GetMetadata(file string) (*ffmpeg.Metadata, error) {
 
 	args := []string{"-i", file, "-print_format", "json", "-show_format", "-show_streams", "-show_error"}
 
-	cmd := exec.Command(binFFProbe, args...)
+	cmd := exec.Command(ffmpegConf.FfprobeBinPath, args...)
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 
 	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("error executing (%s) with args (%s) | error: %s | message: %s %s", binFFProbe, args, err, outb.String(), errb.String())
+		return nil, fmt.Errorf(
+			"error executing (%s) with args (%s) | error: %s | message: %s %s",
+			ffmpegConf.FfprobeBinPath, args, err, outb.String(), errb.String())
 	}
 
 	if err = json.Unmarshal([]byte(outb.String()), &metadata); err != nil {
