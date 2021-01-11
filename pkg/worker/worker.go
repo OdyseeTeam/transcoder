@@ -41,10 +41,13 @@ func (w *Ticker) Start() {
 			case <-ticker.C:
 				err := w.workload.Process()
 				if errors.Is(err, FatalError) || errors.Is(err, ErrShutdown) {
+					logger.Errorw("workload had a fatal error", "err", err)
 					w.Stop()
 					go func() {
 						w.workload.Shutdown()
 					}()
+				} else if err != nil {
+					logger.Errorw("workload errored", "err", err)
 				}
 			}
 		}

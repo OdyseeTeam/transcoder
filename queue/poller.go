@@ -4,7 +4,6 @@ import (
 	"database/sql"
 
 	"github.com/lbryio/transcoder/pkg/worker"
-	"github.com/pkg/errors"
 )
 
 type Poller struct {
@@ -24,7 +23,7 @@ func (p *Poller) Process() error {
 		if err == sql.ErrNoRows {
 			return nil
 		}
-		return errors.Wrap(worker.FatalError, err.Error())
+		return err
 	}
 	p.incomingTasks <- t
 	p.incomingTaskCounter++

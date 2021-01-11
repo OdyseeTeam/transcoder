@@ -93,6 +93,7 @@ func (q *Queries) Poll(ctx context.Context) (*Task, error) {
 		return &i, err
 	}
 
+	logger.Debugw("got a task", "id", i.ID, "url", i.URL)
 	i.Progress = sql.NullFloat64{Float64: 0, Valid: true}
 	i.Status = StatusPending
 	return &i, err

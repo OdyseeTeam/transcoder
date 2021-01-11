@@ -83,9 +83,9 @@ func (q Queue) UpdateProgress(id uint32, progress float64) error {
 func (q *Queue) StartPoller(workers int) *Poller {
 	p := &Poller{
 		queue:         q,
-		incomingTasks: make(chan *Task, workers),
+		incomingTasks: make(chan *Task, 1000),
 	}
-	w := worker.NewTicker(p, 100*time.Millisecond)
+	w := worker.NewTicker(p, 1*time.Second)
 	w.Start()
 	return p
 }

@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"os/signal"
 	"path"
-	"syscall"
 	"time"
 
 	"github.com/lbryio/transcoder/api"
@@ -36,7 +34,7 @@ var CLI struct {
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	stopChan := make(chan os.Signal)
+	// stopChan := make(chan os.Signal)
 
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
@@ -44,7 +42,7 @@ func main() {
 		if !CLI.Serve.Debug {
 			api.SetLogger(logging.Create("api", logging.Prod))
 			db.SetLogger(logging.Create("db", logging.Prod))
-			queue.SetLogger(logging.Create("queue", logging.Prod))
+			// queue.SetLogger(logging.Create("queue", logging.Prod))
 			encoder.SetLogger(logging.Create("encoder", logging.Prod))
 			video.SetLogger(logging.Create("video", logging.Prod))
 			claim.SetLogger(logging.Create("video", logging.Prod))
@@ -82,18 +80,18 @@ func main() {
 				VideoPath(CLI.Serve.VideoPath).
 				VideoManager(api.NewManager(q, lib)),
 		)
-		go func() {
-			err := apiServer.Start()
-			if err != nil {
-				logger.Fatal(err)
-			}
-		}()
+		// go func() {
+		err = apiServer.Start()
+		if err != nil {
+			logger.Fatal(err)
+		}
+		// }()
 
-		signal.Notify(stopChan, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
-		sig := <-stopChan
-		logger.Infof("caught an %v signal, shutting down", sig)
-		apiServer.Shutdown()
-		poller.Shutdown()
+		// signal.Notify(stopChan, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
+		// sig := <-stopChan
+		// logger.Infof("caught an %v signal, shutting down", sig)
+		// apiServer.Shutdown()
+		// poller.Shutdown()
 	default:
 		logger.Fatal(ctx.Command())
 	}
