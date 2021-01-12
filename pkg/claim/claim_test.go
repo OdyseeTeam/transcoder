@@ -22,11 +22,12 @@ func TestClaimDownload(t *testing.T) {
 	require.NoError(t, err)
 	f, n, err := c.Download(path.Join(os.TempDir(), "transcoder_test"))
 	require.NoError(t, err)
-	f.Close()
-	defer os.Remove(f.Name())
 
 	fi, err := os.Stat(f.Name())
 	require.NoError(t, err)
 	assert.Equal(t, int64(c.Value.GetStream().GetSource().Size), fi.Size())
 	assert.Equal(t, int64(c.Value.GetStream().GetSource().Size), n)
+
+	f.Close()
+	os.Remove(f.Name())
 }

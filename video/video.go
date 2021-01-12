@@ -16,9 +16,8 @@ func NewLibrary(db *db.DB) *Library {
 }
 
 // Add records data about video into database.
-func (q Library) Add(url, sdHash, _type, path string) (*Video, error) {
-	tp := AddParams{URL: url, SDHash: sdHash, Type: _type, Path: path}
-	return q.queries.Add(context.Background(), tp)
+func (q Library) Add(params AddParams) (*Video, error) {
+	return q.queries.Add(context.Background(), params)
 }
 
 func (q Library) Get(sdHash string) (*Video, error) {

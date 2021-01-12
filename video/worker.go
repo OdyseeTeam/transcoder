@@ -82,7 +82,13 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 				break
 			}
 		}
-		_, err = lib.Add(t.URL, t.SDHash, formats.TypeHLS, streamPath)
+		_, err = lib.Add(AddParams{
+			URL:     t.URL,
+			SDHash:  t.SDHash,
+			Type:    formats.TypeHLS,
+			Path:    streamPath,
+			Channel: c.SigningChannel.CanonicalURL,
+		})
 		if err != nil {
 			logger.Errorw("adding to video library failed", "err", err)
 		}
