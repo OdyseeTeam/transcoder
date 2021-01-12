@@ -32,41 +32,45 @@ func (s *LibrarySuite) SetupSuite() {
 
 func (s *LibrarySuite) SetupTest() {
 	s.db = db.OpenTestDB()
-	s.db.MigrateUp(InitialMigration)
+	s.Require().NoError(s.db.MigrateUp(InitialMigration))
 }
 
 func (s *LibrarySuite) TestVideoAdd() {
 	lib := NewLibrary(s.db)
 	params := AddParams{
-		URL:    "what",
-		SDHash: "string",
-		Type:   formats.TypeHLS,
-		Path:   "/tmp/test",
+		URL:     "what",
+		SDHash:  "string",
+		Type:    formats.TypeHLS,
+		Path:    "/tmp/test",
+		Channel: "@specialoperationstest#3",
 	}
-	video, err := lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	video, err := lib.Add(params)
 	s.Require().NoError(err)
 	s.Equal(params.URL, video.URL)
 	s.EqualValues(params.SDHash, video.SDHash)
 	s.EqualValues(params.Type, video.Type)
 	s.EqualValues(params.Path, video.Path)
+	s.Equal(sql.NullTime{}, video.LastAccessed)
 
-	video, err = lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	video, err = lib.Add(params)
 	s.Require().Error(err, "UNIQUE constraint failed")
 }
 
 func (s *LibrarySuite) TestVideoGet() {
 	lib := NewLibrary(s.db)
 	params := AddParams{
-		URL:    "what",
-		SDHash: "string",
-		Type:   formats.TypeHLS,
-		Path:   "/tmp/test",
+		URL:     "what",
+		SDHash:  "string",
+		Type:    formats.TypeHLS,
+		Path:    "/tmp/test",
+		Channel: "@specialoperationstest#3",
 	}
 	video, err := lib.Get(params.SDHash)
 	s.Error(err, sql.ErrNoRows)
 	s.Nil(video)
 
-	_, err = lib.Add(params.URL, params.SDHash, params.Type, params.Path)
+	_, err = lib.Add(params)
+
 	s.Require().NoError(err)
 
 	video, err = lib.Get(params.SDHash)
@@ -74,4 +78,6 @@ func (s *LibrarySuite) TestVideoGet() {
 	s.EqualValues(params.SDHash, video.SDHash)
 	s.EqualValues(params.Type, video.Type)
 	s.EqualValues(params.Path, video.Path)
+	s.EqualValues(params.Channel, video.Channel)
+	s.LessOrEqual((time.Since(video.LastAccessed.Time)).Seconds(), float64(1))
 }
