@@ -98,8 +98,8 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 	}
 
 	vs := e.Meta.GetStreams()[0]
-	ll.Debugw(
-		"starting encoding",
+	ll.Infow(
+		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
 		"media_duration", e.Meta.GetFormat().GetDuration(),
 		"media_bitrate", e.Meta.GetFormat().GetBitRate(),
