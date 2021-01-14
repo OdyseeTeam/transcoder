@@ -167,6 +167,22 @@ func (s *ClientSuite) TestGet() {
 	}
 }
 
+func (s *ClientSuite) TestGetCachedVideo() {
+	vPath := path.Join(s.assetsPath, "TestGetCachedVideo")
+	c := New(Configure().VideoPath(vPath))
+	hash := randomString(96)
+	cachedPath := path.Join(vPath, hash)
+	os.MkdirAll(cachedPath, os.ModePerm)
+	c.CacheVideo(hash, 6000)
+
+	cv := c.GetCachedVideo(hash)
+	s.Equal(cv.dirName, hash)
+	s.Equal(cv.size, int64(6000))
+
+	s.Require().NoError(os.Remove(cachedPath))
+	s.Nil(c.GetCachedVideo(hash))
+}
+
 func randomString(n int) string {
 	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 

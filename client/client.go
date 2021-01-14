@@ -142,6 +142,15 @@ func (c Client) GetCachedVideo(sdHash string) *CachedVideo {
 		return nil
 	}
 	cv, _ := item.Value().(*CachedVideo)
+	if cv == nil {
+		return nil
+	}
+
+	_, err := os.Stat(path.Join(c.videoPath, cv.dirName))
+	if err != nil {
+		c.cache.Delete(sdHash)
+		return nil
+	}
 	return cv
 }
 
