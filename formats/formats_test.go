@@ -15,19 +15,19 @@ func TestTargetFormats(t *testing.T) {
 	}{
 		{
 			generateMeta(720, 480, 5000, FPS30),
-			[]Format{H264.Format(SD480), H264.Format(SD360)},
+			[]Format{H264.CustomFormat(SD480), H264.CustomFormat(SD360)},
 		},
 		{
 			generateMeta(1920, 1080, 8000, FPS30),
-			[]Format{H264.Format(HD1080), H264.Format(HD720), H264.Format(SD480), H264.Format(SD360)},
+			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD480), H264.CustomFormat(SD360)},
 		},
 		{
 			generateMeta(800, 600, 3000, FPS30),
-			[]Format{H264.Format(SD480), H264.Format(SD360), H264.Format(Resolution{800, 600})},
+			[]Format{H264.CustomFormat(SD480), H264.CustomFormat(SD360), H264.CustomFormat(Resolution{800, 600})},
 		},
 		{
 			generateMeta(1920, 1080, 3000, FPS30),
-			[]Format{H264.Format(HD720), H264.Format(SD480), H264.Format(SD360)},
+			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD480), H264.CustomFormat(SD360)},
 		},
 	}
 
@@ -46,6 +46,16 @@ func TestTargetFormats(t *testing.T) {
 			assert.Equal(t, ti.target, tf)
 		})
 	}
+}
+
+func TestFormat(t *testing.T) {
+	f := H264.CustomFormat(HD1080)
+	assert.Equal(t, 2300, f.Bitrate.FPS30)
+	assert.Equal(t, 3500, f.Bitrate.FPS60)
+
+	f = H264.CustomFormat(Resolution{800, 600})
+	assert.Equal(t, 528, f.Bitrate.FPS30)
+	assert.Equal(t, 823, f.Bitrate.FPS60)
 }
 
 func generateMeta(w, h, br, fr int) ffmpeg.Metadata {

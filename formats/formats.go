@@ -55,12 +55,13 @@ var H264 = Codec{
 	Format{QHD2K, Bitrate{FPS30: 12000, FPS60: 18000}},
 	Format{HD1080, Bitrate{FPS30: 2300, FPS60: 3500}},
 	Format{HD720, Bitrate{FPS30: 1400, FPS60: 2200}},
-	Format{SD480, Bitrate{FPS30: 1100, FPS60: 1700}},
+	Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
 	Format{SD360, Bitrate{FPS30: 525, FPS60: 800}},
 	// Format{SD240, Bitrate{FPS30: 250, FPS60: 380}},
 }
 
-var brResolutionFactor = 800
+// brResolutionFactor is a quality factor for non-standard resolution videos. The higher it is
+var brResolutionFactor = .11
 var fpsPattern = regexp.MustCompile(`^(\d+)?.+`)
 
 func (f Format) GetBitrateForFPS(fps int) int {
@@ -105,20 +106,14 @@ func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
 		}
 	}
 
-	hasSelf := false
-	for _, f := range formats {
-		if f.Resolution == origRes {
-			hasSelf = true
-			break
-		}
-	}
-	if !hasSelf {
-		formats = append(formats, codec.Format(Resolution{Width: w, Height: h}))
-	}
-
 	// Excluding all target resolutions that have bitrate higher than the original media.
 	formatsFinal := []Format{}
 	for _, f := range formats {
+		// Do not remove original resolution
+		if f.Resolution.Height == origRes.Height {
+			formatsFinal = append(formatsFinal, f)
+			continue
+		}
 		targetBitrate := f.GetBitrateForFPS(origFPS)
 		cutoffBitrate := targetBitrate + int(float32(targetBitrate)*.4)
 		if origBitrate > cutoffBitrate {
@@ -134,18 +129,30 @@ func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
 		}
 	}
 
+	hasSelf := false
+	for _, f := range formatsFinal {
+		if f.Resolution == origRes {
+			hasSelf = true
+			break
+		}
+	}
+	if !hasSelf {
+		formatsFinal = append(formatsFinal, codec.CustomFormat(Resolution{Width: w, Height: h}))
+	}
+
 	return formatsFinal, nil
 }
 
-func (c Codec) Format(r Resolution) Format {
+// CustomFormat generates a Format for non-standard resolutions, calculating optimal bitrates (note: it should be calculated better).
+func (c Codec) CustomFormat(r Resolution) Format {
 	for _, f := range c {
 		if f.Resolution == r {
 			return f
 		}
 	}
 	br := Bitrate{
-		FPS30: (r.Width * r.Height) / brResolutionFactor,
-		FPS60: int((float32(r.Width) * float32(r.Height) * 1.56) / float32(brResolutionFactor)),
+		FPS30: int(float64(r.Width*r.Height) * brResolutionFactor / 100),
+		FPS60: int(float64(float64(r.Width)*float64(r.Height)*1.56) * brResolutionFactor / 100),
 	}
 	return Format{Resolution: r, Bitrate: br}
 }
