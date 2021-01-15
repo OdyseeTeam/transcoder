@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/stretchr/testify/suite"
@@ -29,13 +30,8 @@ func (s *EncoderSuite) SetupSuite() {
 		panic(err)
 	}
 	s.file, _, err = c.Download(path.Join(os.TempDir(), "transcoder_test"))
-	if err != nil {
-		panic(err)
-	}
-	err = s.file.Close()
-	if err != nil {
-		panic(err)
-	}
+	s.Require().NoError(err)
+	s.Require().NoError(s.file.Close())
 }
 
 func (s *EncoderSuite) TearDownSuite() {
@@ -74,6 +70,7 @@ func (s *EncoderSuite) TestEncode() {
 }
 
 func (s *EncoderSuite) Test_GetMetadata() {
+	time.Sleep(1 * time.Second)
 	meta, err := GetMetadata(s.file.Name())
 	s.Require().NoError(err)
 	vs := meta.GetStreams()[0]
