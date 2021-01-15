@@ -11,7 +11,6 @@ import (
 	"github.com/grafov/m3u8"
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
-	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
 	"github.com/stretchr/testify/suite"
@@ -66,8 +65,8 @@ func (s *ClientSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
-func (s *ClientSuite) TestCache() {
-	vPath := path.Join(s.assetsPath, "TestCache")
+func (s *ClientSuite) TestRestoreCache() {
+	vPath := path.Join(s.assetsPath, "TestRestoreCache")
 
 	c := New(Configure().VideoPath(vPath))
 
@@ -96,7 +95,7 @@ func (s *ClientSuite) TestCache() {
 }
 
 func (s *ClientSuite) TestGet() {
-	vPath := path.Join(s.assetsPath, "Test_restoreCache")
+	vPath := path.Join(s.assetsPath, "TestGet")
 	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
 	s.Require().NotNil(c.httpClient)
 
@@ -144,7 +143,7 @@ func (s *ClientSuite) TestGet() {
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Nil(dl)
 
-	f, err := os.Open(path.Join(vPath, cv.DirName(), encoder.MasterPlaylist))
+	f, err := os.Open(path.Join(vPath, cv.DirName(), MasterPlaylistName))
 	s.NoError(err)
 	rawpl, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
