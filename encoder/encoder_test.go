@@ -31,7 +31,6 @@ func (s *EncoderSuite) SetupSuite() {
 	s.file, _, err = c.Download(path.Join(os.TempDir(), "transcoder_test"))
 	s.file.Close()
 	s.Require().NoError(err)
-	s.Require().NoError(s.file.Close())
 }
 
 func (s *EncoderSuite) TearDownSuite() {
