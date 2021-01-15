@@ -12,10 +12,12 @@ const (
 	MasterPlaylistName = "master.m3u8"
 )
 
-type fileLoader func(path ...string) (data []byte, err error)
-type fileProcessor func(data []byte, name string) (err error)
+type fileLoader func(rootPath ...string) ([]byte, error)
+type fileProcessor func(data []byte, name string) error
 
-func playlistDive(rootPath string, _load fileLoader, process fileProcessor) (int64, error) {
+// hlsPlaylistDive processes HLS streams, calling `load` to load and `process`
+// for each master/child playlists and all the files they reference.
+func hlsPlaylistDive(rootPath string, _load fileLoader, process fileProcessor) (int64, error) {
 	var streamSize int64
 
 	load := func(path ...string) (io.Reader, error) {
@@ -32,7 +34,7 @@ func playlistDive(rootPath string, _load fileLoader, process fileProcessor) (int
 		return bytes.NewReader(data), err
 	}
 
-	data, err := load(rootPath, "master.m3u8")
+	data, err := load(rootPath, MasterPlaylistName)
 	if err != nil {
 		return streamSize, err
 	}

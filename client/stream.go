@@ -64,8 +64,8 @@ func (s HLSStream) fetch(url string) (*http.Response, error) {
 	return s.client.httpClient.Do(req)
 }
 
-func (s HLSStream) retrieveFile(path ...string) ([]byte, error) {
-	rawurl := strings.Join(path, "/")
+func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
+	rawurl := strings.Join(rootPath, "/")
 
 	logger.Debugw("retrieving file media", "url", rawurl)
 	_, err := url.Parse(rawurl)
@@ -144,13 +144,13 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 		return errors.New("download already in progress")
 	}
 
-	rootPath := strings.Replace(playlistURL, "/master.m3u8", "", 1)
+	rootPath := strings.Replace(playlistURL, "/"+MasterPlaylistName, "", 1)
 
 	if err := os.MkdirAll(s.LocalPath(), os.ModePerm); err != nil {
 		return err
 	}
 
-	streamSize, err := playlistDive(rootPath, s.retrieveFile, s.saveFile)
+	streamSize, err := hlsPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
 	if err != nil {
 		return err
 	}
