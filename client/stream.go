@@ -1,10 +1,9 @@
 package client
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/lbryio/transcoder/video"
-
-	"github.com/grafov/m3u8"
 )
 
 type CachedVideo struct {
@@ -27,9 +24,10 @@ type Downloadable interface {
 }
 
 type Progress struct {
-	Error error
-	Stage int
-	Done  bool
+	Error       error
+	Stage       int
+	Done        bool
+	BytesLoaded int64
 }
 
 type HLSStream struct {
@@ -66,33 +64,38 @@ func (s HLSStream) fetch(url string) (*http.Response, error) {
 	return s.client.httpClient.Do(req)
 }
 
-func (s HLSStream) retrieveFile(rawurl string) (io.ReadCloser, int64, error) {
-	var bytesRead int64
+func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
+	rawurl := strings.Join(rootPath, "/")
 
-	parsedurl, err := url.Parse(rawurl)
+	logger.Debugw("retrieving file media", "url", rawurl)
+	_, err := url.Parse(rawurl)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	res, err := s.fetch(rawurl)
+	defer res.Body.Close()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	out, err := os.Create(path.Join(s.LocalPath(), path.Base(parsedurl.Path)))
+	data, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, 0, err
-	}
-	if bytesRead, err = io.Copy(out, bufio.NewReader(res.Body)); err != nil {
-		return nil, 0, err
-	}
-	_, err = out.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, bytesRead, err
+		return nil, err
 	}
 
-	s.makeProgress()
-	return out, bytesRead, nil
+	s.makeProgress(int64(len(data)))
+	return data, nil
+}
+
+func (s HLSStream) saveFile(data []byte, name string) error {
+	logger.Debugw("saving file", "path", path.Join(s.LocalPath(), name))
+	err := ioutil.WriteFile(path.Join(s.LocalPath(), name), data, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s HLSStream) Download() error {
@@ -131,70 +134,28 @@ func (s HLSStream) Progress() <-chan Progress {
 	return s.progress
 }
 
-func (s *HLSStream) makeProgress() {
+func (s *HLSStream) makeProgress(bl int64) {
 	s.filesFetched++
-	s.progress <- Progress{Stage: s.filesFetched}
+	s.progress <- Progress{Stage: s.filesFetched, BytesLoaded: bl}
 }
 
 func (s *HLSStream) startDownload(playlistURL string) error {
-	var streamSize int64
-
 	if !s.client.canStartDownload(s.rootURL()) {
 		return errors.New("download already in progress")
 	}
 
-	basePath := strings.Replace(playlistURL, "/master.m3u8", "", 1)
+	rootPath := strings.Replace(playlistURL, "/"+MasterPlaylistName, "", 1)
 
 	if err := os.MkdirAll(s.LocalPath(), os.ModePerm); err != nil {
 		return err
 	}
 
-	logger.Debugw("downloading master playlist", "url", playlistURL)
-	res, br, err := s.retrieveFile(playlistURL)
-	streamSize += br
+	streamSize, err := hlsPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
 	if err != nil {
 		return err
 	}
 
-	p, _, err := m3u8.DecodeFrom(bufio.NewReader(res), true)
-	if err != nil {
-		return err
-	}
-	res.Close()
-
-	masterpl := p.(*m3u8.MasterPlaylist)
-	for _, plv := range masterpl.Variants {
-		url := fmt.Sprintf("%v/%v", basePath, plv.URI)
-		logger.Debugw("downloading variant playlist", "url", url)
-		res, br, err := s.retrieveFile(url)
-		streamSize += br
-		if err != nil {
-			return err
-		}
-
-		p, _, err := m3u8.DecodeFrom(bufio.NewReader(res), true)
-		if err != nil {
-			return err
-		}
-		res.Close()
-		mediapl := p.(*m3u8.MediaPlaylist)
-
-		for _, seg := range mediapl.Segments {
-			if seg == nil {
-				continue
-			}
-			url := fmt.Sprintf("%v/%v", basePath, seg.URI)
-			logger.Debugw("downloading media", "url", url)
-			res, br, err := s.retrieveFile(url)
-			streamSize += br
-			if err != nil {
-				return err
-			}
-			res.Close()
-		}
-	}
-
-	s.progress <- Progress{Stage: 999999}
+	s.progress <- Progress{Stage: 999999, BytesLoaded: streamSize}
 
 	// Download complete
 	logger.Debugw("got all files, saving to cache",

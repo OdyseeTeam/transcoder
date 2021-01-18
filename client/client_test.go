@@ -5,13 +5,15 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/grafov/m3u8"
+	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
-	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
 	"github.com/stretchr/testify/suite"
@@ -66,21 +68,22 @@ func (s *ClientSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
-func (s *ClientSuite) TestCache() {
-	vPath := path.Join(s.assetsPath, "TestCache")
+func (s *ClientSuite) TestRestoreCache() {
+	vPath := path.Join(s.assetsPath, "TestRestoreCache")
 
 	c := New(Configure().VideoPath(vPath))
 
-	cvDirs := []string{}
+	cvDirs := map[string]int64{}
 	for range [10]int{} {
 		dir := randomString(96)
-		cvDirs = append(cvDirs, dir)
-		os.MkdirAll(path.Join(vPath, dir), os.ModePerm)
-		ioutil.WriteFile(path.Join(vPath, dir, "master.m3u8"), []byte("12345"), os.ModePerm)
-		c.CacheVideo(dir, 5)
+		size, err := populateHLSPlaylist(path.Join(vPath, dir))
+		s.Require().NoError(err)
+		cvDirs[dir] = size
 
+		c.CacheVideo(dir, size)
 		cv := c.GetCachedVideo(dir)
 		s.Require().NotNil(cv)
+		s.Require().Equal(size, cv.Size())
 	}
 
 	c = New(Configure().VideoPath(vPath))
@@ -88,15 +91,36 @@ func (s *ClientSuite) TestCache() {
 	s.Require().NoError(err)
 	s.EqualValues(10, n)
 
-	for _, dir := range cvDirs {
+	for dir, size := range cvDirs {
 		cv := c.GetCachedVideo(dir)
 		s.Require().NotNil(cv)
-		s.EqualValues(5, cv.Size())
+		s.EqualValues(size, cv.Size())
 	}
+
+	// Obliterate half the playlist files to simulate partially downloaded transcoded stream
+	// and make sure the playlist cache entry doesn't get restored.
+	var cvToNuke string
+	for dir := range cvDirs {
+		cvToNuke = dir
+		break
+	}
+	entries, err := godirwalk.ReadDirnames(path.Join(c.videoPath, cvToNuke), nil)
+	s.Require().NoError(err)
+	for _, e := range entries[len(entries)/2:] {
+		if strings.HasSuffix(e, ".m3u8") {
+			continue
+		}
+		s.Require().NoError(os.Remove(path.Join(vPath, cvToNuke, e)))
+	}
+
+	c = New(Configure().VideoPath(vPath))
+	_, err = c.RestoreCache()
+	s.Require().NoError(err)
+	s.Require().Nil(c.GetCachedVideo(cvToNuke))
 }
 
 func (s *ClientSuite) TestGet() {
-	vPath := path.Join(s.assetsPath, "Test_restoreCache")
+	vPath := path.Join(s.assetsPath, "TestGet")
 	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
 	s.Require().NotNil(c.httpClient)
 
@@ -144,7 +168,7 @@ func (s *ClientSuite) TestGet() {
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Nil(dl)
 
-	f, err := os.Open(path.Join(vPath, cv.DirName(), encoder.MasterPlaylist))
+	f, err := os.Open(path.Join(vPath, cv.DirName(), MasterPlaylistName))
 	s.NoError(err)
 	rawpl, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
@@ -191,4 +215,29 @@ func randomString(n int) string {
 		b[i] = letter[rand.Intn(len(letter))]
 	}
 	return string(b)
+}
+
+func populateHLSPlaylist(vPath string) (int64, error) {
+	err := os.MkdirAll(vPath, os.ModePerm)
+	if err != nil {
+		return 0, err
+	}
+
+	plPath, _ := filepath.Abs("./testdata")
+	size, err := hlsPlaylistDive(
+		plPath,
+		func(rootPath ...string) ([]byte, error) {
+			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
+				return ioutil.ReadFile(path.Join(rootPath...))
+			}
+			return make([]byte, 10000), nil
+		},
+		func(data []byte, name string) error {
+			return ioutil.WriteFile(path.Join(vPath, name), data, os.ModePerm)
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return size, nil
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -167,25 +168,40 @@ func (c Client) RestoreCache() (int64, error) {
 		return streamsRestored, errors.Wrap(err, "cannot restore cache")
 	}
 
+	// Verify that all stream files are present
 	for _, cvPath := range cvs {
-		var cvSize int64
-
 		// Skip non-sdHashes
 		if len(cvPath) != 96 {
 			continue
 		}
+		cvFullPath := path.Join(c.videoPath, cvPath)
 
-		cvFiles, err := godirwalk.ReadDirnames(path.Join(c.videoPath, cvPath), nil)
+		cvSize, err := hlsPlaylistDive(
+			cvFullPath,
+			func(rootPath ...string) ([]byte, error) {
+				f, err := os.Open(path.Join(rootPath...))
+				defer f.Close()
+				if err != nil {
+					return nil, err
+				}
+				if path.Ext(rootPath[len(rootPath)-1]) != ".m3u8" {
+					s, err := os.Stat(path.Join(rootPath...))
+					if err != nil {
+						return nil, err
+					}
+					return make([]byte, s.Size()), nil
+				}
+				return ioutil.ReadAll(f)
+			},
+			func(data []byte, name string) error {
+				return nil
+			},
+		)
+
 		if err != nil {
-			return streamsRestored, errors.Wrap(err, "cannot restore cache")
-		}
-
-		for _, f := range cvFiles {
-			s, err := os.Stat(path.Join(c.videoPath, cvPath, f))
-			if err != nil {
-				return streamsRestored, errors.Wrap(err, "cannot restore cache")
-			}
-			cvSize += s.Size()
+			os.RemoveAll(cvFullPath)
+			logger.Infow("removing broken playlist", "path", cvPath, "err", err)
+			continue
 		}
 		c.CacheVideo(cvPath, cvSize)
 		streamsRestored++
