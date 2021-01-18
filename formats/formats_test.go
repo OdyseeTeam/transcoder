@@ -33,7 +33,7 @@ func TestTargetFormats(t *testing.T) {
 
 	for _, ti := range testInputs {
 		meta := ti.meta
-		stream := meta.GetStreams()[0]
+		stream := GetVideoStream(&meta)
 		testName := fmt.Sprintf(
 			"%v x %v x %vbps",
 			stream.GetWidth(),
@@ -59,8 +59,9 @@ func TestFormat(t *testing.T) {
 }
 
 func generateMeta(w, h, br, fr int) ffmpeg.Metadata {
-	return ffmpeg.Metadata{
+	meta := ffmpeg.Metadata{
 		Format:  ffmpeg.Format{BitRate: fmt.Sprintf("%v", br*1000)},
-		Streams: []ffmpeg.Streams{{Index: 0, Width: w, Height: h, AvgFrameRate: fmt.Sprintf("%v/1", fr)}},
+		Streams: []ffmpeg.Streams{{CodecType: "audio"}, {CodecType: "video", Index: 0, Width: w, Height: h, AvgFrameRate: fmt.Sprintf("%v/1", fr)}},
 	}
+	return meta
 }

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/pkg/errors"
 )
@@ -77,7 +78,7 @@ func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
 		err                  error
 	)
 
-	vs := meta.GetStreams()[0]
+	vs := GetVideoStream(meta)
 	w, h := vs.GetWidth(), vs.GetHeight()
 
 	origFPS, err = DetectFPS(meta)
@@ -162,7 +163,7 @@ func DetectFPS(meta *ffmpeg.Metadata) (int, error) {
 		err error
 		fps int
 	)
-	vs := meta.GetStreams()[0]
+	vs := GetVideoStream(meta)
 	fpsMatch := fpsPattern.FindStringSubmatch(vs.GetAvgFrameRate())
 	if len(fpsMatch) > 0 {
 		fps, err = strconv.Atoi(fpsMatch[1])
@@ -179,4 +180,13 @@ func DetectFPS(meta *ffmpeg.Metadata) (int, error) {
 		return fps, fmt.Errorf("cannot determine FPS from `%v`", vs.GetAvgFrameRate())
 	}
 	return fps, nil
+}
+
+func GetVideoStream(meta *ffmpeg.Metadata) transcoder.Streams {
+	for _, s := range meta.GetStreams() {
+		if s.GetCodecType() == "video" {
+			return s
+		}
+	}
+	return nil
 }

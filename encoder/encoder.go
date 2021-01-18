@@ -97,7 +97,7 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 		return nil, err
 	}
 
-	vs := e.Meta.GetStreams()[0]
+	vs := formats.GetVideoStream(e.Meta)
 	ll.Infow(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),

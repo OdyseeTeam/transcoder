@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/stretchr/testify/suite"
 )
@@ -71,7 +72,7 @@ func (s *EncoderSuite) TestEncode() {
 func (s *EncoderSuite) Test_GetMetadata() {
 	meta, err := GetMetadata(s.file.Name())
 	s.Require().NoError(err)
-	vs := meta.GetStreams()[0]
+	vs := formats.GetVideoStream(meta)
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
 }
