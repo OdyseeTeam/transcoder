@@ -15,7 +15,7 @@ import (
 	"github.com/floostack/transcoder/ffmpeg"
 )
 
-var ffmpegConf = &ffmpeg.Config{
+var ffmpegConf = ffmpeg.Config{
 	FfmpegBinPath:   "",
 	FfprobeBinPath:  "",
 	ProgressEnabled: true,
@@ -66,21 +66,12 @@ func NewEncoder(in, out string) (*Encoder, error) {
 // Encode does transcoding of specified video file into a series of HLS streams.
 func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 	ll := logger.With("in", e.in)
+	conf := ffmpegConf
+	conf.OutputDir = e.out
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("cannot get working dir: %v", err)
-	}
 	if err := os.MkdirAll(e.out, os.ModePerm); err != nil {
 		return nil, err
 	}
-	if err := os.Chdir(e.out); err != nil {
-		return nil, err
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer os.Chdir(wd)
 
 	targetFormats, err := formats.TargetFormats(formats.H264, e.Meta)
 	if err != nil {
@@ -106,7 +97,7 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
 	)
-	return ffmpeg.New(ffmpegConf).
+	return ffmpeg.New(&conf).
 		Input(e.in).
 		Output("stream_%v.m3u8").
 		Start(args)
