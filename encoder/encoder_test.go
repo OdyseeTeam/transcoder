@@ -22,14 +22,14 @@ func TestEncoderSuite(t *testing.T) {
 }
 
 func (s *EncoderSuite) SetupSuite() {
-	s.out = path.Join(os.TempDir(), "encoder_test_out")
+	s.out = path.Join(os.TempDir(), "EncoderSuite_out")
 
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := claim.Resolve(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download(path.Join(os.TempDir(), "transcoder_test"))
+	s.file, _, err = c.Download(path.Join(os.TempDir(), "EncoderSuite_in"))
 	s.file.Close()
 	s.Require().NoError(err)
 }
