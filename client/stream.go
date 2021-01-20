@@ -66,16 +66,17 @@ func (s HLSStream) fetch(url string) (*http.Response, error) {
 
 func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
 	rawurl := strings.Join(rootPath, "/")
+	ll := logger.With("remote_url", rawurl, "url", s.rootURL())
 
-	logger.Debugw("retrieving file media", "url", rawurl)
+	ll.Debugw("fetching stream part")
 	_, err := url.Parse(rawurl)
 	if err != nil {
 		return nil, err
 	}
 
 	res, err := s.fetch(rawurl)
-	defer res.Body.Close()
 	if err != nil {
+		ll.Warnw("stream part fetch failed", "err", err)
 		return nil, err
 	}
 
@@ -89,9 +90,11 @@ func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
 }
 
 func (s HLSStream) saveFile(data []byte, name string) error {
-	logger.Debugw("saving file", "path", path.Join(s.LocalPath(), name))
+	ll := logger.With("path", path.Join(s.LocalPath(), name), "url", s.rootURL())
+	ll.Debugw("saving stream part")
 	err := ioutil.WriteFile(path.Join(s.LocalPath(), name), data, os.ModePerm)
 	if err != nil {
+		ll.Warnw("saving stream part failed", "err", err)
 		return err
 	}
 
@@ -99,25 +102,26 @@ func (s HLSStream) saveFile(data []byte, name string) error {
 }
 
 func (s HLSStream) Download() error {
-	logger.Debugw("stream download requested", "url", s.rootURL())
+	ll := logger.With("url", s.rootURL())
 	res, err := s.fetch(s.rootURL())
 	if err != nil {
 		return err
 	}
 
-	logger.Debugw("transcoder response", "status", res.StatusCode)
 	switch res.StatusCode {
 	case http.StatusForbidden:
 		return video.ErrChannelNotEnabled
 	case http.StatusNotFound:
 		return errors.New("stream not found")
 	case http.StatusAccepted:
+		ll.Debugw("stream encoding underway")
 		return errors.New("encoding underway")
 	case http.StatusSeeOther:
 		loc, err := res.Location()
 		if err != nil {
 			return err
 		}
+		ll.Debugw("starting stream download", "location", loc)
 		go func() {
 			err := s.startDownload(loc.String())
 			if err != nil {
@@ -126,6 +130,7 @@ func (s HLSStream) Download() error {
 		}()
 		return nil
 	default:
+		ll.Infow("unknown http status", "status_code", res.StatusCode)
 		return fmt.Errorf("unknown http status: %v", res.StatusCode)
 	}
 }
