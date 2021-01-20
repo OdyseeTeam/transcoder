@@ -25,4 +25,4 @@ require (
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 )
 
-replace github.com/floostack/transcoder => ../../External/transcoder
+replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.1.1
