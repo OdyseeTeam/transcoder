@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/alecthomas/kong v0.2.12
+	github.com/aws/aws-sdk-go v1.36.29
 	github.com/fasthttp/router v1.3.3
 	github.com/floostack/transcoder v1.1.1
 	github.com/golang/protobuf v1.4.3 // indirect
