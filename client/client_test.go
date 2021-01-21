@@ -151,11 +151,11 @@ func (s *ClientSuite) TestGet() {
 	cv, dl2 := c.Get("hls", streamURL, streamSDHash)
 	s.Nil(cv)
 	err = dl2.Download()
-	s.Nil(err)
+	s.EqualError(err, "video is already downloading")
 
-	p := <-dl2.Progress()
-	s.T().Logf("got dl2 progress: %+v", p)
-	s.EqualError(p.Error, "download already in progress")
+	// p2 := <-dl2.Progress()
+	// s.T().Logf("got dl2 progress: %+v", p2)
+	// s.EqualError(p.Error, "download already in progress")
 
 	for p := range dl.Progress() {
 		s.T().Logf("got download progress: %+v", p)

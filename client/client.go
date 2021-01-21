@@ -128,6 +128,10 @@ func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
 // 	return c.downloads.Has(sdHash)
 // }
 
+func (c Client) isDownloading(key string) bool {
+	return c.downloads.Has(key)
+}
+
 func (c Client) canStartDownload(key string) bool {
 	ok := c.downloads.SetIfAbsent(key, dlStarted)
 	return ok

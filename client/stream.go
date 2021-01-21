@@ -13,6 +13,10 @@ import (
 	"github.com/lbryio/transcoder/video"
 )
 
+// ErrAlreadyDownloading when returned means that video retrieval is already underway
+// and nothing needs to be done at this time.
+var ErrAlreadyDownloading = errors.New("video is already downloading")
+
 type CachedVideo struct {
 	dirName string
 	size    int64
@@ -102,7 +106,11 @@ func (s HLSStream) saveFile(data []byte, name string) error {
 }
 
 func (s HLSStream) Download() error {
-	ll := logger.With("url", s.rootURL())
+	ll := logger.With("url", s.rootURL(), "sd_hash", s.SDHash)
+	if s.client.isDownloading(s.SDHash) {
+		ll.Debugw("already downloading")
+		return ErrAlreadyDownloading
+	}
 	res, err := s.fetch(s.rootURL())
 	if err != nil {
 		return err
@@ -145,7 +153,7 @@ func (s *HLSStream) makeProgress(bl int64) {
 }
 
 func (s *HLSStream) startDownload(playlistURL string) error {
-	if !s.client.canStartDownload(s.rootURL()) {
+	if !s.client.canStartDownload(s.SDHash) {
 		return errors.New("download already in progress")
 	}
 
