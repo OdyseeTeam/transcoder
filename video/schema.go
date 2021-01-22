@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS video (
     "path" TEXT NOT NULL,
 	"type" TEXT NOT NULL,
 	"channel" TEXT NOT NULL,
-	"last_accessed" TIMESTAMP
+	"last_accessed" TIMESTAMP,
+	"access_count" INTEGER NOT NULL DEFAULT 0
 );
 -- +migrate StatementEnd
 

@@ -10,6 +10,7 @@ type Video struct {
 	Type         string
 	Channel      string
 	LastAccessed sql.NullTime
+	AccessCount  int64
 }
 
 func (v Video) GetPath() string {

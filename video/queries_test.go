@@ -74,10 +74,16 @@ func (s *LibrarySuite) TestVideoGet() {
 	s.Require().NoError(err)
 
 	video, err = lib.Get(params.SDHash)
+	s.Require().NoError(err)
 	s.EqualValues(params.URL, video.URL)
 	s.EqualValues(params.SDHash, video.SDHash)
 	s.EqualValues(params.Type, video.Type)
 	s.EqualValues(params.Path, video.Path)
 	s.EqualValues(params.Channel, video.Channel)
 	s.LessOrEqual((time.Since(video.LastAccessed.Time)).Seconds(), float64(1))
+	s.EqualValues(1, video.AccessCount)
+
+	video, err = lib.Get(params.SDHash)
+	s.Require().NoError(err)
+	s.EqualValues(2, video.AccessCount)
 }
