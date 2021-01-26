@@ -8,7 +8,8 @@ import (
 const (
 	queryVideoGet = `select
 		url, sd_hash, type, path,
-		created_at, channel, last_accessed
+		created_at, channel,
+		last_accessed, access_count
 		from video where sd_hash = $1 limit 1`
 	queryVideoAdd = `
 		insert into video (
@@ -17,7 +18,7 @@ const (
 			$1, $2, $3, $4, $5, datetime('now')
 		);
 	`
-	queryVideoUpdateLastAccessed = `update video set last_accessed = $1 where sd_hash = $2`
+	queryVideoUpdateAccess = `update video set last_accessed = $1, access_count = access_count + 1 where sd_hash = $2`
 )
 
 type AddParams struct {
@@ -53,12 +54,13 @@ func (q *Queries) Get(ctx context.Context, sdHash string) (*Video, error) {
 		&i.CreatedAt,
 		&i.Channel,
 		&i.LastAccessed,
+		&i.AccessCount,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = q.db.ExecContext(ctx, queryVideoUpdateLastAccessed, time.Now(), sdHash)
+	_, err = q.db.ExecContext(ctx, queryVideoUpdateAccess, time.Now(), sdHash)
 	if err != nil {
 		return nil, err
 	}

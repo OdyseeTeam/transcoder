@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v0.2.12
 	github.com/aws/aws-sdk-go v1.36.29
 	github.com/fasthttp/router v1.3.3
-	github.com/floostack/transcoder v1.1.1
+	github.com/floostack/transcoder v1.2.0
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/grafov/m3u8 v0.11.1
 	github.com/karlseguin/ccache/v2 v2.0.7
@@ -26,4 +26,4 @@ require (
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 )
 
-replace github.com/floostack/transcoder => ../../External/transcoder
+replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.0
