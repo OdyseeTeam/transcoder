@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"math/rand"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -42,17 +43,22 @@ func (s *DispatcherSuite) SetupTest() {
 }
 
 func (s *DispatcherSuite) TestDispatcher() {
-	d := NewDispatcher()
+	d := New()
 	wl := testWorkload{seenTasks: []Task{}}
 	d.Start(20, &wl)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
+
+	grc := runtime.NumGoroutine()
 
 	for range [500]bool{} {
 		d.Dispatch(Task{URL: randomString(25), SDHash: randomString(96)})
 	}
 
 	time.Sleep(1 * time.Second)
+	d.Stop()
+
+	s.Equal(runtime.NumGoroutine(), grc)
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
 }
