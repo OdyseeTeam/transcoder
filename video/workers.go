@@ -9,6 +9,7 @@ import (
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/storage"
 )
 
 func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Poller) {
@@ -48,10 +49,9 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 
 		tmr := timer.Start()
 
-		streamPath := fmt.Sprintf("%v_%v", c.NormalizedName, c.SDHash[:6])
-		out := path.Join(videoPath, streamPath)
+		localStream := storage.InitLocalStream(videoPath, c.SDHash)
 
-		enc, err := encoder.NewEncoder(streamFH.Name(), out)
+		enc, err := encoder.NewEncoder(streamFH.Name(), localStream.Path())
 		if err != nil {
 			ll.Errorw("task rejected", "reason", "encoder initialization failure", "err", err)
 			p.RejectTask(t)
@@ -74,7 +74,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 				p.CompleteTask(t)
 				ll.Infow(
 					"encoding complete",
-					"out", out,
+					"out", localStream.Path(),
 					"seconds_spent", tmr.String(),
 					"duration", enc.Meta.Format.Duration,
 					"bitrate", enc.Meta.Format.GetBitRate(),
@@ -82,12 +82,20 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 				break
 			}
 		}
+
+		err = localStream.FillMeta()
+		if err != nil {
+			logger.Errorw("filling stream metadata failed", "err", err)
+		}
+
 		_, err = lib.Add(AddParams{
-			URL:     t.URL,
-			SDHash:  t.SDHash,
-			Type:    formats.TypeHLS,
-			Path:    streamPath,
-			Channel: c.SigningChannel.CanonicalURL,
+			URL:      t.URL,
+			SDHash:   t.SDHash,
+			Type:     formats.TypeHLS,
+			Channel:  c.SigningChannel.CanonicalURL,
+			Path:     localStream.Path(),
+			Size:     localStream.Size(),
+			Checksum: localStream.Checksum(),
 		})
 		if err != nil {
 			logger.Errorw("adding to video library failed", "err", err)
