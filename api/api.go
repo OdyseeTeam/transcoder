@@ -22,7 +22,7 @@ type Library interface {
 }
 
 type Video interface {
-	GetPath() string
+	GetLocation() (location string, external bool)
 }
 
 type Task interface {

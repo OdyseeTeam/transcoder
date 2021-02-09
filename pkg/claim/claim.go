@@ -15,7 +15,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/timer"
 )
 
-const (
+var (
 	lbrytvAPI = "https://api.lbry.tv/api/v1/proxy"
 	cdnServer = "https://cdn.lbryplayer.xyz/api/v3/streams"
 )
@@ -149,5 +149,9 @@ func (c *Claim) getSDHash() (string, error) {
 }
 
 func (c *Claim) streamFileName() string {
-	return fmt.Sprintf("%s_%s", c.ChannelName, c.SDHash[:6])
+	return c.SDHash
+}
+
+func SetCDNServer(s string) {
+	cdnServer = s
 }

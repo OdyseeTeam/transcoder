@@ -163,7 +163,7 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 		return err
 	}
 
-	streamSize, err := hlsPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
+	streamSize, err := HLSPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
 	if err != nil {
 		return err
 	}

@@ -4,11 +4,18 @@ import (
 	"io"
 )
 
-type RawStream struct {
-	file io.ReadCloser
+type StreamFragment interface {
+	io.ReadCloser
 }
 
-type Storage interface {
-	Put(sdHash, name string, stream RawStream) error
-	Get(sdHash string) (*RawStream, error)
+type RemoteDriver interface {
+	Put(stream *LocalStream) (*RemoteStream, error)
+	Delete(sdHash string) error
+	GetFragment(sdHash, name string) (StreamFragment, error)
+}
+
+type LocalDriver interface {
+	New(sdHash string) *LocalStream
+	Open(sdHash string) (*LocalStream, error)
+	Delete(sdHash string) error
 }

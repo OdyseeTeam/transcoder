@@ -20,13 +20,14 @@ type DispatcherSuite struct {
 type testWorkload struct {
 	sync.Mutex
 	doCalled  int
-	seenTasks []Task
+	seenTasks []string
 }
 
 func (wl *testWorkload) Do(t Task) error {
 	wl.Lock()
 	wl.doCalled++
-	wl.seenTasks = append(wl.seenTasks, t)
+	pl := t.Payload.(struct{ URL, SDHash string })
+	wl.seenTasks = append(wl.seenTasks, pl.URL+pl.SDHash)
 	wl.Unlock()
 	return nil
 }
@@ -43,20 +44,19 @@ func (s *DispatcherSuite) SetupTest() {
 }
 
 func (s *DispatcherSuite) TestDispatcher() {
-	d := New()
-	wl := testWorkload{seenTasks: []Task{}}
-	d.Start(20, &wl)
+
+	wl := testWorkload{seenTasks: []string{}}
+	d := Start(20, &wl)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
 
 	grc := runtime.NumGoroutine()
 
 	for range [500]bool{} {
-		d.Dispatch(Task{URL: randomString(25), SDHash: randomString(96)})
+		d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
 	}
 
 	time.Sleep(1 * time.Second)
-	d.Stop()
 
 	s.Equal(runtime.NumGoroutine(), grc)
 	s.Equal(500, len(wl.seenTasks))

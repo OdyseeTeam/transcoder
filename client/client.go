@@ -180,7 +180,7 @@ func (c Client) RestoreCache() (int64, error) {
 		}
 		cvFullPath := path.Join(c.videoPath, cvPath)
 
-		cvSize, err := hlsPlaylistDive(
+		cvSize, err := HLSPlaylistDive(
 			cvFullPath,
 			func(rootPath ...string) ([]byte, error) {
 				f, err := os.Open(path.Join(rootPath...))

@@ -1,29 +1,48 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
+	"path"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 type S3Configuration struct {
-	bucket                                 string
-	endpoint, region, accessKey, secretKey string
+	endpoint, region, accessKey, secretKey, bucket string
+	disableSSL                                     bool
 }
 
-func S3ConfigureWasabi() *S3Configuration {
-	return &S3Configuration{
-		endpoint: "https://s3.wasabisys.com",
-		region:   "us-east-1",
-	}
+func S3Configure() *S3Configuration {
+	return &S3Configuration{}
 }
 
 // Endpoint ...
 func (c *S3Configuration) Endpoint(e string) *S3Configuration {
 	c.endpoint = e
+	return c
+}
+
+// Region ...
+func (c *S3Configuration) Region(r string) *S3Configuration {
+	c.region = r
+	return c
+}
+
+// Bucket ...
+func (c *S3Configuration) Bucket(b string) *S3Configuration {
+	c.bucket = b
+	return c
+}
+
+// DisableSSL ...
+func (c *S3Configuration) DisableSSL() *S3Configuration {
+	c.disableSSL = true
 	return c
 }
 
@@ -34,33 +53,128 @@ func (c *S3Configuration) Credentials(accessKey, secretKey string) *S3Configurat
 	return c
 }
 
-func NewS3Storage(cfg *S3Configuration) *S3Storage {
+func S3ConfigureWasabi() *S3Configuration {
+	return S3Configure().Region("us-east-1").Endpoint("https://s3.wasabisys.com")
+}
+
+func S3ConfigureWasabiEU() *S3Configuration {
+	return S3ConfigureWasabi().Endpoint("s3.eu-central-1.wasabisys.com")
+}
+
+func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
 	s3cfg := &aws.Config{
 		Credentials:      credentials.NewStaticCredentials(cfg.accessKey, cfg.secretKey, ""),
 		Endpoint:         aws.String(cfg.endpoint),
 		Region:           aws.String(cfg.region),
 		S3ForcePathStyle: aws.Bool(true),
+		DisableSSL:       aws.Bool(cfg.disableSSL),
 	}
 	sess := session.New(s3cfg)
-	ss := &S3Storage{
-		uploader: s3manager.NewUploader(sess),
+	s := &S3Driver{
+		S3Configuration: cfg,
+		session:         sess,
 	}
-	return ss
-}
 
-type S3Storage struct {
-	*S3Configuration
-	uploader *s3manager.Uploader
-}
+	client := s3.New(sess)
 
-func (s *S3Storage) Put(sdHash, name string, stream RawStream) error {
-	_, err := s.uploader.Upload(&s3manager.UploadInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(s3Key(sdHash, name)),
-		ContentType: aws.String("mmmm/aaa"),
-		Body:        stream.file,
+	_, err := client.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(s.bucket),
+		ACL:    aws.String("public-read"),
 	})
-	return err
+	if err != nil {
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() != "BucketAlreadyOwnedByYou" {
+				return nil, err
+			}
+		}
+	}
+	return s, nil
+}
+
+type S3Driver struct {
+	*S3Configuration
+	session *session.Session
+}
+
+func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
+	var url string
+
+	svc := s3manager.NewUploader(s.session)
+
+	err := lstream.Dive(
+		readFile,
+		func(data []byte, name string) error {
+			ctype := FragmentContentType
+			if path.Ext(name) == PlaylistExt {
+				ctype = PlaylistContentType
+			}
+			logger.Debugw("preparing upload", "key", s3Key(lstream.sdHash, name), "ctype", ctype, "size", len(data), "bucket", s.bucket)
+			out, err := svc.Upload(&s3manager.UploadInput{
+				Bucket:      aws.String(s.bucket),
+				Key:         aws.String(s3Key(lstream.sdHash, name)),
+				ContentType: aws.String(ctype),
+				Body:        bytes.NewReader(data),
+				ACL:         aws.String("public-read"),
+			})
+			if err != nil {
+				return err
+			}
+			if name == MasterPlaylistName {
+				url = out.Location
+			}
+			return nil
+		},
+	)
+
+	return &RemoteStream{url: url}, err
+}
+
+func (s *S3Driver) Delete(sdHash string) error {
+	client := s3.New(s.session)
+	bucket := aws.String(s.bucket)
+	input := &s3.DeleteObjectsInput{
+		Bucket: bucket,
+		Delete: &s3.Delete{
+			Objects: []*s3.ObjectIdentifier{},
+			Quiet:   aws.Bool(false),
+		},
+	}
+	objects, err := client.ListObjects(&s3.ListObjectsInput{
+		Bucket: bucket,
+		Prefix: aws.String(sdHash),
+	})
+	if err != nil {
+		return err
+	}
+	for _, o := range objects.Contents {
+		input.Delete.Objects = append(input.Delete.Objects, &s3.ObjectIdentifier{Key: o.Key})
+	}
+
+	_, err = client.DeleteObjects(input)
+	if err != nil {
+		return err
+	}
+	if *objects.IsTruncated {
+		return s.Delete(sdHash)
+	}
+
+	return nil
+}
+
+func (s *S3Driver) Get(sdHash string) (*LocalStream, error) {
+	return nil, nil
+}
+
+func (s *S3Driver) GetFragment(sdHash, name string) (StreamFragment, error) {
+	client := s3.New(s.session)
+	obj, err := client.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s3Key(sdHash, name)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return obj.Body, nil
 }
 
 func s3Key(sdHash, name string) string {

@@ -8,7 +8,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/video"
 
@@ -95,9 +94,12 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	path := fmt.Sprintf("%v/%v/%v", httpVideoPath, v.GetPath(), encoder.MasterPlaylist)
-	ll.Debugw("found", "path", fmt.Sprintf("%v", path))
-	ctx.Redirect(path, http.StatusSeeOther)
+	location, external := v.GetLocation()
+	if !external {
+		location = fmt.Sprintf("%v/%v", httpVideoPath, location)
+	}
+	ll.Infow("redirecting to video", "location", location)
+	ctx.Redirect(location, http.StatusSeeOther)
 }
 
 func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {

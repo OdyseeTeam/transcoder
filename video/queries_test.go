@@ -8,6 +8,7 @@ import (
 
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -36,12 +37,12 @@ func (s *LibrarySuite) SetupTest() {
 }
 
 func (s *LibrarySuite) TestVideoAdd() {
-	lib := NewLibrary(s.db)
+	lib := NewLibrary(Configure().LocalStorage(storage.Local("/tmp/test")).DB(s.db))
 	params := AddParams{
 		URL:     "what",
 		SDHash:  "string",
 		Type:    formats.TypeHLS,
-		Path:    "/tmp/test",
+		Path:    "string",
 		Channel: "@specialoperationstest#3",
 	}
 	video, err := lib.Add(params)
@@ -57,12 +58,12 @@ func (s *LibrarySuite) TestVideoAdd() {
 }
 
 func (s *LibrarySuite) TestVideoGet() {
-	lib := NewLibrary(s.db)
+	lib := NewLibrary(Configure().LocalStorage(storage.Local("/tmp/test")).DB(s.db))
 	params := AddParams{
 		URL:     "what",
 		SDHash:  "string",
 		Type:    formats.TypeHLS,
-		Path:    "/tmp/test",
+		Path:    "string",
 		Channel: "@specialoperationstest#3",
 	}
 	video, err := lib.Get(params.SDHash)

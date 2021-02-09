@@ -4,15 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/queue"
-	"github.com/lbryio/transcoder/storage"
+
+	cmap "github.com/orcaman/concurrent-map"
 )
 
-func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Poller) {
+func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 	logger.Info("started video processor")
 	defer logger.Info("quit video processor")
 
@@ -49,9 +52,9 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 
 		tmr := timer.Start()
 
-		localStream := storage.InitLocalStream(videoPath, c.SDHash)
+		localStream := lib.local.New(c.SDHash)
 
-		enc, err := encoder.NewEncoder(streamFH.Name(), localStream.Path())
+		enc, err := encoder.NewEncoder(streamFH.Name(), localStream.FullPath())
 		if err != nil {
 			ll.Errorw("task rejected", "reason", "encoder initialization failure", "err", err)
 			p.RejectTask(t)
@@ -74,7 +77,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 				p.CompleteTask(t)
 				ll.Infow(
 					"encoding complete",
-					"out", localStream.Path(),
+					"out", localStream.FullPath(),
 					"seconds_spent", tmr.String(),
 					"duration", enc.Meta.Format.Duration,
 					"bitrate", enc.Meta.Format.GetBitRate(),
@@ -83,7 +86,8 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 			}
 		}
 
-		err = localStream.FillMeta()
+		time.Sleep(1 * time.Second)
+		err = localStream.ReadMeta()
 		if err != nil {
 			logger.Errorw("filling stream metadata failed", "err", err)
 		}
@@ -93,7 +97,7 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 			SDHash:   t.SDHash,
 			Type:     formats.TypeHLS,
 			Channel:  c.SigningChannel.CanonicalURL,
-			Path:     localStream.Path(),
+			Path:     localStream.LastPath(),
 			Size:     localStream.Size(),
 			Checksum: localStream.Checksum(),
 		})
@@ -105,4 +109,63 @@ func SpawnProcessing(videoPath string, q *queue.Queue, lib *Library, p *queue.Po
 			logger.Errorw("cleanup failed", "err", err)
 		}
 	}
+}
+
+type S3Uploader struct {
+	lib  *Library
+	seen cmap.ConcurrentMap
+}
+
+func (u S3Uploader) Do(t dispatcher.Task) error {
+	v := t.Payload.(*Video)
+
+	logger.Debugw("uploading stream", "sd_hash", v.SDHash)
+	lv, err := u.lib.local.Open(v.SDHash)
+	if err != nil {
+		return err
+	}
+
+	rs, err := u.lib.remote.Put(lv)
+	if err != nil {
+		return err
+	}
+	v.RemotePath = rs.URL()
+	u.seen.Set(v.SDHash, v)
+
+	err = u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)
+	if err != nil {
+		logger.Errorw("error updating video", "sd_hash", v.SDHash, "remote_path", rs.URL(), "err", err)
+		u.seen.Remove(v.SDHash)
+		return err
+	}
+	logger.Debugw("uploaded stream", "sd_hash", v.SDHash, "remote_path", rs.URL())
+	return nil
+}
+
+func SpawnS3Uploader(lib *Library) dispatcher.Dispatcher {
+	logger.Info("starting s3 uploader")
+	s3up := S3Uploader{lib: lib, seen: cmap.New()}
+	d := dispatcher.Start(5, s3up)
+	ticker := time.NewTicker(5 * time.Second)
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				videos, err := lib.ListLocalOnly()
+				if err != nil {
+					logger.Errorw("listing non-uploaded videos failed", "err", err)
+					return
+				}
+				for _, v := range videos {
+					absent := s3up.seen.SetIfAbsent(v.SDHash, &v)
+					if absent {
+						d.Dispatch(v)
+					}
+				}
+			}
+		}
+	}()
+
+	return d
 }

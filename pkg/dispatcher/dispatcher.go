@@ -1,12 +1,16 @@
 package dispatcher
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
 
+var ErrInvalidPayload = errors.New("invalid payload")
+
 type Task struct {
-	URL, SDHash string
+	Payload    interface{}
+	Dispatcher *Dispatcher
 }
 
 type Workload interface {
@@ -24,14 +28,6 @@ func NewWorker(id int, workerPool chan chan Task, wl Workload) Worker {
 	}
 }
 
-func New() Dispatcher {
-	return Dispatcher{
-		workerPool: make(chan chan Task, 200),
-		tasks:      make(chan Task, 2000),
-		stopChan:   make(chan bool),
-	}
-}
-
 type Worker struct {
 	ID       int
 	tasks    chan Task
@@ -43,17 +39,18 @@ type Worker struct {
 
 // Start starts reading from tasks channel
 func (w *Worker) Start() {
+	logger.Infow("started worker", "id", w.ID)
 	go func() {
 		w.wait.Add(1)
 		for {
 			w.pool <- w.tasks
 
 			select {
-			case task := <-w.tasks:
-				logger.Debugw("got task", "wid", w.ID, "task", fmt.Sprintf("%+v", task))
-				err := w.workload.Do(task)
+			case t := <-w.tasks:
+				logger.Debugw("got task", "wid", w.ID, "task", fmt.Sprintf("%+v", t))
+				err := w.workload.Do(t)
 				if err != nil {
-					logger.Errorw("workload errored", "err", err, "wid", w.ID, "task", fmt.Sprintf("%+v", task))
+					logger.Errorw("workload errored", "err", err, "wid", w.ID, "task", fmt.Sprintf("%+v", t))
 				}
 			case <-w.stopChan:
 				w.wait.Done()
@@ -77,7 +74,13 @@ type Dispatcher struct {
 	stopChan   chan bool
 }
 
-func (d Dispatcher) Start(workers int, wl Workload) {
+func Start(workers int, wl Workload) Dispatcher {
+	d := Dispatcher{
+		workerPool: make(chan chan Task, 200),
+		tasks:      make(chan Task, 2000),
+		stopChan:   make(chan bool),
+	}
+
 	for i := 0; i < workers; i++ {
 		w := NewWorker(i, d.workerPool, wl)
 		d.workers = append(d.workers, &w)
@@ -102,10 +105,12 @@ func (d Dispatcher) Start(workers int, wl Workload) {
 			}
 		}
 	}()
+
+	return d
 }
 
-func (d Dispatcher) Dispatch(t Task) {
-	d.tasks <- t
+func (d *Dispatcher) Dispatch(payload interface{}) {
+	d.tasks <- Task{Payload: payload, Dispatcher: d}
 }
 
 func (d Dispatcher) Stop() {
