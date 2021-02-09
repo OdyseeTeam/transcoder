@@ -15,6 +15,7 @@ import (
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 	"github.com/stretchr/testify/suite"
 )
@@ -44,7 +45,11 @@ func (s *ClientSuite) SetupSuite() {
 	qdb := db.OpenDB(path.Join(s.assetsPath, "sqlite", "queue.sqlite"))
 	qdb.MigrateUp(queue.InitialMigration)
 
-	lib := video.NewLibrary(video.Configure().Path(path.Join(s.assetsPath, "videos")).DB(vdb))
+	lib := video.NewLibrary(
+		video.Configure().
+			LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
+			DB(vdb),
+	)
 	q := queue.NewQueue(qdb)
 
 	poller := q.StartPoller(1)
