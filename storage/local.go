@@ -26,13 +26,3 @@ func (s LocalStorage) Open(sdHash string) (*LocalStream, error) {
 func (s LocalStorage) Delete(sdHash string) error {
 	return os.RemoveAll(path.Join(s.path, sdHash))
 }
-
-// func (s *FSDriver) Put(locs LocalStream) error {
-// 	// f, err := os.Open(path.Join(s.path, locs.sdHash, locs.name))
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
-// 	// _, err = io.Copy(f, stream.file)
-// 	// return err
-// 	return nil
-// }

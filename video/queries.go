@@ -10,23 +10,23 @@ var (
 		created_at, channel,
 		last_accessed, access_count,
 		size, checksum`
-	queryVideoGet = fmt.Sprintf(`select %v from video where sd_hash = $1 limit 1`, allVideoColumns)
+	queryVideoGet = fmt.Sprintf(`select %v from videos where sd_hash = $1 limit 1`, allVideoColumns)
 	queryVideoAdd = `
-		insert into video (
+		insert into videos (
 			url, sd_hash, type, path, channel, size, checksum, created_at
 		) values (
 			$1, $2, $3, $4, $5, $6, $7, datetime('now')
 		)`
-	queryVideoUpdateAccess     = `update video set last_accessed = datetime('now'), access_count = access_count + 1 where sd_hash = $2`
-	queryVideoUpdateRemotePath = `update video set remote_path = $1 where sd_hash = $2`
-	queryVideoUpdatePath       = `update video set path = $1 where sd_hash = $2`
+	queryVideoUpdateAccess     = `update videos set last_accessed = datetime('now'), access_count = access_count + 1 where sd_hash = $2`
+	queryVideoUpdateRemotePath = `update videos set remote_path = $1 where sd_hash = $2`
+	queryVideoUpdatePath       = `update videos set path = $1 where sd_hash = $2`
 	queryVideoLeastAccessed    = `
-		select strftime('%s', 'now') - strftime('%s', last_accessed) las from video
+		select strftime('%s', 'now') - strftime('%s', last_accessed) las from videos
 		where las > 3600 * 24 * 2 order by -las`
-	queryVideoDelete         = `delete from video where sd_hash = $1`
-	queryVideoListLocalOnly  = fmt.Sprintf(`select %s from video where path != "" and remote_path = ""`, allVideoColumns)
-	queryVideoListLocal      = fmt.Sprintf(`select %s from video where path != "" and remote_path != ""`, allVideoColumns)
-	queryVideoListRemoteOnly = fmt.Sprintf(`select %s from video where path = "" and remote_path != ""`, allVideoColumns)
+	queryVideoDelete         = `delete from videos where sd_hash = $1`
+	queryVideoListLocalOnly  = fmt.Sprintf(`select %s from videos where path != "" and remote_path = ""`, allVideoColumns)
+	queryVideoListLocal      = fmt.Sprintf(`select %s from videos where path != "" and remote_path != ""`, allVideoColumns)
+	queryVideoListRemoteOnly = fmt.Sprintf(`select %s from videos where path = "" and remote_path != ""`, allVideoColumns)
 )
 
 type AddParams struct {

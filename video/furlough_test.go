@@ -80,14 +80,14 @@ func (s FurloughSuite) TestFurloughVideos() {
 		}
 		_, err = lib.queries.db.ExecContext(
 			context.Background(),
-			"update video set last_accessed = $2 where sd_hash = $1",
+			"update videos set last_accessed = $2 where sd_hash = $1",
 			time.Now().AddDate(0, 0, -rand.Intn(30)),
 			v.SDHash,
 		)
 		s.Require().NoError(err)
 	}
 
-	r := lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from video where remote_path != ""`)
+	r := lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from videos where remote_path != ""`)
 	err := r.Scan(&totalSize)
 	s.Require().NoError(err)
 
@@ -97,7 +97,7 @@ func (s FurloughSuite) TestFurloughVideos() {
 	s.Equal(totalSize, ts)
 	s.InDelta(sizeToKeep, ts-fs, 2000000)
 
-	r = lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from video where path = "" and remote_path != ""`)
+	r = lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from videos where path = "" and remote_path != ""`)
 	err = r.Scan(&sizeRemoteOnly)
 	s.Require().NoError(err)
 	s.Equal(sizeRemoteOnly, fs)
@@ -132,18 +132,18 @@ func (s FurloughSuite) TestRetireVideos() {
 		}
 		_, err = lib.queries.db.ExecContext(
 			context.Background(),
-			"update video set last_accessed = $2 where sd_hash = $1",
+			"update videos set last_accessed = $2 where sd_hash = $1",
 			time.Now().AddDate(0, 0, -rand.Intn(30)),
 			v.SDHash,
 		)
 		s.Require().NoError(err)
 	}
 
-	r := lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from video where path == ""`)
+	r := lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from videos where path == ""`)
 	err := r.Scan(&totalSize)
 	s.Require().NoError(err)
 
-	r = lib.queries.db.QueryRowContext(context.Background(), `select count(*) from video`)
+	r = lib.queries.db.QueryRowContext(context.Background(), `select count(*) from videos`)
 	err = r.Scan(&initialCount)
 	s.Require().NoError(err)
 
@@ -153,12 +153,12 @@ func (s FurloughSuite) TestRetireVideos() {
 	s.Equal(totalSize, ts)
 	s.InDelta(sizeToKeep, ts-fs, 2000000)
 
-	r = lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from video where path = "" and remote_path != ""`)
+	r = lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from videos where path = "" and remote_path != ""`)
 	err = r.Scan(&sizeRemoteOnly)
 	s.Require().NoError(err)
 	s.InDelta(sizeToKeep, sizeRemoteOnly, 2000000)
 
-	r = lib.queries.db.QueryRowContext(context.Background(), `select count(*) from video`)
+	r = lib.queries.db.QueryRowContext(context.Background(), `select count(*) from videos`)
 	err = r.Scan(&afterCount)
 	s.Require().NoError(err)
 

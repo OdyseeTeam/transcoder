@@ -8,11 +8,15 @@ import (
 	"path"
 	"time"
 
+	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/pkg/claim"
+	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 var httpVideoPath = "/streams"
@@ -62,6 +66,7 @@ func (c *Configuration) VideoManager(videoManager *VideoManager) *Configuration 
 func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	urlQ := ctx.UserValue("url").(string)
 	kind := ctx.UserValue("kind").(string)
+	path := string(ctx.Path())
 
 	url, err := url.PathUnescape(urlQ)
 	if err != nil {
@@ -71,32 +76,39 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	ll := logger.With("url", url)
+	ll := logger.Named("http").With(
+		"url", url,
+		"path", path,
+	)
 
 	v, err := h.videoManager.GetVideoOrCreateTask(url, kind)
 
 	if err == video.ErrChannelNotEnabled || err == video.ErrNoSigningChannel {
 		ctx.SetStatusCode(http.StatusForbidden)
-		ll.Debugw("forbidden")
+		ll.Infow("transcoding disabled")
 		return
 	} else if err == video.ErrTranscodingUnderway {
 		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Debugw("trancoding underway")
+		ll.Infow("trancoding pending")
 		return
 	} else if err == claim.ErrStreamNotFound {
 		ctx.SetStatusCode(http.StatusNotFound)
-		ll.Debugw("stream not found")
+		ll.Infow("stream not found")
 		return
 	} else if err != nil {
 		ctx.SetStatusCode(http.StatusInternalServerError)
-		ll.Errorw("internal error", "error", err)
+		ll.Infow("internal error", "error", err)
 		fmt.Fprint(ctx, err.Error())
 		return
 	}
 
-	location, external := v.GetLocation()
-	if !external {
+	ctx.Response.StatusCode()
+	location, remote := v.GetLocation()
+	if !remote {
+		metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageLocal).Inc()
 		location = fmt.Sprintf("%v/%v", httpVideoPath, location)
+	} else {
+		metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
 	}
 	ll.Infow("redirecting to video", "location", location)
 	ctx.Redirect(location, http.StatusSeeOther)
@@ -114,10 +126,11 @@ func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	}
 }
 
-func loggingMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+func metricsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		logger.Debugw("http request", "path", string(ctx.Path()))
+		t := timer.Start()
 		h(ctx)
+		metrics.HTTPAPIRequests.WithLabelValues(fmt.Sprintf("%v", ctx.Response.StatusCode())).Observe(t.Duration())
 	}
 }
 
@@ -127,13 +140,14 @@ func NewServer(cfg *Configuration) *APIServer {
 	s := &APIServer{
 		Configuration: cfg,
 		httpServer: &fasthttp.Server{
-			Handler: loggingMiddleware(corsMiddleware(r.Handler)),
+			Handler: metricsMiddleware(corsMiddleware(r.Handler)),
 		},
 	}
 
 	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:^[a-z0-9]{96}$}", h.handleVideo)
 	r.GET("/api/v1/video/{kind:hls}/{url}", s.handleVideo)
 	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
+	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 
 	if !s.debug {
 		r.PanicHandler = handlePanic

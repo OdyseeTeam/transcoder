@@ -1,6 +1,8 @@
 package video
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/queue"
@@ -31,7 +34,8 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 		}
 
 		p.StartTask(t)
-		streamFH, _, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
+		streamFH, streamSize, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
+		metrics.DownloadedSizeMB.Add(float64(streamSize) / 1024 / 1024)
 
 		if err != nil {
 			ll.Errorw("task released", "reason", "download failed", "err", err)
@@ -62,10 +66,13 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 		}
 
 		ll.Infow("starting encoding")
+
+		metrics.TranscodingRunning.Inc()
 		e, err := enc.Encode()
 		if err != nil {
 			ll.Errorw("task rejected", "reason", "encoding failure", "err", err)
 			p.RejectTask(t)
+			metrics.TranscodingRunning.Dec()
 			continue
 		}
 
@@ -75,6 +82,8 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 
 			if i.GetProgress() >= 99.9 {
 				p.CompleteTask(t)
+				metrics.TranscodingRunning.Dec()
+				metrics.TranscodingSpentSeconds.Add(tmr.Duration())
 				ll.Infow(
 					"encoding complete",
 					"out", localStream.FullPath(),
@@ -86,7 +95,7 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 			}
 		}
 
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Second)
 		err = localStream.ReadMeta()
 		if err != nil {
 			logger.Errorw("filling stream metadata failed", "err", err)
@@ -104,6 +113,10 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 		if err != nil {
 			logger.Errorw("adding to video library failed", "err", err)
 		}
+
+		metrics.TranscodedCount.Inc()
+		metrics.TranscodedSizeMB.Add(float64(localStream.Size()) / 1024 / 1024)
+
 		err = os.Remove(streamFH.Name())
 		if err != nil {
 			logger.Errorw("cleanup failed", "err", err)
@@ -112,30 +125,45 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 }
 
 type S3Uploader struct {
-	lib  *Library
-	seen cmap.ConcurrentMap
+	lib        *Library
+	processing cmap.ConcurrentMap
 }
 
 func (u S3Uploader) Do(t dispatcher.Task) error {
 	v := t.Payload.(*Video)
+	u.processing.Set(v.SDHash, v)
 
 	logger.Debugw("uploading stream", "sd_hash", v.SDHash)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := dispatcher.WaitUntilTrue(ctx, 300*time.Millisecond, func() bool {
+		if _, err := u.lib.local.Open(v.SDHash); err == nil {
+			return true
+		}
+		return false
+	})
+	if err != nil {
+		return errors.New("timed out waiting for master playlist to appear")
+	}
+
 	lv, err := u.lib.local.Open(v.SDHash)
 	if err != nil {
+		u.processing.Remove(v.SDHash)
 		return err
 	}
 
 	rs, err := u.lib.remote.Put(lv)
 	if err != nil {
+		u.processing.Remove(v.SDHash)
 		return err
 	}
 	v.RemotePath = rs.URL()
-	u.seen.Set(v.SDHash, v)
 
 	err = u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)
 	if err != nil {
 		logger.Errorw("error updating video", "sd_hash", v.SDHash, "remote_path", rs.URL(), "err", err)
-		u.seen.Remove(v.SDHash)
+		u.processing.Remove(v.SDHash)
 		return err
 	}
 	logger.Debugw("uploaded stream", "sd_hash", v.SDHash, "remote_path", rs.URL())
@@ -144,7 +172,7 @@ func (u S3Uploader) Do(t dispatcher.Task) error {
 
 func SpawnS3Uploader(lib *Library) dispatcher.Dispatcher {
 	logger.Info("starting s3 uploader")
-	s3up := S3Uploader{lib: lib, seen: cmap.New()}
+	s3up := S3Uploader{lib: lib, processing: cmap.New()}
 	d := dispatcher.Start(5, s3up)
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -158,7 +186,7 @@ func SpawnS3Uploader(lib *Library) dispatcher.Dispatcher {
 					return
 				}
 				for _, v := range videos {
-					absent := s3up.seen.SetIfAbsent(v.SDHash, &v)
+					absent := s3up.processing.SetIfAbsent(v.SDHash, &v)
 					if absent {
 						d.Dispatch(v)
 					}
