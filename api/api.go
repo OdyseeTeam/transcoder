@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
 )
@@ -47,16 +48,17 @@ func NewManager(q *queue.Queue, l *video.Library) *VideoManager {
 // GetVideoOrCreateTask checks if video exists in the library or is waiting in the queue.
 // If neither, it validates and adds video for later processing.
 func (m *VideoManager) GetVideoOrCreateTask(uri, kind string) (Video, error) {
-	claim, err := video.ValidateIncomingVideo(uri)
-	if err != nil {
-		if errors.Is(err, video.ErrChannelNotEnabled) {
-			m.library.IncViews(claim.PermanentURL, claim.SDHash)
-		}
-		return nil, err
-	}
-
+	claim, err := claim.Resolve(uri)
 	v, err := m.library.Get(claim.SDHash)
 	if v == nil || err == sql.ErrNoRows {
+		err := video.ValidateByClaim(claim)
+		if err != nil {
+			if errors.Is(err, video.ErrChannelNotEnabled) {
+				m.library.IncViews(claim.PermanentURL, claim.SDHash)
+			}
+			return nil, err
+		}
+
 		t, err := m.queue.GetBySDHash(claim.SDHash)
 		if err != nil {
 			return nil, err
