@@ -25,8 +25,9 @@ type sweeper struct {
 }
 
 type TallyItem struct {
-	URL   string
-	Count uint64
+	URL    string
+	SDHash string
+	Count  uint64
 }
 
 func NewSweeper() *sweeper {
@@ -36,29 +37,35 @@ func NewSweeper() *sweeper {
 	}
 }
 
-func (s *sweeper) Inc(url string) {
+func (s *sweeper) Inc(url, sdHash string) {
 	ic := counter(0)
-	i, _ := s.counters.LoadOrStore(url, &ic)
+	i, _ := s.counters.LoadOrStore([2]string{url, sdHash}, &ic)
 	c := i.(*counter)
 	c.Inc()
 }
 
-func (s *sweeper) Top(n int, sweep bool) []TallyItem {
+func (s *sweeper) Top(n, lb int) []TallyItem {
 	tally := []TallyItem{}
 	s.counters.Range(func(k, v interface{}) bool {
-		ti := TallyItem{k.(string), v.(*counter).Value()}
-		if s.swept[ti.URL] {
+		us := k.([2]string)
+		ti := TallyItem{URL: us[0], SDHash: us[1], Count: v.(*counter).Value()}
+		if ti.Count < uint64(lb) || s.swept[ti.SDHash] {
 			return true
 		}
 		tally = append(tally, ti)
-		if sweep {
-			s.swept[ti.URL] = true
-		}
 		return true
 	})
-	sort.Slice(tally, func(i, j int) bool { return tally[i].Count < tally[j].Count })
+
+	// Descending sort
+	sort.Slice(tally, func(i, j int) bool { return tally[i].Count > tally[j].Count })
 	if n >= len(tally) {
 		return tally
 	}
 	return tally[:n]
+}
+
+func (s *sweeper) Sweep(ti []TallyItem) {
+	for _, i := range ti {
+		s.swept[i.SDHash] = true
+	}
 }

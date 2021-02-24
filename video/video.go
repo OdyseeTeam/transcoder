@@ -55,14 +55,20 @@ func (c *Config) MaxRemoteSize(s string) *Config {
 type Library struct {
 	*Config
 	queries Queries
+	sweeper *sweeper
 }
 
 func NewLibrary(cfg *Config) *Library {
 	l := &Library{
 		Config:  cfg,
 		queries: Queries{cfg.db},
+		sweeper: NewSweeper(),
 	}
 	return l
+}
+
+func (q Library) IncViews(uri, sdHash string) {
+	q.sweeper.Inc(uri, sdHash)
 }
 
 // Add records data about video into database.

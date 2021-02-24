@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"errors"
 
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/video"
@@ -48,6 +49,9 @@ func NewManager(q *queue.Queue, l *video.Library) *VideoManager {
 func (m *VideoManager) GetVideoOrCreateTask(uri, kind string) (Video, error) {
 	claim, err := video.ValidateIncomingVideo(uri)
 	if err != nil {
+		if errors.Is(err, video.ErrChannelNotEnabled) {
+			m.library.IncViews(claim.PermanentURL, claim.SDHash)
+		}
 		return nil, err
 	}
 
