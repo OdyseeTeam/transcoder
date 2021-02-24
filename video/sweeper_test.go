@@ -63,14 +63,15 @@ func TestSweeperSweep(t *testing.T) {
 	}
 	wg.Wait()
 
+	require.Len(t, s.Top(3, 0), 3)
+	require.Len(t, s.Top(5, 0), 4)
+
 	counts := []int{}
 	for _, i := range s.Top(4, 0) {
 		counts = append(counts, int(i.Count))
 	}
 	assert.True(t, sort.IsSorted(sort.Reverse(sort.IntSlice(counts))))
 
-	assert.Len(t, s.Top(3, 0), 3)
-	assert.Len(t, s.Top(5, 0), 4)
 	s.Sweep(s.Top(3, 0))
 	assert.Len(t, s.Top(5, 0), 1)
 }

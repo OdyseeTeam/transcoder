@@ -49,7 +49,7 @@ func (s *sweeper) Top(n, lb int) []TallyItem {
 	s.counters.Range(func(k, v interface{}) bool {
 		us := k.([2]string)
 		ti := TallyItem{URL: us[0], SDHash: us[1], Count: v.(*counter).Value()}
-		if ti.Count < uint64(lb) || s.swept[ti.SDHash] {
+		if ti.Count <= uint64(lb) || s.swept[ti.SDHash] {
 			return true
 		}
 		tally = append(tally, ti)
