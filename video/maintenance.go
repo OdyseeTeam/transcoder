@@ -10,7 +10,7 @@ import (
 )
 
 func toGB(s uint64) string {
-	return fmt.Sprintf("%vGB", datasize.ByteSize(s).GBytes())
+	return fmt.Sprintf("%.2fGB", datasize.ByteSize(s).GBytes())
 }
 
 func SpawnLibraryCleaning(lib *Library) chan<- bool {
