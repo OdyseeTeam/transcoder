@@ -17,22 +17,19 @@ func TestSweeperInc(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range [100]int{} {
-		wg.Add(1)
+		wg.Add(2)
 		go func() {
-			wg.Add(1)
 			for range [100]int{} {
 				s.Inc(ids[0][0], ids[0][1])
 			}
 			wg.Done()
 		}()
 		go func() {
-			wg.Add(1)
 			for range [250]int{} {
 				s.Inc(ids[1][0], ids[1][1])
 			}
 			wg.Done()
 		}()
-		wg.Done()
 	}
 	wg.Wait()
 
@@ -52,10 +49,10 @@ func TestSweeperSweep(t *testing.T) {
 	s := NewSweeper()
 	ids := [][2]string{{"abc", "asdasda"}, {"cde", "sdagkkj"}, {"def", "asuyuia"}, {"ghi", "ewury"}}
 
-	var wg sync.WaitGroup
+	wg := &sync.WaitGroup{}
 	for range [100]int{} {
+		wg.Add(1)
 		go func() {
-			wg.Add(1)
 			for range [100]int{} {
 				i := rand.Intn(len(ids))
 				s.Inc(ids[i][0], ids[i][1])
@@ -64,7 +61,6 @@ func TestSweeperSweep(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-
 	require.Len(t, s.Top(3, 0), 3)
 	require.Len(t, s.Top(5, 0), 4)
 
