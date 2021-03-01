@@ -50,8 +50,8 @@ func TestTargetFormats(t *testing.T) {
 
 func TestFormat(t *testing.T) {
 	f := H264.CustomFormat(HD1080)
-	assert.Equal(t, 2300, f.Bitrate.FPS30)
-	assert.Equal(t, 3500, f.Bitrate.FPS60)
+	assert.Equal(t, 2000, f.Bitrate.FPS30)
+	assert.Equal(t, 3200, f.Bitrate.FPS60)
 
 	f = H264.CustomFormat(Resolution{800, 600})
 	assert.Equal(t, 528, f.Bitrate.FPS30)
