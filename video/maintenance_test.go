@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSpawnPopularQueuing(t *testing.T) {
+func TestSpawnPopularSweeper(t *testing.T) {
 	vdb := db.OpenTestDB()
 	vdb.MigrateUp(InitialMigration)
 
@@ -39,7 +39,7 @@ func TestSpawnPopularQueuing(t *testing.T) {
 	lib.IncViews(vids[3].url, vids[3].sdHash)
 	lib.IncViews(vids[5].url, vids[5].sdHash)
 
-	stop := SpawnPopularQueuing(lib, q, PopularQueuingOpts{TopNumber: 3, Interval: 100 * time.Millisecond, LowerBound: 100})
+	stop := SpawnPopularSweeper(lib, q, PopularSweeperOpts{TopNumber: 3, Interval: 100 * time.Millisecond, LowerBound: 100})
 	time.Sleep(1 * time.Second)
 	stop <- true
 

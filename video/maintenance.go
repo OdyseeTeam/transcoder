@@ -69,8 +69,8 @@ func SpawnLibraryCleaning(lib *Library) chan<- bool {
 	return stopChan
 }
 
-// PopularQueuingOpts sets additional options for SpawnPopularQueuing routine.
-type PopularQueuingOpts struct {
+// PopularSweeperOpts sets additional options for SpawnPopularSweeper routine.
+type PopularSweeperOpts struct {
 	// TopNumber limits the number of top viewed videos that will be added to queue every time.
 	TopNumber int
 	// LowerBound sets a lower limit for video views number to be considered.
@@ -79,10 +79,10 @@ type PopularQueuingOpts struct {
 	Interval time.Duration
 }
 
-// SpawnPopularQueuing will tally up the count of rejected videos and pick top N of them
+// SpawnPopularSweeper will tally up the count of rejected videos and pick top N of them
 // to be added to the queue.
 // For it to work, `lib.IncViews(url, sdHash)` should be called somewhere for every video that is requested but rejected.
-func SpawnPopularQueuing(lib *Library, q *queue.Queue, opts PopularQueuingOpts) chan<- bool {
+func SpawnPopularSweeper(lib *Library, q *queue.Queue, opts PopularSweeperOpts) chan<- bool {
 	sweepTicker := time.NewTicker(opts.Interval)
 	stopChan := make(chan bool)
 	ll := logger.Named("sweeper")

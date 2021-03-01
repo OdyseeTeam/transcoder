@@ -118,7 +118,7 @@ func main() {
 			}
 			lowerBound, _ := strconv.Atoi(sweeperCfg["lowerbound"])
 			topNumber, _ := strconv.Atoi(sweeperCfg["topnumber"])
-			video.SpawnPopularQueuing(lib, q, video.PopularQueuingOpts{
+			video.SpawnPopularSweeper(lib, q, video.PopularSweeperOpts{
 				Interval:   time.Duration(interval) * time.Minute,
 				LowerBound: lowerBound,
 				TopNumber:  topNumber,
