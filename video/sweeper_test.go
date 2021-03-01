@@ -17,6 +17,7 @@ func TestSweeperInc(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range [100]int{} {
+		wg.Add(1)
 		go func() {
 			wg.Add(1)
 			for range [100]int{} {
@@ -31,6 +32,7 @@ func TestSweeperInc(t *testing.T) {
 			}
 			wg.Done()
 		}()
+		wg.Done()
 	}
 	wg.Wait()
 
