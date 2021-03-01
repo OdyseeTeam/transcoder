@@ -49,6 +49,9 @@ func NewManager(q *queue.Queue, l *video.Library) *VideoManager {
 // If neither, it validates and adds video for later processing.
 func (m *VideoManager) GetVideoOrCreateTask(uri, kind string) (Video, error) {
 	claim, err := claim.Resolve(uri)
+	if err != nil {
+		return nil, err
+	}
 	v, err := m.library.Get(claim.SDHash)
 	if v == nil || err == sql.ErrNoRows {
 		err := video.ValidateByClaim(claim)
