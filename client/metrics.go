@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	resultForbidden   = ""
-	resultNotFound    = ""
-	resultUnderway    = ""
-	resultFound       = ""
-	resultDownloading = ""
-	resultLocalCache  = ""
+	resultForbidden   = "forbidden"
+	resultNotFound    = "not_found"
+	resultUnderway    = "underway"
+	resultFound       = "found"
+	resultDownloading = "downloading"
+	resultLocalCache  = "local_cache"
 )
 
 var (
