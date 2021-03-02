@@ -87,10 +87,12 @@ func New(cfg *Configuration) Client {
 	}
 	c.cache = ccache.New(ccache.
 		Configure().
-		MaxSize(cfg.cacheSize).
-		ItemsToPrune(20).
+		MaxSize(c.cacheSize).
+		ItemsToPrune(500).
 		OnDelete(c.deleteCachedVideo),
 	)
+
+	logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
 
 	return c
 }
@@ -108,6 +110,8 @@ func (c Client) deleteCachedVideo(i *ccache.Item) {
 			"unable to delete cached video",
 			"path", path, "err", err,
 		)
+	} else {
+		logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
 	}
 }
 
@@ -161,6 +165,7 @@ func (c Client) GetCachedVideo(sdHash string) *CachedVideo {
 
 func (c Client) CacheVideo(path string, size int64) {
 	cv := &CachedVideo{size: size, dirName: path}
+	logger.Infow("cached item", "name", cv.DirName(), "size", cv.Size())
 	c.cache.Set(hlsCacheKey(path), cv, 24*30*12*time.Hour)
 }
 

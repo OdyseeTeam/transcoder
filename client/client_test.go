@@ -212,6 +212,36 @@ func (s *ClientSuite) TestGetCachedVideo() {
 	s.Nil(c.GetCachedVideo(hash))
 }
 
+func (s *ClientSuite) TestCacheSize() {
+	vPath := path.Join(s.assetsPath, "TestCacheSize")
+
+	cSize := int64(3131915 * 25)
+
+	c := New(Configure().VideoPath(vPath).CacheSize(cSize))
+
+	cvDirs := map[string]int64{}
+	for range [50]int{} {
+		dir := randomString(96)
+		size, err := populateHLSPlaylist(path.Join(vPath, dir))
+		s.Require().NoError(err)
+		cvDirs[dir] = size
+
+		c.CacheVideo(dir, size)
+		cv := c.GetCachedVideo(dir)
+		s.Require().NotNil(cv)
+		s.Require().Equal(size, cv.Size())
+	}
+
+	var storedSize int64
+	for dir := range cvDirs {
+		cv := c.GetCachedVideo(dir)
+		if cv != nil {
+			storedSize += cv.Size()
+		}
+	}
+	s.LessOrEqual(storedSize, cSize)
+}
+
 func randomString(n int) string {
 	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
@@ -222,6 +252,7 @@ func randomString(n int) string {
 	return string(b)
 }
 
+// populateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.
 func populateHLSPlaylist(vPath string) (int64, error) {
 	err := os.MkdirAll(vPath, os.ModePerm)
 	if err != nil {
