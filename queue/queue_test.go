@@ -60,25 +60,22 @@ func (s *QueueSuite) TestQueueGetBySDHash() {
 }
 
 func (s *QueueSuite) TestQueuePoll() {
+	var err error
 	q := NewQueue(s.db)
-	var (
-		lastTask *Task
-		err      error
-	)
 	for range [100]int{} {
-		lastTask, err = q.Add(fmt.Sprintf("lbry://%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
+		_, err = q.Add(fmt.Sprintf("lbry://%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
 		s.Require().NoError(err)
 	}
 
 	for i := range [100]int{} {
 		task, err := q.Poll()
 		s.Require().NoError(err)
-		s.Require().Equal(task.ID, lastTask.ID-uint32(i))
+		s.Require().EqualValues(task.ID, i+1)
 		s.Require().Equal(StatusPending, task.Status)
 
 		t, err := q.Get(task.ID)
 		s.Require().NoError(err)
-		s.Require().Equal(t.ID, lastTask.ID-uint32(i))
+		s.Require().EqualValues(t.ID, i+1)
 		s.Require().Equal(StatusPending, t.Status)
 	}
 
@@ -101,23 +98,6 @@ func (s *QueueSuite) TestQueuePoll() {
 	task, err := q.Poll()
 	s.EqualError(err, sql.ErrNoRows.Error())
 	s.Nil(task)
-
-	for range [100]int{} {
-		lastTask, err = q.Add(fmt.Sprintf("lbry://%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
-		s.Require().NoError(err)
-	}
-
-	for i := range [100]int{} {
-		task, err := q.Poll()
-		s.Require().NoError(err)
-		s.Require().Equal(task.ID, lastTask.ID-uint32(i))
-		s.Require().Equal(StatusPending, task.Status)
-
-		t, err := q.Get(task.ID)
-		s.Require().NoError(err)
-		s.Require().Equal(t.ID, lastTask.ID-uint32(i))
-		s.Require().Equal(StatusPending, t.Status)
-	}
 }
 
 func (s *QueueSuite) TestQueueRelease() {

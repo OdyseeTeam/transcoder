@@ -3,6 +3,7 @@ package main
 import (
 	"math/rand"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/lbryio/transcoder/api"
@@ -107,7 +108,22 @@ func main() {
 			go video.SpawnProcessing(q, lib, poller)
 		}
 
-		video.SpawnMaintenance(lib)
+		video.SpawnLibraryCleaning(lib)
+		sweeperCfg := cfg.GetStringMapString("sweeper")
+		if sweeperCfg != nil {
+			interval, err := strconv.Atoi(sweeperCfg["intervalminutes"])
+			if err != nil {
+				interval = 10
+				logger.Warnf("invalid sweeper interval: %v, setting to 10 min", sweeperCfg["intervalminutes"])
+			}
+			lowerBound, _ := strconv.Atoi(sweeperCfg["lowerbound"])
+			topNumber, _ := strconv.Atoi(sweeperCfg["topnumber"])
+			video.SpawnPopularSweeper(lib, q, video.PopularSweeperOpts{
+				Interval:   time.Duration(interval) * time.Minute,
+				LowerBound: lowerBound,
+				TopNumber:  topNumber,
+			})
+		}
 
 		apiServer := api.NewServer(
 			api.Configure().

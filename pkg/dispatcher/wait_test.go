@@ -33,5 +33,4 @@ func TestWaitUntilTrue(t *testing.T) {
 	cancel2()
 
 	assert.EqualError(t, err, "timed out")
-	assert.False(t, true)
 }

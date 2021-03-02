@@ -1,9 +1,11 @@
 package encoder
 
 import (
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lbryio/transcoder/formats"
@@ -55,18 +57,35 @@ func (s *EncoderSuite) TestEncode() {
 
 	s.Require().GreaterOrEqual(progress, 99.9)
 
-	outFiles := []string{
-		"master.m3u8",
-		"stream_0.m3u8",
-		"seg_0_000000.ts",
-		"seg_1_000000.ts",
-		"seg_2_000000.ts",
-		"seg_3_000000.ts",
+	outFiles := map[string]string{
+		"master.m3u8": `
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-STREAM-INF:BANDWIDTH=3660800,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2"
+stream_0.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=2340800,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
+stream_1.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=844800,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
+stream_2.m3u8
+`,
+		"stream_0.m3u8":   "seg_0_000000.ts",
+		"stream_1.m3u8":   "seg_1_000000.ts",
+		"stream_2.m3u8":   "seg_2_000000.ts",
+		"seg_0_000000.ts": "",
+		"seg_1_000000.ts": "",
+		"seg_2_000000.ts": "",
 	}
-	for _, f := range outFiles {
-		_, err = os.Stat(path.Join(s.out, f))
+	for f, str := range outFiles {
+		cont, err := ioutil.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
+		// m, err := regexp.MatchString(strings.TrimSpace(str), string(cont))
+		// s.NoError(err)
+		// s.True(m, fmt.Sprintf("%v doesn't match %v", string(cont), str))
+		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
+
 }
 
 func (s *EncoderSuite) Test_GetMetadata() {

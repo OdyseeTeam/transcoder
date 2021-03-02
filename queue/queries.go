@@ -19,7 +19,7 @@ var (
 	`
 	queryTaskPoll = `
 		select id, sd_hash, created_at, url, progress, started_at, type, status from tasks
-		where status in ("new", "released") order by id desc limit 1
+		where status in ("new", "released") order by created_at asc limit 1
 	`
 	queryTaskMarkStarted = fmt.Sprintf(
 		`update tasks set started_at = datetime('now'), progress = 0, status = "%v" where id = $1`,

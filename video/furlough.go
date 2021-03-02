@@ -1,11 +1,7 @@
 package video
 
 import (
-	"fmt"
 	"sort"
-	"time"
-
-	"github.com/c2h5oh/datasize"
 )
 
 func tailVideos(items []*Video, maxSize uint64, call func(v *Video) error) (totalSize uint64, furloughedSize uint64, err error) {
@@ -49,50 +45,4 @@ func RetireVideos(lib *Library, maxSize uint64) (uint64, uint64, error) {
 		return 0, 0, err
 	}
 	return tailVideos(items, maxSize, lib.Retire)
-}
-
-func SpawnMaintenance(lib *Library) chan<- bool {
-	logger.Infow(
-		"starting library maintenance",
-		"max_local_size", fmt.Sprintf("%vGB", datasize.ByteSize(lib.maxLocalSize).GBytes()),
-		"max_remote_size", fmt.Sprintf("%vGB", datasize.ByteSize(lib.maxRemoteSize).GBytes()),
-	)
-	furloughTicker := time.NewTicker(5 * time.Minute)
-	retireTicker := time.NewTicker(24 * time.Hour)
-	stopChan := make(chan bool)
-
-	go func() {
-		for {
-			select {
-			case <-furloughTicker.C:
-				if lib.maxLocalSize == 0 {
-					continue
-				}
-				logger.Infow("starting furloughing procedure", "max_local_size", fmt.Sprintf("%vGB", datasize.ByteSize(lib.maxLocalSize).GBytes()))
-				totalSize, freedSize, err := FurloughVideos(lib, lib.maxLocalSize)
-				if err != nil {
-					logger.Infow("failed to furlough videos", "furloughed_size", freedSize, "err", err)
-				} else if freedSize > 0 {
-					logger.Infow("furloughed some videos", "total_size", totalSize, "furloughed_size", freedSize)
-				} else {
-					logger.Infow("didn't furlough any videos", "total_size", totalSize)
-				}
-			case <-retireTicker.C:
-				if lib.maxRemoteSize == 0 {
-					continue
-				}
-				_, freedSize, err := RetireVideos(lib, lib.maxRemoteSize)
-				if err != nil {
-					logger.Infow("failed to retire videos", "size", freedSize, "err", err)
-				} else if freedSize > 0 {
-					logger.Infow("retired some videos", "size", freedSize)
-				}
-			case <-stopChan:
-				logger.Info("stopping library maintenance")
-				return
-			}
-		}
-	}()
-
-	return stopChan
 }

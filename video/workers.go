@@ -11,6 +11,7 @@ import (
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/queue"
@@ -24,15 +25,15 @@ func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
 
 	for t := range p.IncomingTasks() {
 		ll := logger.Named("worker").With("url", t.URL, "task_id", t.ID)
-		ll.Infow("incoming task")
 
-		c, err := ValidateIncomingVideo(t.URL)
+		c, err := claim.Resolve(t.URL)
 		if err != nil {
-			ll.Errorw("task rejected", "reason", "validation failed", "err", err)
+			ll.Errorw("resolve failed", "err", err)
 			p.RejectTask(t)
 			continue
 		}
 
+		ll.Infow("starting task")
 		p.StartTask(t)
 		streamFH, streamSize, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
 		metrics.DownloadedSizeMB.Add(float64(streamSize) / 1024 / 1024)

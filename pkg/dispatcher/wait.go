@@ -10,14 +10,11 @@ func WaitUntilTrue(ctx context.Context, between time.Duration, f func() bool) er
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("done")
 			return fmt.Errorf("timed out")
 		default:
 			if f() {
-				fmt.Println("success")
 				return nil
 			}
-			fmt.Println("sleeping")
 			time.Sleep(between)
 		}
 	}
