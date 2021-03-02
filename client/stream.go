@@ -108,6 +108,7 @@ func (s HLSStream) saveFile(data []byte, name string) error {
 func (s HLSStream) Download() error {
 	ll := logger.With("url", s.rootURL(), "sd_hash", s.SDHash)
 	if s.client.isDownloading(s.SDHash) {
+		TranscodedResult.WithLabelValues(resultDownloading).Inc()
 		ll.Debugw("already downloading")
 		return ErrAlreadyDownloading
 	}
@@ -118,13 +119,17 @@ func (s HLSStream) Download() error {
 
 	switch res.StatusCode {
 	case http.StatusForbidden:
+		TranscodedResult.WithLabelValues(resultForbidden).Inc()
 		return video.ErrChannelNotEnabled
 	case http.StatusNotFound:
+		TranscodedResult.WithLabelValues(resultNotFound).Inc()
 		return errors.New("stream not found")
 	case http.StatusAccepted:
+		TranscodedResult.WithLabelValues(resultUnderway).Inc()
 		ll.Debugw("stream encoding underway")
 		return errors.New("encoding underway")
 	case http.StatusSeeOther:
+		TranscodedResult.WithLabelValues(resultFound).Inc()
 		loc, err := res.Location()
 		if err != nil {
 			return err
