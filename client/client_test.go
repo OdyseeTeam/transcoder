@@ -15,6 +15,7 @@ import (
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 	"github.com/stretchr/testify/suite"
 )
@@ -44,11 +45,15 @@ func (s *ClientSuite) SetupSuite() {
 	qdb := db.OpenDB(path.Join(s.assetsPath, "sqlite", "queue.sqlite"))
 	qdb.MigrateUp(queue.InitialMigration)
 
-	lib := video.NewLibrary(vdb)
+	lib := video.NewLibrary(
+		video.Configure().
+			LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
+			DB(vdb),
+	)
 	q := queue.NewQueue(qdb)
 
 	poller := q.StartPoller(1)
-	go video.SpawnProcessing(path.Join(s.assetsPath, "videos"), q, lib, poller)
+	go video.SpawnProcessing(q, lib, poller)
 	s.apiServer = api.NewServer(
 		api.Configure().
 			Debug(true).
@@ -224,7 +229,7 @@ func populateHLSPlaylist(vPath string) (int64, error) {
 	}
 
 	plPath, _ := filepath.Abs("./testdata")
-	size, err := hlsPlaylistDive(
+	size, err := HLSPlaylistDive(
 		plPath,
 		func(rootPath ...string) ([]byte, error) {
 			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {

@@ -1,19 +1,20 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
 	"math/rand"
-	"os"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/pkg/claim"
+	"github.com/lbryio/transcoder/pkg/config"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/alecthomas/kong"
@@ -27,6 +28,7 @@ var CLI struct {
 		DataPath  string `optional name:"data-path" help:"Path to store database files and configs." type:"existingdir" default:"."`
 		VideoPath string `optional name:"video-path" help:"Path to store video." type:"existingdir" default:"."`
 		Workers   int    `optional name:"workers" help:"Number of workers to start." type:"int" default:"10"`
+		CDN       string `optional name:"cdn" help:"LBRY CDN endpoint address."`
 		Debug     bool   `optional name:"debug" help:"Debug mode."`
 	} `cmd help:"Start transcoding server."`
 }
@@ -36,41 +38,91 @@ func main() {
 
 	// stopChan := make(chan os.Signal)
 
+	cfg, err := config.Read()
+	cfg.SetDefault("CDNServer", "https://cdn.lbryplayer.xyz/api/v3/streams")
+	if err != nil {
+		logger.Fatal(err)
+	}
+
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
 	case "serve":
 		if !CLI.Serve.Debug {
 			api.SetLogger(logging.Create("api", logging.Prod))
 			db.SetLogger(logging.Create("db", logging.Prod))
-			// queue.SetLogger(logging.Create("queue", logging.Prod))
+			queue.SetLogger(logging.Create("queue", logging.Prod))
 			encoder.SetLogger(logging.Create("encoder", logging.Prod))
 			video.SetLogger(logging.Create("video", logging.Prod))
-			claim.SetLogger(logging.Create("video", logging.Prod))
+			claim.SetLogger(logging.Create("claim", logging.Prod))
+			storage.SetLogger(logging.Create("storage", logging.Prod))
+			formats.SetLogger(logging.Create("formats", logging.Prod))
 		}
-		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
-		vdb.MigrateUp(video.InitialMigration)
-		qdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "queue.sqlite"))
-		qdb.MigrateUp(queue.InitialMigration)
 
-		lib := video.NewLibrary(vdb)
+		if CLI.Serve.CDN != "" {
+			claim.SetCDNServer(CLI.Serve.CDN)
+		} else {
+			claim.SetCDNServer(cfg.GetString("CDNServer"))
+		}
+
+		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
+		err := vdb.MigrateUp(video.InitialMigration)
+		if err != nil {
+			logger.Fatal(err)
+		}
+
+		qdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "queue.sqlite"))
+		err = qdb.MigrateUp(queue.InitialMigration)
+		if err != nil {
+			logger.Fatal(err)
+		}
+
+		wasabi := cfg.GetStringMapString("wasabi")
+		local := cfg.GetStringMapString("local")
+
+		libCfg := video.Configure().
+			LocalStorage(storage.Local(CLI.Serve.VideoPath)).
+			MaxLocalSize(local["maxsize"]).
+			MaxRemoteSize(wasabi["maxsize"]).
+			DB(vdb)
+
+		if wasabi["bucket"] != "" {
+			s3d, err := storage.InitS3Driver(
+				storage.S3ConfigureWasabiEU().
+					Credentials(wasabi["key"], wasabi["secret"]).
+					Bucket(wasabi["bucket"]))
+			if err != nil {
+				logger.Fatalw("wasabi driver initialization failed", "err", err)
+			}
+			libCfg.RemoteStorage(s3d)
+			logger.Infow("wasabi storage configured", "bucket", wasabi["bucket"])
+		}
+		lib := video.NewLibrary(libCfg)
+		video.SpawnS3Uploader(lib)
+
 		q := queue.NewQueue(qdb)
 
-		channels := []string{}
-		channelsFilePath := path.Join(CLI.Serve.DataPath, "enabled_channels.cfg")
-		cf, err := os.Open(channelsFilePath)
-		if err != nil {
-			logger.Fatalw("cannot open channels file", "path", channelsFilePath, "err", err)
-		}
-		scanner := bufio.NewScanner(cf)
-		for scanner.Scan() {
-			channels = append(channels, scanner.Text())
-		}
-		logger.Debugw("found channels", "channels", fmt.Sprintf("%v", channels))
-		video.LoadEnabledChannels(channels)
+		video.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
 
 		poller := q.StartPoller(CLI.Serve.Workers)
 		for i := 0; i < CLI.Serve.Workers; i++ {
-			go video.SpawnProcessing(CLI.Serve.VideoPath, q, lib, poller)
+			go video.SpawnProcessing(q, lib, poller)
+		}
+
+		video.SpawnLibraryCleaning(lib)
+		sweeperCfg := cfg.GetStringMapString("sweeper")
+		if sweeperCfg != nil {
+			interval, err := strconv.Atoi(sweeperCfg["intervalminutes"])
+			if err != nil {
+				interval = 10
+				logger.Warnf("invalid sweeper interval: %v, setting to 10 min", sweeperCfg["intervalminutes"])
+			}
+			lowerBound, _ := strconv.Atoi(sweeperCfg["lowerbound"])
+			topNumber, _ := strconv.Atoi(sweeperCfg["topnumber"])
+			video.SpawnPopularSweeper(lib, q, video.PopularSweeperOpts{
+				Interval:   time.Duration(interval) * time.Minute,
+				LowerBound: lowerBound,
+				TopNumber:  topNumber,
+			})
 		}
 
 		apiServer := api.NewServer(
@@ -80,6 +132,8 @@ func main() {
 				VideoPath(CLI.Serve.VideoPath).
 				VideoManager(api.NewManager(q, lib)),
 		)
+		logger.Infow("configured api server", "addr", CLI.Serve.Bind)
+
 		// go func() {
 		err = apiServer.Start()
 		if err != nil {

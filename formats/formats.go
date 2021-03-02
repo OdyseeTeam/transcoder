@@ -52,12 +52,12 @@ var Resolutions = []Resolution{
 
 // H264 codec with its suggested bitrates
 var H264 = Codec{
-	Format{UHD4K, Bitrate{FPS30: 23000, FPS60: 35000}},
-	Format{QHD2K, Bitrate{FPS30: 12000, FPS60: 18000}},
-	Format{HD1080, Bitrate{FPS30: 2300, FPS60: 3500}},
-	Format{HD720, Bitrate{FPS30: 1400, FPS60: 2200}},
-	Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
-	Format{SD360, Bitrate{FPS30: 525, FPS60: 800}},
+	Format{UHD4K, Bitrate{FPS30: 18000, FPS60: 28000}},
+	Format{QHD2K, Bitrate{FPS30: 10000, FPS60: 16000}},
+	Format{HD1080, Bitrate{FPS30: 2000, FPS60: 3200}},
+	Format{HD720, Bitrate{FPS30: 1200, FPS60: 2000}},
+	// Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
+	Format{SD360, Bitrate{FPS30: 400, FPS60: 640}},
 	// Format{SD240, Bitrate{FPS30: 250, FPS60: 380}},
 }
 

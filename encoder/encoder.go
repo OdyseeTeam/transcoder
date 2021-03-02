@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/internal/metrics"
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
@@ -97,6 +99,12 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
 	)
+
+	dur, _ := strconv.ParseFloat(e.Meta.GetFormat().GetDuration(), 64)
+	btr, _ := strconv.ParseFloat(e.Meta.GetFormat().GetBitRate(), 64)
+	metrics.EncodedDurationSeconds.Add(dur)
+	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
+
 	return ffmpeg.New(&conf).
 		Input(e.in).
 		Output("stream_%v.m3u8").
