@@ -10,13 +10,13 @@ require (
 	github.com/fasthttp/router v1.3.3
 	github.com/floostack/transcoder v1.2.0
 	github.com/grafov/m3u8 v0.11.1
-	github.com/karlseguin/ccache/v2 v2.0.7
+	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
 	github.com/lbryio/lbry.go/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.8.0
+	github.com/prometheus/client_golang v1.9.0
 	github.com/simukti/sqldb-logger v0.0.0-20201125162808-c35f87e285f2
 	github.com/simukti/sqldb-logger/logadapter/zapadapter v0.0.0-20201125162808-c35f87e285f2
 	github.com/spf13/viper v1.7.1
