@@ -187,12 +187,15 @@ func (c Client) SweepCache(restore bool) (int64, error) {
 	}
 
 	// Verify that all stream files are present
-	for _, cvPath := range cvs {
+	for _, sdHash := range cvs {
 		// Skip non-sdHashes
-		if len(cvPath) != 96 {
+		if len(sdHash) != 96 {
 			continue
 		}
-		cvFullPath := path.Join(c.videoPath, cvPath)
+		if c.isDownloading(sdHash) {
+			continue
+		}
+		cvFullPath := path.Join(c.videoPath, sdHash)
 
 		cvSize, err := HLSPlaylistDive(
 			cvFullPath,
