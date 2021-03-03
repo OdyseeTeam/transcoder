@@ -221,5 +221,6 @@ func (c Client) RestoreCache() (int64, error) {
 		streamsRestored++
 	}
 
+	logger.Infow("cache restored", "number", streamsRestored)
 	return streamsRestored, nil
 }

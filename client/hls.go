@@ -36,24 +36,24 @@ func HLSPlaylistDive(rootPath string, loader fileLoader, processor fileProcessor
 
 	data, err := load(rootPath, MasterPlaylistName)
 	if err != nil {
-		return streamSize, err
+		return streamSize, errors.Wrapf(err, `error loading playlist "%v"`, MasterPlaylistName)
 	}
 
 	pl, _, err := m3u8.DecodeFrom(data, true)
 	if err != nil {
-		return streamSize, err
+		return streamSize, errors.Wrapf(err, `error decoding playlist "%v"`, rootPath)
 	}
 
 	masterpl := pl.(*m3u8.MasterPlaylist)
 	for _, plv := range masterpl.Variants {
 		data, err := load(rootPath, plv.URI)
 		if err != nil {
-			return streamSize, err
+			return streamSize, errors.Wrapf(err, `error loading playlist variant "%v"`, plv.URI)
 		}
 
 		p, _, err := m3u8.DecodeFrom(data, true)
 		if err != nil {
-			return streamSize, err
+			return streamSize, errors.Wrapf(err, `error decoding playlist variant "%v"`, plv.URI)
 		}
 		mediapl := p.(*m3u8.MediaPlaylist)
 
@@ -63,7 +63,7 @@ func HLSPlaylistDive(rootPath string, loader fileLoader, processor fileProcessor
 			}
 			_, err := load(rootPath, seg.URI)
 			if err != nil {
-				return streamSize, err
+				return streamSize, errors.Wrapf(err, `error loading fragment "%v"`, seg.URI)
 			}
 		}
 	}
