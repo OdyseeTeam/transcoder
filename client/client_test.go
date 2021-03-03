@@ -73,8 +73,8 @@ func (s *ClientSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
-func (s *ClientSuite) TestRestoreCache() {
-	vPath := path.Join(s.assetsPath, "TestRestoreCache")
+func (s *ClientSuite) TestSweepCache() {
+	vPath := path.Join(s.assetsPath, "TestSweepCache")
 
 	c := New(Configure().VideoPath(vPath))
 
@@ -92,7 +92,7 @@ func (s *ClientSuite) TestRestoreCache() {
 	}
 
 	c = New(Configure().VideoPath(vPath))
-	n, err := c.RestoreCache()
+	n, err := c.SweepCache(true)
 	s.Require().NoError(err)
 	s.EqualValues(10, n)
 
@@ -119,7 +119,7 @@ func (s *ClientSuite) TestRestoreCache() {
 	}
 
 	c = New(Configure().VideoPath(vPath))
-	_, err = c.RestoreCache()
+	_, err = c.SweepCache(true)
 	s.Require().NoError(err)
 	s.Require().Nil(c.GetCachedVideo(cvToNuke))
 }
