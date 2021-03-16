@@ -79,6 +79,9 @@ func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
 	)
 
 	vs := GetVideoStream(meta)
+	if vs == nil {
+		return nil, errors.New("no video stream detected")
+	}
 	w, h := vs.GetWidth(), vs.GetHeight()
 
 	origFPS, err = DetectFPS(meta)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTargetFormats(t *testing.T) {
@@ -46,6 +47,14 @@ func TestTargetFormats(t *testing.T) {
 			assert.Equal(t, ti.target, tf)
 		})
 	}
+}
+
+func TestTargetFormatsErr(t *testing.T) {
+	tf, err := TargetFormats(H264, &ffmpeg.Metadata{
+		Streams: []ffmpeg.Streams{{CodecType: "audio"}},
+	})
+	require.Nil(t, tf)
+	assert.EqualError(t, err, "no video stream detected")
 }
 
 func TestFormat(t *testing.T) {
