@@ -91,7 +91,7 @@ func New(cfg *Configuration) Client {
 	c.cache = ccache.New(ccache.
 		Configure().
 		MaxSize(c.cacheSize).
-		ItemsToPrune(500).
+		ItemsToPrune(20).
 		OnDelete(c.deleteCachedVideo),
 	)
 
