@@ -91,7 +91,7 @@ func New(cfg *Configuration) Client {
 	c.cache = ccache.New(ccache.
 		Configure().
 		MaxSize(c.cacheSize).
-		ItemsToPrune(10).
+		ItemsToPrune(500).
 		OnDelete(c.deleteCachedVideo),
 	)
 
@@ -221,11 +221,11 @@ func (c Client) SweepCache(restore bool) (int64, error) {
 
 		if err != nil {
 			os.RemoveAll(cvFullPath)
-			c.logger.Infow("removed broken stream", "path", cvPath, "err", err)
+			c.logger.Infow("removed broken stream", "path", sdHash, "err", err)
 			continue
 		}
 		if restore {
-			c.CacheVideo(cvPath, cvSize)
+			c.CacheVideo(sdHash, cvSize)
 		}
 		swept++
 	}
