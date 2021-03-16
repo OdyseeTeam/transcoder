@@ -13,6 +13,7 @@ import (
 	"github.com/karrick/godirwalk"
 	cmap "github.com/orcaman/concurrent-map"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const (
@@ -28,6 +29,7 @@ type Client struct {
 	*Configuration
 	cache     *ccache.Cache
 	downloads cmap.ConcurrentMap
+	logger    *zap.SugaredLogger
 }
 
 type Configuration struct {
@@ -84,16 +86,17 @@ func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
 		downloads:     cmap.New(),
+		logger:        logger,
 	}
 	c.cache = ccache.New(ccache.
 		Configure().
 		MaxSize(c.cacheSize).
-		ItemsToPrune(10).
+		ItemsToPrune(500).
 		OnDelete(c.deleteCachedVideo),
 	)
 
-	logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
-
+	c.logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
+	c.startSweeper()
 	return c
 }
 
@@ -106,26 +109,26 @@ func (c Client) deleteCachedVideo(i *ccache.Item) {
 	path := path.Join(c.videoPath, cv.DirName())
 	err := os.RemoveAll(path)
 	if err != nil {
-		logger.Errorw(
+		c.logger.Errorw(
 			"unable to delete cached video",
 			"path", path, "err", err,
 		)
 	} else {
 		TranscodedCacheSizeBytes.Sub(float64(cv.Size()))
 		TranscodedCacheItemsCount.Dec()
-		logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
+		c.logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
 	}
 }
 
 // Get returns either a cached video or downloadable instance for further processing.
 func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
-	logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(sdHash))
+	c.logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(sdHash))
 	cv := c.GetCachedVideo(sdHash)
 	if cv != nil {
 		TranscodedResult.WithLabelValues(resultLocalCache).Inc()
 		return cv, nil
 	}
-	logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(sdHash))
+	c.logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(sdHash))
 
 	stream := newHLSStream(lbryURL, sdHash, &c)
 	return nil, stream
@@ -170,25 +173,29 @@ func (c Client) CacheVideo(path string, size int64) {
 	cv := &CachedVideo{size: size, dirName: path}
 	TranscodedCacheSizeBytes.Add(float64(cv.Size()))
 	TranscodedCacheItemsCount.Inc()
-	logger.Infow("cached item", "name", cv.DirName(), "size", cv.Size())
+	c.logger.Infow("cached item", "name", cv.DirName(), "size", cv.Size())
 	c.cache.Set(hlsCacheKey(path), cv, 24*30*12*time.Hour)
 }
 
-func (c Client) RestoreCache() (int64, error) {
-	var streamsRestored int64
+// SweepCache goes through cache directory and removes broken streams, optionally restoring healthy ones in the cache.
+func (c Client) SweepCache(restore bool) (int64, error) {
+	var swept int64
 	cvs, err := godirwalk.ReadDirnames(c.videoPath, nil)
 
 	if err != nil {
-		return streamsRestored, errors.Wrap(err, "cannot restore cache")
+		return 0, errors.Wrap(err, "cannot sweep cache")
 	}
 
 	// Verify that all stream files are present
-	for _, cvPath := range cvs {
+	for _, sdHash := range cvs {
 		// Skip non-sdHashes
-		if len(cvPath) != 96 {
+		if len(sdHash) != 96 {
 			continue
 		}
-		cvFullPath := path.Join(c.videoPath, cvPath)
+		if c.isDownloading(sdHash) {
+			continue
+		}
+		cvFullPath := path.Join(c.videoPath, sdHash)
 
 		cvSize, err := HLSPlaylistDive(
 			cvFullPath,
@@ -214,12 +221,29 @@ func (c Client) RestoreCache() (int64, error) {
 
 		if err != nil {
 			os.RemoveAll(cvFullPath)
-			logger.Infow("removing broken playlist", "path", cvPath, "err", err)
+			c.logger.Infow("removed broken stream", "path", sdHash, "err", err)
 			continue
 		}
-		c.CacheVideo(cvPath, cvSize)
-		streamsRestored++
+		if restore {
+			c.CacheVideo(sdHash, cvSize)
+		}
+		swept++
 	}
 
-	return streamsRestored, nil
+	c.logger.Infow("cache swept", "count", swept)
+	return swept, nil
+}
+
+func (c Client) startSweeper() {
+	sweepTicker := time.NewTicker(5 * time.Minute)
+	go func() {
+		for range sweepTicker.C {
+			n, err := c.SweepCache(false)
+			if err != nil {
+				c.logger.Warnw("periodic sweep failed", err)
+			} else {
+				c.logger.Infow("periodic sweep performed", "count", n)
+			}
+		}
+	}()
 }

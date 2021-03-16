@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lbryio/transcoder/video"
+	"go.uber.org/zap"
 )
 
 // ErrAlreadyDownloading when returned means that video retrieval is already underway
@@ -41,6 +42,7 @@ type HLSStream struct {
 	client       *Client
 	progress     chan Progress
 	filesFetched int
+	logger       *zap.SugaredLogger
 }
 
 func (v *CachedVideo) Size() int64 {
@@ -56,7 +58,13 @@ func (v CachedVideo) delete() error {
 }
 
 func newHLSStream(url, sdHash string, client *Client) *HLSStream {
-	s := &HLSStream{URL: url, progress: make(chan Progress, 1), client: client, SDHash: sdHash}
+	s := &HLSStream{
+		URL:      url,
+		progress: make(chan Progress, 1),
+		client:   client,
+		SDHash:   sdHash,
+		logger:   logger.With("url", url, "sd_hash", sdHash),
+	}
 	return s
 }
 
@@ -70,7 +78,7 @@ func (s HLSStream) fetch(url string) (*http.Response, error) {
 
 func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
 	rawurl := strings.Join(rootPath, "/")
-	ll := logger.With("remote_url", rawurl, "url", s.rootURL())
+	ll := s.logger.With("remote_url", rawurl)
 
 	ll.Debugw("fetching stream part")
 	_, err := url.Parse(rawurl)
@@ -80,12 +88,13 @@ func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
 
 	res, err := s.fetch(rawurl)
 	if err != nil {
-		ll.Warnw("stream part fetch failed", "err", err)
+		ll.Warnw("stream fragment fetch failed", "err", err)
 		return nil, err
 	}
 
 	data, err := ioutil.ReadAll(res.Body)
 	if err != nil {
+		ll.Warnw("reading stream response body failed", "err", err)
 		return nil, err
 	}
 
@@ -94,11 +103,10 @@ func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
 }
 
 func (s HLSStream) saveFile(data []byte, name string) error {
-	ll := logger.With("path", path.Join(s.LocalPath(), name), "url", s.rootURL())
-	ll.Debugw("saving stream part")
+	s.logger.Debugw("writing stream fragment")
 	err := ioutil.WriteFile(path.Join(s.LocalPath(), name), data, os.ModePerm)
 	if err != nil {
-		ll.Warnw("saving stream part failed", "err", err)
+		s.logger.Warnw("writing stream fragment failed", "err", err)
 		return err
 	}
 
@@ -106,10 +114,9 @@ func (s HLSStream) saveFile(data []byte, name string) error {
 }
 
 func (s HLSStream) Download() error {
-	ll := logger.With("url", s.rootURL(), "sd_hash", s.SDHash)
 	if s.client.isDownloading(s.SDHash) {
 		TranscodedResult.WithLabelValues(resultDownloading).Inc()
-		ll.Debugw("already downloading")
+		s.logger.Debugw("already downloading")
 		return ErrAlreadyDownloading
 	}
 	res, err := s.fetch(s.rootURL())
@@ -126,7 +133,7 @@ func (s HLSStream) Download() error {
 		return errors.New("stream not found")
 	case http.StatusAccepted:
 		TranscodedResult.WithLabelValues(resultUnderway).Inc()
-		ll.Debugw("stream encoding underway")
+		s.logger.Debugw("stream encoding underway")
 		return errors.New("encoding underway")
 	case http.StatusSeeOther:
 		TranscodedResult.WithLabelValues(resultFound).Inc()
@@ -134,7 +141,7 @@ func (s HLSStream) Download() error {
 		if err != nil {
 			return err
 		}
-		ll.Debugw("starting stream download", "location", loc)
+		s.logger.Debugw("starting stream download", "location", loc)
 		go func() {
 			err := s.startDownload(loc.String())
 			if err != nil {
@@ -143,7 +150,7 @@ func (s HLSStream) Download() error {
 		}()
 		return nil
 	default:
-		ll.Infow("unknown http status", "status_code", res.StatusCode)
+		s.logger.Warnw("unknown http status", "status_code", res.StatusCode)
 		return fmt.Errorf("unknown http status: %v", res.StatusCode)
 	}
 }
@@ -176,16 +183,11 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 	s.progress <- Progress{Stage: 999999, BytesLoaded: streamSize}
 
 	// Download complete
-	logger.Debugw("got all files, saving to cache",
-		"url", s.URL,
+	s.logger.Debugw("got all files, saving to cache",
 		"size", streamSize,
-		"path", s.LocalPath(),
-		"key", hlsCacheKey(s.SDHash),
 	)
 	s.client.CacheVideo(s.DirName(), streamSize)
-
 	s.client.releaseDownload(s.rootURL())
-
 	s.progress <- Progress{Done: true}
 	close(s.progress)
 	return nil

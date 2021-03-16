@@ -19,6 +19,8 @@ func TestValidateIncomingVideo(t *testing.T) {
 	urlsDisabled := []string{
 		"lbry://@TRUTH#2/what-do-you-know-what-do-you-believe#2",
 		"lbry://@samtime#1/airpods-max-parody-ehh-pods-max#7",
+	}
+	urlsNoChannel := []string{
 		"lbry://what#1",
 	}
 	for _, u := range urlsEnabled {
@@ -28,5 +30,9 @@ func TestValidateIncomingVideo(t *testing.T) {
 	for _, u := range urlsDisabled {
 		_, err := ValidateIncomingVideo(u)
 		assert.Equal(t, ErrChannelNotEnabled, err)
+	}
+	for _, u := range urlsNoChannel {
+		_, err := ValidateIncomingVideo(u)
+		assert.Equal(t, ErrNoSigningChannel, err)
 	}
 }
