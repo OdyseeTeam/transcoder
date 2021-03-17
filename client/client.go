@@ -33,15 +33,17 @@ type Client struct {
 }
 
 type Configuration struct {
-	cacheSize  int64
-	server     string
-	videoPath  string
-	httpClient HTTPRequester
+	cacheSize    int64
+	itemsToPrune uint32
+	server       string
+	videoPath    string
+	httpClient   HTTPRequester
 }
 
 func Configure() *Configuration {
 	return &Configuration{
-		cacheSize: int64(math.Pow(1024, 3)),
+		cacheSize:    int64(math.Pow(1024, 3)),
+		itemsToPrune: 100,
 		httpClient: &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
@@ -62,6 +64,12 @@ func Configure() *Configuration {
 // CacheSize defines local disk cache size for downloaded transcoded videos.
 func (c *Configuration) CacheSize(size int64) *Configuration {
 	c.cacheSize = size
+	return c
+}
+
+// ItemsToPrune defines how many items to prune during cache cleanup
+func (c *Configuration) ItemsToPrune(i uint32) *Configuration {
+	c.itemsToPrune = i
 	return c
 }
 
@@ -91,7 +99,7 @@ func New(cfg *Configuration) Client {
 	c.cache = ccache.New(ccache.
 		Configure().
 		MaxSize(c.cacheSize).
-		ItemsToPrune(20).
+		ItemsToPrune(c.itemsToPrune).
 		OnDelete(c.deleteCachedVideo),
 	)
 
