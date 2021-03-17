@@ -168,6 +168,7 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 	if !s.client.canStartDownload(s.SDHash) {
 		return errors.New("download already in progress")
 	}
+	defer s.client.releaseDownload(s.rootURL())
 
 	rootPath := strings.Replace(playlistURL, "/"+MasterPlaylistName, "", 1)
 
@@ -177,7 +178,11 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 
 	streamSize, err := HLSPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
 	if err != nil {
-		return err
+		rmErr := os.RemoveAll(s.LocalPath())
+		if rmErr != nil {
+			s.logger.Warnw("download cleanup failed", "err", rmErr)
+		}
+		return fmt.Errorf("download start failed: %v", err)
 	}
 
 	s.progress <- Progress{Stage: 999999, BytesLoaded: streamSize}
@@ -187,7 +192,6 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 		"size", streamSize,
 	)
 	s.client.CacheVideo(s.DirName(), streamSize)
-	s.client.releaseDownload(s.rootURL())
 	s.progress <- Progress{Done: true}
 	close(s.progress)
 	return nil

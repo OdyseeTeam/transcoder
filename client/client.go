@@ -238,11 +238,9 @@ func (c Client) startSweeper() {
 	sweepTicker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for range sweepTicker.C {
-			n, err := c.SweepCache(false)
+			_, err := c.SweepCache(false)
 			if err != nil {
 				c.logger.Warnw("periodic sweep failed", err)
-			} else {
-				c.logger.Infow("periodic sweep performed", "count", n)
 			}
 		}
 	}()
