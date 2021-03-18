@@ -2,7 +2,6 @@ package dispatcher
 
 import (
 	"math/rand"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/goleak"
 )
 
 type DispatcherSuite struct {
@@ -44,23 +44,27 @@ func (s *DispatcherSuite) SetupTest() {
 }
 
 func (s *DispatcherSuite) TestDispatcher() {
-
+	defer goleak.VerifyNone(s.T())
 	wl := testWorkload{seenTasks: []string{}}
 	d := Start(20, &wl)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
-
-	grc := runtime.NumGoroutine()
+	dones := []chan bool{}
 
 	for range [500]bool{} {
-		d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		done := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		dones = append(dones, done)
 	}
 
 	time.Sleep(1 * time.Second)
 
-	s.Equal(runtime.NumGoroutine(), grc)
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
+	for _, done := range dones {
+		s.True(Done(done))
+	}
+	d.Stop()
+	time.Sleep(1 * time.Second)
 }
 
 func randomString(n int) string {

@@ -3,6 +3,7 @@ package client
 import (
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
@@ -194,6 +196,52 @@ func (s *ClientSuite) TestGet() {
 			s.FileExists(path.Join(vPath, cv.DirName(), seg.URI))
 		}
 	}
+}
+
+func (s *ClientSuite) TestPoolDownload() {
+	vPath := path.Join(s.assetsPath, "TestPoolDownload")
+	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
+	s.Require().NotNil(c.httpClient)
+
+	cv, dl := c.Get("hls", streamURL, streamSDHash)
+	s.Require().Nil(cv)
+
+	time.Sleep(100 * time.Millisecond)
+	err := dl.Download()
+	s.Require().EqualError(err, "encoding underway")
+
+	s.T().Log("waiting for transcoder to ready up the stream")
+
+	for {
+		req, _ := http.NewRequest(
+			http.MethodGet,
+			"http://127.0.0.1:50808/api/v1/video/hls/lbry:%2F%2F@specialoperationstest%233%2Ffear-of-death-inspirational%23a", nil)
+		r, err := c.httpClient.Do(req)
+		s.Require().NoError(err)
+		if r.StatusCode == http.StatusSeeOther {
+			break
+		}
+		time.Sleep(1000 * time.Millisecond)
+	}
+
+	s.T().Log("transcoder is ready, starting HLSStream download")
+	cv, dl = c.Get("hls", streamURL, streamSDHash)
+	s.Require().Nil(cv)
+	done := PoolDownload(dl)
+	time.Sleep(500 * time.Millisecond)
+
+	// cv, dl2 := c.Get("hls", streamURL, streamSDHash)
+	// s.Nil(cv)
+	// err = dl2.Download()
+	// s.EqualError(err, "video is already downloading")
+	for {
+		if dispatcher.Done(done) {
+			break
+		}
+	}
+
+	cv, dl = c.Get("hls", streamURL, streamSDHash)
+	s.Nil(dl)
 }
 
 func (s *ClientSuite) TestGetCachedVideo() {

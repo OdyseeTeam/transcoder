@@ -11,10 +11,20 @@ var ErrInvalidPayload = errors.New("invalid payload")
 type Task struct {
 	Payload    interface{}
 	Dispatcher *Dispatcher
+	done       chan bool
 }
 
 type Workload interface {
 	Do(Task) error
+}
+
+func Done(d chan bool) bool {
+	select {
+	case <-d:
+		return true
+	default:
+		return false
+	}
 }
 
 func NewWorker(id int, workerPool chan chan Task, wl Workload) Worker {
@@ -47,11 +57,15 @@ func (w *Worker) Start() {
 
 			select {
 			case t := <-w.tasks:
-				logger.Debugw("got task", "wid", w.ID, "task", fmt.Sprintf("%+v", t))
+				ll := logger.With("wid", w.ID, "task", fmt.Sprintf("%+v", t))
+				ll.Debugw("got task")
 				err := w.workload.Do(t)
 				if err != nil {
-					logger.Errorw("workload errored", "err", err, "wid", w.ID, "task", fmt.Sprintf("%+v", t))
+					ll.Errorw("workload errored", "err", err)
+				} else {
+					ll.Debugw("task done")
 				}
+				t.done <- true
 			case <-w.stopChan:
 				w.wait.Done()
 				logger.Infow("stopped worker", "id", w.ID)
@@ -109,8 +123,10 @@ func Start(workers int, wl Workload) Dispatcher {
 	return d
 }
 
-func (d *Dispatcher) Dispatch(payload interface{}) {
-	d.tasks <- Task{Payload: payload, Dispatcher: d}
+func (d *Dispatcher) Dispatch(payload interface{}) chan bool {
+	done := make(chan bool, 1)
+	d.tasks <- Task{Payload: payload, Dispatcher: d, done: done}
+	return done
 }
 
 func (d Dispatcher) Stop() {

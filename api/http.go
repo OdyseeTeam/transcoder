@@ -85,19 +85,19 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 
 	if err == video.ErrChannelNotEnabled || err == video.ErrNoSigningChannel {
 		ctx.SetStatusCode(http.StatusForbidden)
-		ll.Infow("transcoding disabled")
+		ll.Debug("transcoding disabled")
 		return
 	} else if err == video.ErrTranscodingUnderway {
 		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Infow("trancoding pending")
+		ll.Debug("trancoding pending")
 		return
 	} else if err == claim.ErrStreamNotFound {
 		ctx.SetStatusCode(http.StatusNotFound)
-		ll.Infow("stream not found")
+		ll.Debug("stream not found")
 		return
 	} else if err != nil {
 		ctx.SetStatusCode(http.StatusInternalServerError)
-		ll.Infow("internal error", "error", err)
+		ll.Errorw("internal error", "error", err)
 		fmt.Fprint(ctx, err.Error())
 		return
 	}
@@ -110,7 +110,7 @@ func (h *APIServer) handleVideo(ctx *fasthttp.RequestCtx) {
 	} else {
 		metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
 	}
-	ll.Infow("redirecting to video", "location", location)
+	ll.Infow("stream found", "location", location)
 	ctx.Redirect(location, http.StatusSeeOther)
 }
 

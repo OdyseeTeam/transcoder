@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/goleak"
 )
 
 func TestWaitUntilTrue(t *testing.T) {
+	defer goleak.VerifyNone(t)
 	var i, x int
 
 	ctx, cancel1 := context.WithTimeout(context.Background(), 100*time.Millisecond)

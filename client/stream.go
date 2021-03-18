@@ -26,6 +26,7 @@ type CachedVideo struct {
 type Downloadable interface {
 	Download() error
 	Progress() <-chan Progress
+	Done() bool
 }
 
 type Progress struct {
@@ -41,6 +42,7 @@ type HLSStream struct {
 	SDHash       string
 	client       *Client
 	progress     chan Progress
+	done         bool
 	filesFetched int
 	logger       *zap.SugaredLogger
 }
@@ -66,6 +68,10 @@ func newHLSStream(url, sdHash string, client *Client) *HLSStream {
 		logger:   logger.With("url", url, "sd_hash", sdHash),
 	}
 	return s
+}
+
+func (s HLSStream) Done() bool {
+	return s.done
 }
 
 func (s HLSStream) fetch(url string) (*http.Response, error) {
@@ -193,6 +199,7 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 	)
 	s.client.CacheVideo(s.DirName(), streamSize)
 	s.progress <- Progress{Done: true}
+	s.done = true
 	close(s.progress)
 	return nil
 }
