@@ -35,7 +35,7 @@ func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(ClientSuite))
 }
 
-func (s *ClientSuite) SetupSuite() {
+func (s *ClientSuite) SetupTest() {
 	s.assetsPath = path.Join(os.TempDir(), "transcoder_test")
 	os.RemoveAll(s.assetsPath)
 	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "sqlite"), os.ModePerm))
@@ -71,7 +71,7 @@ func (s *ClientSuite) SetupSuite() {
 		})
 }
 
-func (s *ClientSuite) TearDownSuite() {
+func (s *ClientSuite) TearDownTest() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
