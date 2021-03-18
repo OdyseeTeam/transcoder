@@ -27,6 +27,9 @@ var (
 	DownloadedSizeMB = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "downloaded_size_mb",
 	})
+	S3UploadedSizeMB = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "s3_uploaded_size_mb",
+	})
 
 	EncodedDurationSeconds = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "encoded_duration_seconds",

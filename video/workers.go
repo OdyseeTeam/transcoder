@@ -134,7 +134,7 @@ func (u S3Uploader) Do(t dispatcher.Task) error {
 	v := t.Payload.(*Video)
 	u.processing.Set(v.SDHash, v)
 
-	logger.Debugw("uploading stream", "sd_hash", v.SDHash)
+	logger.Infow("uploading stream to S3", "sd_hash", v.SDHash, "size", v.GetSize())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -167,7 +167,8 @@ func (u S3Uploader) Do(t dispatcher.Task) error {
 		u.processing.Remove(v.SDHash)
 		return err
 	}
-	logger.Debugw("uploaded stream", "sd_hash", v.SDHash, "remote_path", rs.URL())
+	metrics.S3UploadedSizeMB.Add(float64(v.GetSize()))
+	logger.Infow("uploaded stream to S3", "sd_hash", v.SDHash, "remote_path", rs.URL(), "size", v.GetSize())
 	return nil
 }
 

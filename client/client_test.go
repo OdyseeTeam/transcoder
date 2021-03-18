@@ -72,6 +72,7 @@ func (s *ClientSuite) SetupTest() {
 }
 
 func (s *ClientSuite) TearDownTest() {
+	go s.apiServer.Shutdown()
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
@@ -228,12 +229,13 @@ func (s *ClientSuite) TestPoolDownload() {
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Require().Nil(cv)
 	done := PoolDownload(dl)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
 
 	// cv, dl2 := c.Get("hls", streamURL, streamSDHash)
 	// s.Nil(cv)
 	// err = dl2.Download()
 	// s.EqualError(err, "video is already downloading")
+
 	for {
 		if dispatcher.Done(done) {
 			break
