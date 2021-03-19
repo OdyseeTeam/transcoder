@@ -52,11 +52,13 @@ func (s *sweeper) Inc(url, sdHash string) {
 
 func (s *sweeper) Top(n, lb int) []*TallyItem {
 	tally := []*TallyItem{}
+	s.mu.Lock()
 	for _, v := range s.counters {
 		if v.Count >= uint64(lb) && !s.swept[v.SDHash] {
 			tally = append(tally, v)
 		}
 	}
+	s.mu.Unlock()
 
 	// Descending sort
 	sort.Slice(tally, func(i, j int) bool { return tally[i].Count > tally[j].Count })
