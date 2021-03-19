@@ -82,6 +82,8 @@ func (s *DispatcherSuite) TestDispatcherLeaks() {
 	time.Sleep(5 * time.Second)
 
 	s.Equal(grc, runtime.NumGoroutine())
+
+	d.Stop()
 }
 
 func randomString(n int) string {

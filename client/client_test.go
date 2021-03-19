@@ -168,7 +168,7 @@ func (s *ClientSuite) TestGet() {
 	for p := range dl.Progress() {
 		s.T().Logf("got download progress: %+v", p)
 		s.Require().NoError(p.Error)
-		if p.Done {
+		if p.Stage == DownloadDone {
 			break
 		}
 	}
@@ -181,6 +181,8 @@ func (s *ClientSuite) TestGet() {
 	rawpl, _, err := m3u8.DecodeFrom(f, true)
 	s.NoError(err)
 	f.Close()
+
+	pool.Stop()
 
 	masterpl := rawpl.(*m3u8.MasterPlaylist)
 	for _, plv := range masterpl.Variants {

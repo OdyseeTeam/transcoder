@@ -17,7 +17,7 @@ func (d downloader) Do(t dispatcher.Task) error {
 		return nil
 	}
 	for p := range dl.Progress() {
-		if p.Done {
+		if p.Stage == DownloadDone {
 			break
 		}
 		if p.Error != nil {

@@ -14,6 +14,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	Downloading = iota
+	DownloadDone
+	Failed
+)
+
 // ErrAlreadyDownloading when returned means that video retrieval is already underway
 // and nothing needs to be done at this time.
 var ErrAlreadyDownloading = errors.New("video is already downloading")
@@ -31,9 +37,8 @@ type Downloadable interface {
 
 type Progress struct {
 	Error       error
-	Stage       int
-	Done        bool
 	BytesLoaded int64
+	Stage       int
 }
 
 type HLSStream struct {
@@ -148,12 +153,7 @@ func (s HLSStream) Download() error {
 			return err
 		}
 		s.logger.Debugw("starting stream download", "location", loc)
-		go func() {
-			err := s.startDownload(loc.String())
-			if err != nil {
-				s.progress <- Progress{Error: err}
-			}
-		}()
+		go s.startDownload(loc.String())
 		return nil
 	default:
 		s.logger.Warnw("unknown http status", "status_code", res.StatusCode)
@@ -167,19 +167,23 @@ func (s HLSStream) Progress() <-chan Progress {
 
 func (s *HLSStream) makeProgress(bl int64) {
 	s.filesFetched++
-	s.progress <- Progress{Stage: s.filesFetched, BytesLoaded: bl}
+	s.progress <- Progress{Stage: Downloading, BytesLoaded: bl}
 }
 
-func (s *HLSStream) startDownload(playlistURL string) error {
+func (s *HLSStream) startDownload(playlistURL string) {
+	defer close(s.progress)
+
 	if !s.client.canStartDownload(s.SDHash) {
-		return errors.New("download already in progress")
+		s.progress <- Progress{Stage: Failed, Error: errors.New("download already in progress")}
+		return
 	}
 	defer s.client.releaseDownload(s.rootURL())
 
 	rootPath := strings.Replace(playlistURL, "/"+MasterPlaylistName, "", 1)
 
 	if err := os.MkdirAll(s.LocalPath(), os.ModePerm); err != nil {
-		return err
+		s.progress <- Progress{Stage: Failed, Error: err}
+		return
 	}
 
 	streamSize, err := HLSPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
@@ -188,20 +192,17 @@ func (s *HLSStream) startDownload(playlistURL string) error {
 		if rmErr != nil {
 			s.logger.Warnw("download cleanup failed", "err", rmErr)
 		}
-		return fmt.Errorf("download start failed: %v", err)
+		s.progress <- Progress{Stage: Failed, Error: fmt.Errorf("download start failed: %v", err)}
+		return
 	}
-
-	s.progress <- Progress{Stage: 999999, BytesLoaded: streamSize}
 
 	// Download complete
 	s.logger.Debugw("got all files, saving to cache",
 		"size", streamSize,
 	)
 	s.client.CacheVideo(s.DirName(), streamSize)
-	s.progress <- Progress{Done: true}
+	s.progress <- Progress{Stage: DownloadDone, BytesLoaded: streamSize}
 	s.done = true
-	close(s.progress)
-	return nil
 }
 
 func (s HLSStream) rootURL() string {
