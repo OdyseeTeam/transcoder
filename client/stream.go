@@ -65,7 +65,7 @@ func newHLSStream(url, sdHash string, client *Client) *HLSStream {
 		progress: make(chan Progress, 1),
 		client:   client,
 		SDHash:   sdHash,
-		logger:   logger.With("url", url, "sd_hash", sdHash),
+		logger:   client.logger.With("url", url, "sd_hash", sdHash),
 	}
 	return s
 }

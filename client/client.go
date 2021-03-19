@@ -11,6 +11,7 @@ import (
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"
+	"github.com/lbryio/transcoder/pkg/logging"
 	cmap "github.com/orcaman/concurrent-map"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,6 +20,8 @@ import (
 const (
 	hlsURLTemplate = "%v/api/v1/video/hls/%v"
 	dlStarted      = iota
+	Dev            = iota
+	Prod
 )
 
 type HTTPRequester interface {
@@ -38,6 +41,7 @@ type Configuration struct {
 	server       string
 	videoPath    string
 	httpClient   HTTPRequester
+	logLevel     int
 }
 
 func Configure() *Configuration {
@@ -58,6 +62,7 @@ func Configure() *Configuration {
 				ResponseHeaderTimeout: 15 * time.Second,
 			},
 		},
+		logLevel: Prod,
 	}
 }
 
@@ -90,11 +95,21 @@ func (c *Configuration) HTTPClient(httpClient HTTPRequester) *Configuration {
 	return c
 }
 
+// LogLevel sets verbosity of logging. `Dev` outputs a lot of debugging info, `Prod` is more restrained.
+func (c *Configuration) LogLevel(l int) *Configuration {
+	c.logLevel = l
+	return c
+}
+
 func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
 		downloads:     cmap.New(),
-		logger:        logger,
+	}
+	if c.logLevel == Dev {
+		c.logger = logging.Create("client", logging.Dev)
+	} else {
+		c.logger = logging.Create("client", logging.Prod)
 	}
 	c.cache = ccache.New(ccache.
 		Configure().
