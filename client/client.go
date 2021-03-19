@@ -263,7 +263,7 @@ func (c Client) startSweeper() {
 		for range sweepTicker.C {
 			_, err := c.SweepCache(false)
 			if err != nil {
-				c.logger.Warnw("periodic sweep failed", err)
+				c.logger.Warnw("periodic sweep failed", "err", err)
 			}
 		}
 	}()

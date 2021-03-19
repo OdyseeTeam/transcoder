@@ -52,18 +52,18 @@ func (s *DispatcherSuite) TestDispatcher() {
 	d := Start(20, &wl)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
-	dones := []chan bool{}
+	results := []*Result{}
 
 	for range [500]bool{} {
-		done := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
-		dones = append(dones, done)
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		results = append(results, r)
 	}
 
 	d.DoAndStop()
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
-	for _, done := range dones {
-		s.True(Done(done))
+	for _, r := range results {
+		s.True(r.Done())
 	}
 }
 
@@ -74,7 +74,6 @@ func (s *DispatcherSuite) TestDispatcherLeaks() {
 	grc := runtime.NumGoroutine()
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
-
 	for range [10000]bool{} {
 		d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
 	}

@@ -6,12 +6,24 @@ import (
 	"sync"
 )
 
+const (
+	TaskFailed = iota
+	TaskDone
+	TaskActive
+	TaskPending
+)
+
 var ErrInvalidPayload = errors.New("invalid payload")
 
 type Task struct {
 	Payload    interface{}
 	Dispatcher *Dispatcher
-	done       chan bool
+	result     *Result
+}
+
+type Result struct {
+	Status int
+	Error  error
 }
 
 type Workload interface {
@@ -23,15 +35,6 @@ const (
 	sigDoAndStop
 )
 
-func Done(d chan bool) bool {
-	select {
-	case <-d:
-		return true
-	default:
-		return false
-	}
-}
-
 type Worker struct {
 	id      string
 	tasks   chan Task
@@ -40,6 +43,14 @@ type Worker struct {
 	wl      Workload
 	gwait   *sync.WaitGroup
 	wait    *sync.WaitGroup
+}
+
+func (r Result) Failed() bool {
+	return r.Status == TaskFailed
+}
+
+func (r Result) Done() bool {
+	return r.Status == TaskDone
 }
 
 func NewWorker(id int, workerPool chan chan Task, wl Workload, gwait *sync.WaitGroup) Worker {
@@ -64,15 +75,18 @@ func (w *Worker) Start() {
 
 			select {
 			case t := <-w.tasks:
+				t.result.Status = TaskActive
 				ll := logger.With("wid", w.id, "task", fmt.Sprintf("%+v", t))
 				ll.Debugw("worker got a task")
 				err := w.wl.Do(t)
 				if err != nil {
-					ll.Errorw("workload errored", "err", err)
+					t.result.Status = TaskFailed
+					t.result.Error = err
+					ll.Errorw("workload failed", "err", err)
 				} else {
 					ll.Debugw("worker done a task")
 				}
-				t.done <- true
+				t.result.Status = TaskDone
 			case sig := <-w.sigChan:
 				if sig == sigStop {
 					close(w.tasks)
@@ -147,10 +161,10 @@ func Start(workers int, wl Workload) Dispatcher {
 	return d
 }
 
-func (d *Dispatcher) Dispatch(payload interface{}) chan bool {
-	done := make(chan bool, 1)
-	d.tasks <- Task{Payload: payload, Dispatcher: d, done: done}
-	return done
+func (d *Dispatcher) Dispatch(payload interface{}) *Result {
+	r := &Result{Status: TaskPending}
+	d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}
+	return r
 }
 
 func (d Dispatcher) Stop() {

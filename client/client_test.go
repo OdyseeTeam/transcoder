@@ -15,7 +15,6 @@ import (
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
-	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
@@ -230,7 +229,7 @@ func (s *ClientSuite) TestPoolDownload() {
 	s.T().Log("transcoder is ready, starting HLSStream download")
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Require().Nil(cv)
-	done := PoolDownload(dl)
+	result := PoolDownload(dl)
 	time.Sleep(30 * time.Millisecond)
 
 	// cv, dl2 := c.Get("hls", streamURL, streamSDHash)
@@ -239,8 +238,10 @@ func (s *ClientSuite) TestPoolDownload() {
 	// s.EqualError(err, "video is already downloading")
 
 	for {
-		if dispatcher.Done(done) {
+		if result.Done() {
 			break
+		} else if result.Failed() {
+			s.FailNow("download task failed", err)
 		}
 	}
 

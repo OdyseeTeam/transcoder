@@ -29,6 +29,6 @@ func (d downloader) Do(t dispatcher.Task) error {
 
 var pool = dispatcher.Start(10, downloader{})
 
-func PoolDownload(d Downloadable) chan bool {
+func PoolDownload(d Downloadable) *dispatcher.Result {
 	return pool.Dispatch(d)
 }
