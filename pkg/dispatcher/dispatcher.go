@@ -18,6 +18,11 @@ type Workload interface {
 	Do(Task) error
 }
 
+const (
+	sigStop = iota
+	sigDoAndStop
+)
+
 func Done(d chan bool) bool {
 	select {
 	case <-d:
@@ -27,96 +32,115 @@ func Done(d chan bool) bool {
 	}
 }
 
-func NewWorker(id int, workerPool chan chan Task, wl Workload) Worker {
-	return Worker{
-		ID:       id,
-		tasks:    make(chan Task),
-		pool:     workerPool,
-		stopChan: make(chan bool),
-		workload: wl,
-		wait:     sync.WaitGroup{},
-	}
+type Worker struct {
+	id      string
+	tasks   chan Task
+	pool    chan chan Task
+	sigChan chan int
+	wl      Workload
+	gwait   *sync.WaitGroup
+	wait    *sync.WaitGroup
 }
 
-type Worker struct {
-	ID       int
-	tasks    chan Task
-	pool     chan chan Task
-	stopChan chan bool
-	workload Workload
-	wait     sync.WaitGroup
+func NewWorker(id int, workerPool chan chan Task, wl Workload, gwait *sync.WaitGroup) Worker {
+	return Worker{
+		id:      fmt.Sprintf("%T#%v", wl, id),
+		tasks:   make(chan Task),
+		pool:    workerPool,
+		sigChan: make(chan int),
+		wl:      wl,
+		gwait:   gwait,
+		wait:    &sync.WaitGroup{},
+	}
 }
 
 // Start starts reading from tasks channel
 func (w *Worker) Start() {
-	logger.Infow("started worker", "id", w.ID)
+	logger.Infof("spawned dispatch worker %v", w.id)
+	w.gwait.Add(1)
 	go func() {
-		w.wait.Add(1)
 		for {
 			w.pool <- w.tasks
 
 			select {
 			case t := <-w.tasks:
-				ll := logger.With("wid", w.ID, "task", fmt.Sprintf("%+v", t))
-				ll.Debugw("got task")
-				err := w.workload.Do(t)
+				ll := logger.With("wid", w.id, "task", fmt.Sprintf("%+v", t))
+				ll.Debugw("worker got a task")
+				err := w.wl.Do(t)
 				if err != nil {
 					ll.Errorw("workload errored", "err", err)
 				} else {
-					ll.Debugw("task done")
+					ll.Debugw("worker done a task")
 				}
 				t.done <- true
-			case <-w.stopChan:
-				w.wait.Done()
-				logger.Infow("stopped worker", "id", w.ID)
-				return
+			case sig := <-w.sigChan:
+				if sig == sigStop {
+					close(w.tasks)
+					w.gwait.Done()
+					logger.Infof("stopped dispatch worker %v", w.id)
+					return
+				}
 			}
 		}
 	}()
 }
 
-// Stop stops the workload invocation cycle (it will finish the current workload)
+// Stop stops the wl invocation cycle (it will finish the current wl).
 func (w *Worker) Stop() {
-	w.stopChan <- true
-	w.wait.Wait()
+	w.sigChan <- sigStop
 }
 
 type Dispatcher struct {
 	workerPool chan chan Task
 	workers    []*Worker
 	tasks      chan Task
-	stopChan   chan bool
+	sigChan    chan int
+	gwait      *sync.WaitGroup
 }
 
 func Start(workers int, wl Workload) Dispatcher {
 	d := Dispatcher{
-		workerPool: make(chan chan Task, 200),
-		tasks:      make(chan Task, 2000),
-		stopChan:   make(chan bool),
+		workerPool: make(chan chan Task, 10000),
+		tasks:      make(chan Task, 10000),
+		sigChan:    make(chan int, 1),
+		gwait:      &sync.WaitGroup{},
 	}
 
 	for i := 0; i < workers; i++ {
-		w := NewWorker(i, d.workerPool, wl)
+		w := NewWorker(i, d.workerPool, wl, d.gwait)
 		d.workers = append(d.workers, &w)
 		w.Start()
 	}
+
+	var cstop bool
 
 	go func() {
 		for {
 			select {
 			case task := <-d.tasks:
-				logger.Debugw("received incoming task", "task", fmt.Sprintf("%+v", task))
-				go func() {
-					logger.Debugw("dispatching incoming task", "task", fmt.Sprintf("%+v", task))
-					workerQueue := <-d.workerPool
-					workerQueue <- task
-				}()
-			case <-d.stopChan:
-				for _, w := range d.workers {
-					w.Stop()
+				logger.Debugw("dispatching incoming task", "task", fmt.Sprintf("%+v", task))
+				wq := <-d.workerPool
+				wq <- task
+			case sig := <-d.sigChan:
+				if sig == sigDoAndStop {
+					cstop = true
+				} else if sig == sigStop {
+					for _, w := range d.workers {
+						w.Stop()
+					}
+					return
 				}
-				return
+			default:
+				if cstop {
+					logger.Debug("do-and-stop in progress, sending out signals")
+					for _, w := range d.workers {
+						logger.Debugf("sent stop signal to %v", w.id)
+						w.Stop()
+					}
+					return
+				}
 			}
+
 		}
 	}()
 
@@ -130,5 +154,14 @@ func (d *Dispatcher) Dispatch(payload interface{}) chan bool {
 }
 
 func (d Dispatcher) Stop() {
-	d.stopChan <- true
+	d.sigChan <- sigStop
+	d.gwait.Wait()
+	logger.Infof("all %v workers are stopped", len(d.workers))
+}
+
+func (d Dispatcher) DoAndStop() {
+	logger.Infof("waiting for %v workers to be done with their workload queues", len(d.workers))
+	d.sigChan <- sigDoAndStop
+	d.gwait.Wait()
+	logger.Infof("all %v workers are stopped", len(d.workers))
 }

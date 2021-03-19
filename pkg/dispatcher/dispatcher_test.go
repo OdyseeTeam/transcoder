@@ -2,12 +2,14 @@ package dispatcher
 
 import (
 	"math/rand"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/pkg/logging"
+
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 )
@@ -45,6 +47,7 @@ func (s *DispatcherSuite) SetupTest() {
 
 func (s *DispatcherSuite) TestDispatcher() {
 	defer goleak.VerifyNone(s.T())
+
 	wl := testWorkload{seenTasks: []string{}}
 	d := Start(20, &wl)
 
@@ -56,15 +59,29 @@ func (s *DispatcherSuite) TestDispatcher() {
 		dones = append(dones, done)
 	}
 
-	time.Sleep(1 * time.Second)
-
+	d.DoAndStop()
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
 	for _, done := range dones {
 		s.True(Done(done))
 	}
-	d.Stop()
-	time.Sleep(1 * time.Second)
+}
+
+func (s *DispatcherSuite) TestDispatcherLeaks() {
+	wl := testWorkload{seenTasks: []string{}}
+	d := Start(20, &wl)
+
+	grc := runtime.NumGoroutine()
+
+	SetLogger(logging.Create("dispatcher", logging.Prod))
+
+	for range [10000]bool{} {
+		d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+	}
+
+	time.Sleep(5 * time.Second)
+
+	s.Equal(grc, runtime.NumGoroutine())
 }
 
 func randomString(n int) string {

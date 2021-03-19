@@ -3,7 +3,6 @@ package video
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -30,7 +29,6 @@ func TestTailSizeables(t *testing.T) {
 
 	totalSize, furloughedSize, err := tailVideos(vs, 75000, func(v *Video) error { removed = append(removed, v); return nil })
 	require.NoError(t, err)
-	fmt.Println(removed)
 	assert.EqualValues(t, 130000, totalSize)
 	assert.EqualValues(t, 60000, furloughedSize)
 	assert.Equal(t, vsog[3], removed[0])
