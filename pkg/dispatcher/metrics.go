@@ -24,6 +24,9 @@ var (
 	DispatcherTasksQueued = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_queued",
 	})
+	DispatcherTasksDropped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "dispatcher_tasks_dropped",
+	})
 	DispatcherTasksDone = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_done",
 	}, []string{"worker_id"})

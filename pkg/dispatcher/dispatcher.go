@@ -11,6 +11,7 @@ const (
 	TaskDone
 	TaskActive
 	TaskPending
+	TaskDropped
 )
 
 var ErrInvalidPayload = errors.New("invalid payload")
@@ -118,8 +119,8 @@ type Dispatcher struct {
 
 func Start(workers int, wl Workload) Dispatcher {
 	d := Dispatcher{
-		workerPool: make(chan chan Task, 10000),
-		tasks:      make(chan Task, 10000),
+		workerPool: make(chan chan Task, 100000),
+		tasks:      make(chan Task, 100000),
 		sigChan:    make(chan int, 1),
 		gwait:      &sync.WaitGroup{},
 	}
@@ -171,6 +172,19 @@ func (d *Dispatcher) Dispatch(payload interface{}) *Result {
 	d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}
 	DispatcherQueueLength.Inc()
 	DispatcherTasksQueued.Inc()
+	return r
+}
+
+func (d *Dispatcher) TryDispatch(payload interface{}) *Result {
+	r := &Result{Status: TaskPending}
+	select {
+	case d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}:
+		DispatcherQueueLength.Inc()
+		DispatcherTasksQueued.Inc()
+	default:
+		DispatcherTasksDropped.Inc()
+		r.Status = TaskDropped
+	}
 	return r
 }
 

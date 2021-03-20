@@ -34,6 +34,17 @@ func (wl *testWorkload) Do(t Task) error {
 	return nil
 }
 
+type slowWorkload struct {
+	sync.Mutex
+	doCalled  int
+	seenTasks []string
+}
+
+func (wl *slowWorkload) Do(t Task) error {
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
 func TestDispatcherSuite(t *testing.T) {
 	suite.Run(t, new(DispatcherSuite))
 }
@@ -62,6 +73,28 @@ func (s *DispatcherSuite) TestDispatcher() {
 	d.DoAndStop()
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
+	for _, r := range results {
+		s.True(r.Done())
+	}
+}
+
+func (s *DispatcherSuite) TestDispatcherTryDispatch() {
+	defer goleak.VerifyNone(s.T())
+
+	wl := testWorkload{seenTasks: []string{}}
+	d := Start(20, &wl)
+
+	SetLogger(logging.Create("dispatcher", logging.Prod))
+	results := []*Result{}
+
+	for range [500000]bool{} {
+		r := d.TryDispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		results = append(results, r)
+	}
+
+	d.DoAndStop()
+	s.Equal(500000, len(wl.seenTasks))
+	s.Equal(500000, wl.doCalled)
 	for _, r := range results {
 		s.True(r.Done())
 	}
