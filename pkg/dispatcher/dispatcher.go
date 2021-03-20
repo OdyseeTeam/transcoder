@@ -78,12 +78,16 @@ func (w *Worker) Start() {
 				t.result.Status = TaskActive
 				ll := logger.With("wid", w.id, "task", fmt.Sprintf("%+v", t))
 				ll.Debugw("worker got a task")
+				DispatcherTasksActive.Inc()
 				err := w.wl.Do(t)
+				DispatcherTasksActive.Dec()
 				if err != nil {
 					t.result.Status = TaskFailed
 					t.result.Error = err
+					DispatcherTasksFailed.WithLabelValues(w.id).Inc()
 					ll.Errorw("workload failed", "err", err)
 				} else {
+					DispatcherTasksDone.WithLabelValues(w.id).Inc()
 					ll.Debugw("worker done a task")
 				}
 				t.result.Status = TaskDone
@@ -132,6 +136,7 @@ func Start(workers int, wl Workload) Dispatcher {
 		for {
 			select {
 			case task := <-d.tasks:
+				DispatcherQueueLength.Dec()
 				logger.Debugw("dispatching incoming task", "task", fmt.Sprintf("%+v", task))
 				wq := <-d.workerPool
 				wq <- task
@@ -164,6 +169,8 @@ func Start(workers int, wl Workload) Dispatcher {
 func (d *Dispatcher) Dispatch(payload interface{}) *Result {
 	r := &Result{Status: TaskPending}
 	d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}
+	DispatcherQueueLength.Inc()
+	DispatcherTasksQueued.Inc()
 	return r
 }
 
