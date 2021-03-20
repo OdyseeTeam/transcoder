@@ -70,7 +70,7 @@ func (v CachedVideo) delete() error {
 func newHLSStream(url, sdHash string, client *Client) *HLSStream {
 	s := &HLSStream{
 		URL:      url,
-		progress: make(chan Progress, 1000),
+		progress: make(chan Progress, 1),
 		client:   client,
 		SDHash:   sdHash,
 		logger:   client.logger.With("url", url, "sd_hash", sdHash),
@@ -174,7 +174,7 @@ func (s *HLSStream) makeProgress(bl int64) {
 	s.bytesDownloaded += bl
 	p := Progress{Stage: Downloading, BytesLoaded: s.bytesDownloaded}
 	s.logger.Debugf("download progress: %+v", p)
-	s.progress <- p
+	// s.progress <- p
 }
 
 func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
