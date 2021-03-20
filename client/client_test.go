@@ -128,14 +128,14 @@ func (s *ClientSuite) TestSweepCache() {
 
 func (s *ClientSuite) TestGet() {
 	vPath := path.Join(s.assetsPath, "TestGet")
-	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
+	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()).LogLevel(Dev))
 	s.Require().NotNil(c.httpClient)
 
 	cv, dl := c.Get("hls", streamURL, streamSDHash)
 	s.Require().Nil(cv)
 
 	time.Sleep(100 * time.Millisecond)
-	err := dl.Download()
+	err := dl.Init()
 	s.Require().EqualError(err, "encoding underway")
 
 	s.T().Log("waiting for transcoder to ready up the stream")
@@ -144,33 +144,35 @@ func (s *ClientSuite) TestGet() {
 		cv, dl = c.Get("hls", streamURL, streamSDHash)
 		s.Require().Nil(cv)
 		if dl != nil {
-			err := dl.Download()
+			err := dl.Init()
 			if err == nil {
 				break
 			}
 		}
-		time.Sleep(1000 * time.Millisecond)
 	}
 
-	s.T().Log("transcoder is ready, HLSStream.startDownload is working")
-	time.Sleep(1000 * time.Millisecond)
+	go func() {
+		err := dl.Download()
+		s.Require().NoError(err)
+	}()
 
+	<-dl.Progress()
 	cv, dl2 := c.Get("hls", streamURL, streamSDHash)
-	s.Nil(cv)
-	err = dl2.Download()
+	s.Require().Nil(cv)
+	err = dl2.Init()
 	s.EqualError(err, "video is already downloading")
-
-	// p2 := <-dl2.Progress()
-	// s.T().Logf("got dl2 progress: %+v", p2)
-	// s.EqualError(p.Error, "download already in progress")
 
 	for p := range dl.Progress() {
 		s.T().Logf("got download progress: %+v", p)
 		s.Require().NoError(p.Error)
+
 		if p.Stage == DownloadDone {
 			break
 		}
 	}
+
+	err = dl2.Init()
+	s.NoError(err)
 
 	cv, dl = c.Get("hls", streamURL, streamSDHash)
 	s.Nil(dl)
@@ -209,7 +211,7 @@ func (s *ClientSuite) TestPoolDownload() {
 	s.Require().Nil(cv)
 
 	time.Sleep(100 * time.Millisecond)
-	err := dl.Download()
+	err := dl.Init()
 	s.Require().EqualError(err, "encoding underway")
 
 	s.T().Log("waiting for transcoder to ready up the stream")

@@ -145,21 +145,17 @@ func (c Client) deleteCachedVideo(i *ccache.Item) {
 
 // Get returns either a cached video or downloadable instance for further processing.
 func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
-	c.logger.Debugw("getting video from cache", "url", lbryURL, "key", hlsCacheKey(sdHash))
+	ll := c.logger.With("url", lbryURL, "key", hlsCacheKey(sdHash))
 	cv := c.GetCachedVideo(sdHash)
-	if cv != nil {
-		TranscodedResult.WithLabelValues(resultLocalCache).Inc()
-		return cv, nil
+	if cv == nil {
+		ll.Debugw("video cache miss")
+		stream := newHLSStream(lbryURL, sdHash, &c)
+		return nil, stream
 	}
-	c.logger.Debugw("cache miss", "url", lbryURL, "key", hlsCacheKey(sdHash))
-
-	stream := newHLSStream(lbryURL, sdHash, &c)
-	return nil, stream
+	ll.Debugw("video cache hit")
+	TranscodedResult.WithLabelValues(resultLocalCache).Inc()
+	return cv, nil
 }
-
-// func (c Client) downloadExists(sdHash string) bool {
-// 	return c.downloads.Has(sdHash)
-// }
 
 func (c Client) isDownloading(key string) bool {
 	return c.downloads.Has(key)
@@ -196,7 +192,7 @@ func (c Client) CacheVideo(path string, size int64) {
 	cv := &CachedVideo{size: size, dirName: path}
 	TranscodedCacheSizeBytes.Add(float64(cv.Size()))
 	TranscodedCacheItemsCount.Inc()
-	c.logger.Infow("cached item", "name", cv.DirName(), "size", cv.Size())
+	c.logger.Infow("saved video to cache", "name", cv.DirName(), "size", cv.Size())
 	c.cache.Set(hlsCacheKey(path), cv, 24*30*12*time.Hour)
 }
 

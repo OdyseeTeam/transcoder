@@ -30,6 +30,7 @@ type CachedVideo struct {
 }
 
 type Downloadable interface {
+	Init() error
 	Download() error
 	Progress() <-chan Progress
 	Done() bool
@@ -42,14 +43,16 @@ type Progress struct {
 }
 
 type HLSStream struct {
-	URL          string
-	size         int64
-	SDHash       string
-	client       *Client
-	progress     chan Progress
-	done         bool
-	filesFetched int
-	logger       *zap.SugaredLogger
+	URL             string
+	size            int64
+	SDHash          string
+	client          *Client
+	progress        chan Progress
+	done            bool
+	filesFetched    int
+	bytesDownloaded int64
+	playlistURL     string
+	logger          *zap.SugaredLogger
 }
 
 func (v *CachedVideo) Size() int64 {
@@ -67,7 +70,7 @@ func (v CachedVideo) delete() error {
 func newHLSStream(url, sdHash string, client *Client) *HLSStream {
 	s := &HLSStream{
 		URL:      url,
-		progress: make(chan Progress, 1),
+		progress: make(chan Progress, 1000),
 		client:   client,
 		SDHash:   sdHash,
 		logger:   client.logger.With("url", url, "sd_hash", sdHash),
@@ -75,56 +78,15 @@ func newHLSStream(url, sdHash string, client *Client) *HLSStream {
 	return s
 }
 
+func (s HLSStream) Progress() <-chan Progress {
+	return s.progress
+}
+
 func (s HLSStream) Done() bool {
 	return s.done
 }
 
-func (s HLSStream) fetch(url string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	return s.client.httpClient.Do(req)
-}
-
-func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
-	rawurl := strings.Join(rootPath, "/")
-	ll := s.logger.With("remote_url", rawurl)
-
-	ll.Debugw("fetching stream part")
-	_, err := url.Parse(rawurl)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := s.fetch(rawurl)
-	if err != nil {
-		ll.Warnw("stream fragment fetch failed", "err", err)
-		return nil, err
-	}
-
-	data, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		ll.Warnw("reading stream response body failed", "err", err)
-		return nil, err
-	}
-
-	s.makeProgress(int64(len(data)))
-	return data, nil
-}
-
-func (s HLSStream) saveFile(data []byte, name string) error {
-	s.logger.Debugw("writing stream fragment")
-	err := ioutil.WriteFile(path.Join(s.LocalPath(), name), data, os.ModePerm)
-	if err != nil {
-		s.logger.Warnw("writing stream fragment failed", "err", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s HLSStream) Download() error {
+func (s *HLSStream) Init() error {
 	if s.client.isDownloading(s.SDHash) {
 		TranscodedResult.WithLabelValues(resultDownloading).Inc()
 		s.logger.Debugw("already downloading")
@@ -152,8 +114,8 @@ func (s HLSStream) Download() error {
 		if err != nil {
 			return err
 		}
-		s.logger.Debugw("starting stream download", "location", loc)
-		go s.startDownload(loc.String())
+		s.logger.Debugw("got playlist URL", "location", loc)
+		s.playlistURL = loc.String()
 		return nil
 	default:
 		s.logger.Warnw("unknown http status", "status_code", res.StatusCode)
@@ -161,29 +123,21 @@ func (s HLSStream) Download() error {
 	}
 }
 
-func (s HLSStream) Progress() <-chan Progress {
-	return s.progress
-}
-
-func (s *HLSStream) makeProgress(bl int64) {
-	s.filesFetched++
-	s.progress <- Progress{Stage: Downloading, BytesLoaded: bl}
-}
-
-func (s *HLSStream) startDownload(playlistURL string) {
+func (s *HLSStream) Download() error {
+	if s.playlistURL == "" {
+		return errors.New("playlistURL is empty")
+	}
 	defer close(s.progress)
 
 	if !s.client.canStartDownload(s.SDHash) {
-		s.progress <- Progress{Stage: Failed, Error: errors.New("download already in progress")}
-		return
+		return errors.New("download already in progress")
 	}
-	defer s.client.releaseDownload(s.rootURL())
+	defer s.client.releaseDownload(s.SDHash)
 
-	rootPath := strings.Replace(playlistURL, "/"+MasterPlaylistName, "", 1)
+	rootPath := strings.Replace(s.playlistURL, "/"+MasterPlaylistName, "", 1)
 
 	if err := os.MkdirAll(s.LocalPath(), os.ModePerm); err != nil {
-		s.progress <- Progress{Stage: Failed, Error: err}
-		return
+		return err
 	}
 
 	streamSize, err := HLSPlaylistDive(rootPath, s.retrieveFile, s.saveFile)
@@ -192,17 +146,72 @@ func (s *HLSStream) startDownload(playlistURL string) {
 		if rmErr != nil {
 			s.logger.Warnw("download cleanup failed", "err", rmErr)
 		}
-		s.progress <- Progress{Stage: Failed, Error: fmt.Errorf("download start failed: %v", err)}
-		return
+		return fmt.Errorf("download start failed: %v", err)
 	}
 
 	// Download complete
-	s.logger.Debugw("got all files, saving to cache",
+	s.logger.Debugw("got all files, saving video to cache",
 		"size", streamSize,
 	)
+	s.progress <- Progress{Stage: DownloadDone}
 	s.client.CacheVideo(s.DirName(), streamSize)
-	s.progress <- Progress{Stage: DownloadDone, BytesLoaded: streamSize}
 	s.done = true
+
+	return nil
+}
+
+func (s HLSStream) fetch(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Debugw("fetching", "url", url)
+	return s.client.httpClient.Do(req)
+}
+
+func (s *HLSStream) makeProgress(bl int64) {
+	s.filesFetched++
+	s.bytesDownloaded += bl
+	p := Progress{Stage: Downloading, BytesLoaded: s.bytesDownloaded}
+	s.logger.Debugf("download progress: %+v", p)
+	s.progress <- p
+}
+
+func (s HLSStream) retrieveFile(rootPath ...string) ([]byte, error) {
+	rawurl := strings.Join(rootPath, "/")
+	ll := s.logger.With("remote_url", rawurl)
+
+	ll.Debugw("fetching stream part")
+	_, err := url.Parse(rawurl)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.fetch(rawurl)
+	if err != nil {
+		ll.Warnw("stream fragment fetch failed", "err", err)
+		return nil, err
+	}
+
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		ll.Warnw("reading stream response body failed", "err", err)
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (s HLSStream) saveFile(data []byte, name string) error {
+	s.logger.Debugw("writing stream fragment")
+	err := ioutil.WriteFile(path.Join(s.LocalPath(), name), data, os.ModePerm)
+	if err != nil {
+		s.logger.Warnw("writing stream fragment failed", "err", err)
+		return err
+	}
+	s.makeProgress(int64(len(data)))
+
+	return nil
 }
 
 func (s HLSStream) rootURL() string {
