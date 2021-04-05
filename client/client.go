@@ -1,28 +1,36 @@
 package client
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
 	"os"
 	"path"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/video"
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/pkg/logging"
-	cmap "github.com/orcaman/concurrent-map"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 const (
-	hlsURLTemplate = "%v/api/v1/video/hls/%v"
-	dlStarted      = iota
-	Dev            = iota
+	hlsURLTemplate        = "/api/v1/video/hls/%v"
+	fragmentURLTemplate   = "/streams/%v"
+	fragmentCacheDuration = time.Hour * 24 * 30
+	dlStarted             = iota
+	Dev                   = iota
 	Prod
 )
+
+var ErrNotOK = errors.New("http response not OK")
 
 type HTTPRequester interface {
 	Do(req *http.Request) (res *http.Response, err error)
@@ -30,9 +38,10 @@ type HTTPRequester interface {
 
 type Client struct {
 	*Configuration
-	cache     *ccache.Cache
-	downloads cmap.ConcurrentMap
-	logger    *zap.SugaredLogger
+	logger *zap.SugaredLogger
+
+	cache      *ccache.Cache
+	streamURLs *sync.Map
 }
 
 type Configuration struct {
@@ -42,6 +51,11 @@ type Configuration struct {
 	videoPath    string
 	httpClient   HTTPRequester
 	logLevel     int
+}
+
+type Fragment struct {
+	path string
+	size int64
 }
 
 func Configure() *Configuration {
@@ -101,166 +115,202 @@ func (c *Configuration) LogLevel(l int) *Configuration {
 	return c
 }
 
+func (f Fragment) Size() int64 {
+	return f.size
+}
+
 func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
-		downloads:     cmap.New(),
 	}
 	if c.logLevel == Dev {
 		c.logger = logging.Create("client", logging.Dev)
 	} else {
 		c.logger = logging.Create("client", logging.Prod)
 	}
+
 	c.cache = ccache.New(ccache.
 		Configure().
 		MaxSize(c.cacheSize).
 		ItemsToPrune(c.itemsToPrune).
-		OnDelete(c.deleteCachedVideo),
+		OnDelete(c.deleteCachedFragment),
 	)
-
 	c.logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
-	c.startSweeper()
 	return c
 }
 
-func hlsCacheKey(sdHash string) string {
-	return "hls::" + sdHash
+// PlayFragment ...
+func (c Client) PlayFragment(lurl, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
+	path, err := c.getCachedFragment(lurl, sdHash, fragment)
+	if err != nil {
+		return err
+	}
+
+	http.ServeFile(w, r, path)
+	return nil
 }
 
-func (c Client) deleteCachedVideo(i *ccache.Item) {
-	cv := i.Value().(*CachedVideo)
-	path := path.Join(c.videoPath, cv.DirName())
+func cacheFragmentKey(sdHash, name string) string {
+	return fmt.Sprintf("hlsf::%v/%v", sdHash, name)
+}
+
+func (c Client) deleteCachedFragment(i *ccache.Item) {
+	fg := i.Value().(*Fragment)
+	path := path.Join(c.videoPath, fg.path)
 	err := os.RemoveAll(path)
 	if err != nil {
 		c.logger.Errorw(
-			"unable to delete cached video",
+			"unable to delete cached fragment",
 			"path", path, "err", err,
 		)
 	} else {
-		TranscodedCacheSizeBytes.Sub(float64(cv.Size()))
+		TranscodedCacheSizeBytes.Sub(float64(fg.Size()))
 		TranscodedCacheItemsCount.Dec()
-		c.logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
+		// c.logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
 	}
 }
 
-// Get returns either a cached video or downloadable instance for further processing.
-func (c Client) Get(kind, lbryURL, sdHash string) (*CachedVideo, Downloadable) {
-	ll := c.logger.With("url", lbryURL, "key", hlsCacheKey(sdHash))
-	cv := c.GetCachedVideo(sdHash)
-	if cv == nil {
-		ll.Debugw("video cache miss")
-		stream := newHLSStream(lbryURL, sdHash, &c)
-		return nil, stream
+func (c Client) fragmentURL(url, sdHash, name string) (string, error) {
+	var furl string
+	if d, ok := c.streamURLs.Load(sdHash); !ok {
+		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url))
+		if err != nil {
+			return furl, err
+		}
+
+		switch res.StatusCode {
+		case http.StatusForbidden:
+			TranscodedResult.WithLabelValues(resultForbidden).Inc()
+			return furl, video.ErrChannelNotEnabled
+		case http.StatusNotFound:
+			TranscodedResult.WithLabelValues(resultNotFound).Inc()
+			return furl, errors.New("stream not found")
+		case http.StatusAccepted:
+			TranscodedResult.WithLabelValues(resultUnderway).Inc()
+			c.logger.Debugw("stream encoding underway")
+			return furl, errors.New("encoding underway")
+		case http.StatusSeeOther:
+			TranscodedResult.WithLabelValues(resultFound).Inc()
+			loc, err := res.Location()
+			if err != nil {
+				return furl, err
+			}
+			c.logger.Debugw("got playlist URL", "location", loc)
+			furl = strings.TrimSuffix(loc.String(), "/"+MasterPlaylistName)
+			c.streamURLs.Store(sdHash, furl)
+			return furl, nil
+		default:
+			c.logger.Warnw("unknown http status", "status_code", res.StatusCode)
+			return furl, fmt.Errorf("unknown http status: %v", res.StatusCode)
+		}
+	} else {
+		furl, _ := d.(string)
+		return furl, nil
 	}
-	ll.Debugw("video cache hit")
-	TranscodedResult.WithLabelValues(resultLocalCache).Inc()
-	return cv, nil
 }
 
-func (c Client) isDownloading(key string) bool {
-	return c.downloads.Has(key)
-}
-
-func (c Client) canStartDownload(key string) bool {
-	ok := c.downloads.SetIfAbsent(key, dlStarted)
-	return ok
-}
-
-func (c Client) releaseDownload(key string) {
-	c.downloads.Remove(key)
-}
-
-func (c Client) GetCachedVideo(sdHash string) *CachedVideo {
-	item := c.cache.Get(hlsCacheKey(sdHash))
-	if item == nil {
-		return nil
-	}
-	cv, _ := item.Value().(*CachedVideo)
-	if cv == nil {
-		return nil
-	}
-
-	_, err := os.Stat(path.Join(c.videoPath, cv.dirName))
+func (c Client) fetch(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, c.server+url, nil)
 	if err != nil {
-		c.cache.Delete(sdHash)
-		return nil
+		return nil, err
 	}
-	return cv
+	c.logger.Debugw("fetching", "url", url)
+	r, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if r.StatusCode != http.StatusOK {
+		return r, ErrNotOK
+	}
+	return r, nil
 }
 
-func (c Client) CacheVideo(path string, size int64) {
-	cv := &CachedVideo{size: size, dirName: path}
-	TranscodedCacheSizeBytes.Add(float64(cv.Size()))
-	TranscodedCacheItemsCount.Inc()
-	c.logger.Infow("saved video to cache", "name", cv.DirName(), "size", cv.Size())
-	c.cache.Set(hlsCacheKey(path), cv, 24*30*12*time.Hour)
+func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
+	key := cacheFragmentKey(sdHash, name)
+	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
+		path := path.Join(c.videoPath, sdHash, name)
+
+		url, err := c.fragmentURL(lurl, sdHash, name)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.fetch(url)
+		if err != nil {
+			return nil, err
+		}
+		defer r.Body.Close()
+
+		f, err := os.Create(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		size, err := io.Copy(f, r.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		TranscodedCacheSizeBytes.Add(float64(size))
+		TranscodedCacheItemsCount.Inc()
+
+		return &Fragment{
+			path: path,
+			size: size,
+		}, nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+	fg, _ := item.Value().(*Fragment)
+	if fg == nil {
+		return "", err
+	}
+
+	_, err = os.Stat(path.Join(c.videoPath, fg.path))
+	if err != nil {
+		c.cache.Delete(key)
+		return "", fmt.Errorf("missing cached fragment: %v", path.Join(c.videoPath, fg.path))
+	}
+	return fg.path, nil
 }
 
-// SweepCache goes through cache directory and removes broken streams, optionally restoring healthy ones in the cache.
-func (c Client) SweepCache(restore bool) (int64, error) {
+// RestoreCache ...
+func (c Client) RestoreCache(restore bool) (int64, error) {
 	var swept int64
-	cvs, err := godirwalk.ReadDirnames(c.videoPath, nil)
+	sdirs, err := godirwalk.ReadDirnames(c.videoPath, nil)
 
 	if err != nil {
 		return 0, errors.Wrap(err, "cannot sweep cache")
 	}
 
 	// Verify that all stream files are present
-	for _, sdHash := range cvs {
+	for _, sdHash := range sdirs {
 		// Skip non-sdHashes
 		if len(sdHash) != 96 {
 			continue
 		}
-		if c.isDownloading(sdHash) {
-			continue
-		}
-		cvFullPath := path.Join(c.videoPath, sdHash)
 
-		cvSize, err := HLSPlaylistDive(
-			cvFullPath,
-			func(rootPath ...string) ([]byte, error) {
-				f, err := os.Open(path.Join(rootPath...))
-				defer f.Close()
-				if err != nil {
-					return nil, err
-				}
-				if path.Ext(rootPath[len(rootPath)-1]) != ".m3u8" {
-					s, err := os.Stat(path.Join(rootPath...))
-					if err != nil {
-						return nil, err
-					}
-					return make([]byte, s.Size()), nil
-				}
-				return ioutil.ReadAll(f)
-			},
-			func(data []byte, name string) error {
-				return nil
-			},
-		)
-
+		spath := path.Join(c.videoPath, sdHash)
+		fragments, err := godirwalk.ReadDirnames(spath, nil)
 		if err != nil {
-			os.RemoveAll(cvFullPath)
-			c.logger.Infow("removed broken stream", "path", sdHash, "err", err)
-			continue
+			return 0, err
 		}
-		if restore {
-			c.CacheVideo(sdHash, cvSize)
+		for _, name := range fragments {
+			s, err := os.Stat(path.Join(spath, name))
+			if err != nil {
+				// warn?
+				continue
+			}
+			c.cache.Set(
+				cacheFragmentKey(sdHash, name),
+				&Fragment{path: path.Join(sdHash, name), size: s.Size()},
+				fragmentCacheDuration,
+			)
 		}
 		swept++
 	}
 
 	c.logger.Infow("cache swept", "count", swept)
 	return swept, nil
-}
-
-func (c Client) startSweeper() {
-	sweepTicker := time.NewTicker(5 * time.Minute)
-	go func() {
-		for range sweepTicker.C {
-			_, err := c.SweepCache(false)
-			if err != nil {
-				c.logger.Warnw("periodic sweep failed", "err", err)
-			}
-		}
-	}()
 }
