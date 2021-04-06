@@ -22,6 +22,8 @@ import (
 )
 
 const (
+	MasterPlaylistName = "master.m3u8"
+
 	hlsURLTemplate        = "/api/v1/video/hls/%v"
 	fragmentURLTemplate   = "/streams/%v"
 	fragmentCacheDuration = time.Hour * 24 * 30
@@ -122,6 +124,7 @@ func (f Fragment) Size() int64 {
 func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
+		streamURLs:    &sync.Map{},
 	}
 	if c.logLevel == Dev {
 		c.logger = logging.Create("client", logging.Dev)
@@ -141,13 +144,25 @@ func New(cfg *Configuration) Client {
 
 // PlayFragment ...
 func (c Client) PlayFragment(lurl, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
+	ll := c.logger.With("lurl", lurl, "sd_hash", sdHash, "fragment", fragment)
 	path, err := c.getCachedFragment(lurl, sdHash, fragment)
 	if err != nil {
+		ll.Warnf("failed to serve fragment: %v", err)
 		return err
 	}
 
+	c.logger.Infow("serving fragment", "path", path)
 	http.ServeFile(w, r, path)
 	return nil
+}
+
+func (c Client) GetPlaybackPath(lurl, sdHash string) string {
+	if _, err := c.fragmentURL(lurl, sdHash, MasterPlaylistName); err != nil {
+		c.logger.Debugw("playback path not found", "lurl", lurl, "sd_hash", sdHash, "err", err)
+		return ""
+	}
+	c.logger.Debugw("playback path found", "lurl", lurl, "sd_hash", sdHash)
+	return fmt.Sprintf("%v/%v/%v", strings.Replace(lurl, "#", "/", 1), sdHash, MasterPlaylistName)
 }
 
 func cacheFragmentKey(sdHash, name string) string {
@@ -171,46 +186,46 @@ func (c Client) deleteCachedFragment(i *ccache.Item) {
 }
 
 func (c Client) fragmentURL(url, sdHash, name string) (string, error) {
-	var furl string
 	if d, ok := c.streamURLs.Load(sdHash); !ok {
+		// Getting root playlist location from transcoder.
 		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url))
 		if err != nil {
-			return furl, err
+			return "", err
 		}
 
 		switch res.StatusCode {
 		case http.StatusForbidden:
 			TranscodedResult.WithLabelValues(resultForbidden).Inc()
-			return furl, video.ErrChannelNotEnabled
+			return "", video.ErrChannelNotEnabled
 		case http.StatusNotFound:
 			TranscodedResult.WithLabelValues(resultNotFound).Inc()
-			return furl, errors.New("stream not found")
+			return "", errors.New("stream not found")
 		case http.StatusAccepted:
 			TranscodedResult.WithLabelValues(resultUnderway).Inc()
 			c.logger.Debugw("stream encoding underway")
-			return furl, errors.New("encoding underway")
+			return "", errors.New("encoding underway")
 		case http.StatusSeeOther:
 			TranscodedResult.WithLabelValues(resultFound).Inc()
 			loc, err := res.Location()
 			if err != nil {
-				return furl, err
+				return "", err
 			}
-			c.logger.Debugw("got playlist URL", "location", loc)
-			furl = strings.TrimSuffix(loc.String(), "/"+MasterPlaylistName)
-			c.streamURLs.Store(sdHash, furl)
-			return furl, nil
+			streamURL := strings.TrimSuffix(loc.String(), MasterPlaylistName)
+			c.logger.Debugw("got stream URL", "stream_url", streamURL)
+			c.streamURLs.Store(sdHash, streamURL)
+			return streamURL + name, nil
 		default:
 			c.logger.Warnw("unknown http status", "status_code", res.StatusCode)
-			return furl, fmt.Errorf("unknown http status: %v", res.StatusCode)
+			return "", fmt.Errorf("unknown http status: %v", res.StatusCode)
 		}
 	} else {
-		furl, _ := d.(string)
-		return furl, nil
+		streamURL, _ := d.(string)
+		return streamURL + name, nil
 	}
 }
 
 func (c Client) fetch(url string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, c.server+url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -219,16 +234,18 @@ func (c Client) fetch(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if r.StatusCode != http.StatusOK {
-		return r, ErrNotOK
-	}
 	return r, nil
 }
 
 func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
 	key := cacheFragmentKey(sdHash, name)
 	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
-		path := path.Join(c.videoPath, sdHash, name)
+		c.logger.Debugw("cache miss", "key", key)
+		fpath := path.Join(c.videoPath, sdHash, name)
+
+		if err := os.MkdirAll(path.Join(c.videoPath, sdHash), os.ModePerm); err != nil {
+			return nil, err
+		}
 
 		url, err := c.fragmentURL(lurl, sdHash, name)
 		if err != nil {
@@ -238,9 +255,12 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
 		if err != nil {
 			return nil, err
 		}
+		if r.StatusCode != http.StatusOK {
+			return r, ErrNotOK
+		}
 		defer r.Body.Close()
 
-		f, err := os.Create(path)
+		f, err := os.Create(fpath)
 		if err != nil {
 			return nil, err
 		}
@@ -249,12 +269,13 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
 		if err != nil {
 			return nil, err
 		}
+		c.logger.Debugw("saved fragment", "url", url, "size", size, "path", fpath)
 
 		TranscodedCacheSizeBytes.Add(float64(size))
 		TranscodedCacheItemsCount.Inc()
 
 		return &Fragment{
-			path: path,
+			path: path.Join(sdHash, name),
 			size: size,
 		}, nil
 	})
@@ -267,17 +288,18 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
 		return "", err
 	}
 
-	_, err = os.Stat(path.Join(c.videoPath, fg.path))
+	fullPath := path.Join(c.videoPath, fg.path)
+	_, err = os.Stat(fullPath)
 	if err != nil {
 		c.cache.Delete(key)
-		return "", fmt.Errorf("missing cached fragment: %v", path.Join(c.videoPath, fg.path))
+		return "", fmt.Errorf("fragment in cache but not on disk: %v", fullPath)
 	}
-	return fg.path, nil
+	return fullPath, nil
 }
 
 // RestoreCache ...
-func (c Client) RestoreCache(restore bool) (int64, error) {
-	var swept int64
+func (c Client) RestoreCache() (int64, error) {
+	var fnum, size int64
 	sdirs, err := godirwalk.ReadDirnames(c.videoPath, nil)
 
 	if err != nil {
@@ -299,7 +321,7 @@ func (c Client) RestoreCache(restore bool) (int64, error) {
 		for _, name := range fragments {
 			s, err := os.Stat(path.Join(spath, name))
 			if err != nil {
-				// warn?
+				c.logger.Warnw("unable to stat cache fragment", "err", err)
 				continue
 			}
 			c.cache.Set(
@@ -307,10 +329,11 @@ func (c Client) RestoreCache(restore bool) (int64, error) {
 				&Fragment{path: path.Join(sdHash, name), size: s.Size()},
 				fragmentCacheDuration,
 			)
+			size += s.Size()
+			fnum++
 		}
-		swept++
 	}
 
-	c.logger.Infow("cache swept", "count", swept)
-	return swept, nil
+	c.logger.Infow("cache restored", "fragments_number", fnum, "size", size)
+	return fnum, nil
 }
