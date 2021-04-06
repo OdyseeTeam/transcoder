@@ -2,8 +2,12 @@ package main
 
 import (
 	"math/rand"
+	"os"
+	"os/signal"
 	"path"
+	"runtime/pprof"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/lbryio/transcoder/api"
@@ -16,6 +20,7 @@ import (
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
+	"github.com/pkg/profile"
 
 	"github.com/alecthomas/kong"
 )
@@ -24,19 +29,21 @@ var logger = logging.Create("main", logging.Dev)
 
 var CLI struct {
 	Serve struct {
-		Bind      string `optional name:"bind" help:"Address to listen on." default:":8080"`
-		DataPath  string `optional name:"data-path" help:"Path to store database files and configs." type:"existingdir" default:"."`
-		VideoPath string `optional name:"video-path" help:"Path to store video." type:"existingdir" default:"."`
-		Workers   int    `optional name:"workers" help:"Number of workers to start." type:"int" default:"10"`
-		CDN       string `optional name:"cdn" help:"LBRY CDN endpoint address."`
-		Debug     bool   `optional name:"debug" help:"Debug mode."`
+		Bind         string `optional name:"bind" help:"Address to listen on." default:":8080"`
+		DataPath     string `optional name:"data-path" help:"Path to store database files and configs." type:"existingdir" default:"."`
+		VideoPath    string `optional name:"video-path" help:"Path to store video." type:"existingdir" default:"."`
+		Workers      int    `optional name:"workers" help:"Number of workers to start." type:"int" default:"10"`
+		CDN          string `optional name:"cdn" help:"LBRY CDN endpoint address."`
+		Debug        bool   `optional name:"debug" help:"Debug mode."`
+		ProfileCPU   bool   `optional name:"profile-cpu" help:"Enable CPU profiling."`
+		ProfileTrace bool   `optional name:"profile-trace" help:"Enable execution tracer."`
 	} `cmd help:"Start transcoding server."`
 }
 
+const cpuPF = "cpu.pprof"
+
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
-
-	// stopChan := make(chan os.Signal)
 
 	cfg, err := config.Read()
 	cfg.SetDefault("CDNServer", "https://cdn.lbryplayer.xyz/api/v3/streams")
@@ -47,6 +54,23 @@ func main() {
 	ctx := kong.Parse(&CLI)
 	switch ctx.Command() {
 	case "serve":
+		if CLI.Serve.ProfileCPU {
+			logger.Infof("outputting CPU profile to %v", cpuPF)
+			f, err := os.Create(cpuPF)
+			if err != nil {
+				logger.Fatal("could not create CPU profile: ", err)
+			}
+			defer f.Close()
+			if err := pprof.StartCPUProfile(f); err != nil {
+				logger.Fatal("could not start CPU profiling: ", err)
+			}
+			defer pprof.StopCPUProfile()
+		}
+		if CLI.Serve.ProfileTrace {
+			logger.Info("tracing enabled")
+			defer profile.Start(profile.TraceProfile, profile.ProfilePath(".")).Stop()
+		}
+
 		if !CLI.Serve.Debug {
 			api.SetLogger(logging.Create("api", logging.Prod))
 			db.SetLogger(logging.Create("db", logging.Prod))
@@ -134,18 +158,19 @@ func main() {
 		)
 		logger.Infow("configured api server", "addr", CLI.Serve.Bind)
 
-		// go func() {
-		err = apiServer.Start()
-		if err != nil {
-			logger.Fatal(err)
-		}
-		// }()
+		go func() {
+			err = apiServer.Start()
+			if err != nil {
+				logger.Fatal(err)
+			}
+		}()
 
-		// signal.Notify(stopChan, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGINT)
-		// sig := <-stopChan
-		// logger.Infof("caught an %v signal, shutting down", sig)
-		// apiServer.Shutdown()
-		// poller.Shutdown()
+		stopChan := make(chan os.Signal, 1)
+		signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+		sig := <-stopChan
+		logger.Infof("caught an %v signal, shutting down", sig)
+		apiServer.Shutdown()
+		poller.Shutdown()
 	default:
 		logger.Fatal(ctx.Command())
 	}
