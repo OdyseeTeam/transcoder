@@ -70,7 +70,7 @@ func (s *DispatcherSuite) TestDispatcher() {
 		results = append(results, r)
 	}
 
-	d.DoAndStop()
+	d.Stop()
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
 	for _, r := range results {
@@ -92,7 +92,7 @@ func (s *DispatcherSuite) TestDispatcherTryDispatch() {
 		results = append(results, r)
 	}
 
-	d.DoAndStop()
+	d.Stop()
 	s.Equal(500000, len(wl.seenTasks))
 	s.Equal(500000, wl.doCalled)
 	for _, r := range results {
@@ -112,9 +112,7 @@ func (s *DispatcherSuite) TestDispatcherLeaks() {
 	}
 
 	time.Sleep(5 * time.Second)
-
 	s.Equal(grc, runtime.NumGoroutine())
-
 	d.Stop()
 }
 

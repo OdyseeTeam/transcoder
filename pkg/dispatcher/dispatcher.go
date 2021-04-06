@@ -131,8 +131,6 @@ func Start(workers int, wl Workload) Dispatcher {
 		w.Start()
 	}
 
-	var cstop bool
-
 	go func() {
 		for {
 			select {
@@ -142,25 +140,13 @@ func Start(workers int, wl Workload) Dispatcher {
 				wq := <-d.workerPool
 				wq <- task
 			case sig := <-d.sigChan:
-				if sig == sigDoAndStop {
-					cstop = true
-				} else if sig == sigStop {
+				if sig == sigStop {
 					for _, w := range d.workers {
-						w.Stop()
-					}
-					return
-				}
-			default:
-				if cstop {
-					logger.Debug("do-and-stop in progress, sending out signals")
-					for _, w := range d.workers {
-						logger.Debugf("sent stop signal to %v", w.id)
 						w.Stop()
 					}
 					return
 				}
 			}
-
 		}
 	}()
 
@@ -190,13 +176,6 @@ func (d *Dispatcher) TryDispatch(payload interface{}) *Result {
 
 func (d Dispatcher) Stop() {
 	d.sigChan <- sigStop
-	d.gwait.Wait()
-	logger.Infof("all %v workers are stopped", len(d.workers))
-}
-
-func (d Dispatcher) DoAndStop() {
-	logger.Infof("waiting for %v workers to be done with their workload queues", len(d.workers))
-	d.sigChan <- sigDoAndStop
 	d.gwait.Wait()
 	logger.Infof("all %v workers are stopped", len(d.workers))
 }
