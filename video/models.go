@@ -2,9 +2,6 @@ package video
 
 import (
 	"database/sql"
-	"fmt"
-
-	"github.com/lbryio/transcoder/encoder"
 )
 
 type Video struct {
@@ -29,7 +26,7 @@ func (v Video) GetLocation() (string, bool) {
 	if v.Path != "" {
 		return v.Path, false
 	}
-	return fmt.Sprintf("%v/%v", v.RemotePath, encoder.MasterPlaylist), true
+	return v.RemotePath, true
 }
 
 func (v Video) GetSize() int64 {
