@@ -3,15 +3,11 @@ package client
 import (
 	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/grafov/m3u8"
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
@@ -75,245 +71,36 @@ func (s *ClientSuite) TearDownTest() {
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
-func (s *ClientSuite) TestSweepCache() {
-	vPath := path.Join(s.assetsPath, "TestSweepCache")
+func (s *ClientSuite) TestRestoreCache() {
+	dstPath := path.Join(s.assetsPath, "TestRestoreCache")
 
-	c := New(Configure().VideoPath(vPath))
+	c := New(Configure().VideoPath(dstPath))
 
-	cvDirs := map[string]int64{}
+	cvDirs := []string{}
 	for range [10]int{} {
-		dir := randomString(96)
-		size, err := populateHLSPlaylist(path.Join(vPath, dir))
-		s.Require().NoError(err)
-		cvDirs[dir] = size
-
-		c.CacheVideo(dir, size)
-		cv := c.GetCachedVideo(dir)
-		s.Require().NotNil(cv)
-		s.Require().Equal(size, cv.Size())
+		sdHash := randomString(96)
+		s.populateHLSPlaylist(dstPath, sdHash)
+		cvDirs = append(cvDirs, sdHash)
 	}
 
-	c = New(Configure().VideoPath(vPath))
-	n, err := c.SweepCache(true)
+	c = New(Configure().VideoPath(dstPath))
+	n, err := c.RestoreCache()
 	s.Require().NoError(err)
-	s.EqualValues(10, n)
+	s.EqualValues((78*4+5)*10, n)
 
-	for dir, size := range cvDirs {
-		cv := c.GetCachedVideo(dir)
-		s.Require().NotNil(cv)
-		s.EqualValues(size, cv.Size())
-	}
-
-	// Obliterate half the playlist files to simulate partially downloaded transcoded stream
-	// and make sure the playlist cache entry doesn't get restored.
-	var cvToNuke string
-	for dir := range cvDirs {
-		cvToNuke = dir
-		break
-	}
-	entries, err := godirwalk.ReadDirnames(path.Join(c.videoPath, cvToNuke), nil)
-	s.Require().NoError(err)
-	for _, e := range entries[len(entries)/2:] {
-		if strings.HasSuffix(e, ".m3u8") {
-			continue
-		}
-		s.Require().NoError(os.Remove(path.Join(vPath, cvToNuke, e)))
-	}
-
-	c = New(Configure().VideoPath(vPath))
-	_, err = c.SweepCache(true)
-	s.Require().NoError(err)
-	s.Require().Nil(c.GetCachedVideo(cvToNuke))
-}
-
-func (s *ClientSuite) TestGet() {
-	s.T().SkipNow()
-
-	vPath := path.Join(s.assetsPath, "TestGet")
-	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()).LogLevel(Dev))
-	s.Require().NotNil(c.httpClient)
-
-	cv, dl := c.Get("hls", streamURL, streamSDHash)
-	s.Require().Nil(cv)
-
-	time.Sleep(100 * time.Millisecond)
-	err := dl.Init()
-	s.Require().EqualError(err, "encoding underway")
-
-	s.T().Log("waiting for transcoder to ready up the stream")
-
-	for {
-		cv, dl = c.Get("hls", streamURL, streamSDHash)
-		s.Require().Nil(cv)
-		if dl != nil {
-			err := dl.Init()
-			if err == nil {
-				break
-			}
-		}
-	}
-
-	go func() {
-		err := dl.Download()
+	for _, sdHash := range cvDirs {
+		fragments, err := godirwalk.ReadDirnames(path.Join(dstPath, sdHash), nil)
 		s.Require().NoError(err)
-	}()
+		for _, fname := range fragments {
+			fg, err := c.getCachedFragment("zzz", sdHash, fname)
+			s.Require().NoError(err)
+			s.Require().NotNil(fg)
 
-	<-dl.Progress()
-	cv, dl2 := c.Get("hls", streamURL, streamSDHash)
-	s.Require().Nil(cv)
-	err = dl2.Init()
-	s.EqualError(err, "video is already downloading")
-
-	for p := range dl.Progress() {
-		s.T().Logf("got download progress: %+v", p)
-		s.Require().NoError(p.Error)
-
-		if p.Stage == DownloadDone {
-			break
+			fi, err := os.Stat(c.fullFragmentPath(fg))
+			s.Require().NoError(err)
+			s.EqualValues(fi.Size(), fg.Size())
 		}
 	}
-
-	err = dl2.Init()
-	s.NoError(err)
-
-	cv, dl = c.Get("hls", streamURL, streamSDHash)
-	s.Nil(dl)
-
-	f, err := os.Open(path.Join(vPath, cv.DirName(), MasterPlaylistName))
-	s.NoError(err)
-	rawpl, _, err := m3u8.DecodeFrom(f, true)
-	s.NoError(err)
-	f.Close()
-
-	pool.Stop()
-
-	masterpl := rawpl.(*m3u8.MasterPlaylist)
-	for _, plv := range masterpl.Variants {
-		f, err := os.Open(path.Join(vPath, cv.DirName(), plv.URI))
-		s.NoError(err)
-		p, _, err := m3u8.DecodeFrom(f, true)
-		s.NoError(err)
-		f.Close()
-		mediapl := p.(*m3u8.MediaPlaylist)
-		for _, seg := range mediapl.Segments {
-			if seg == nil {
-				continue
-			}
-			s.FileExists(path.Join(vPath, cv.DirName(), seg.URI))
-		}
-	}
-}
-
-func (s *ClientSuite) TestPoolDownload() {
-	vPath := path.Join(s.assetsPath, "TestPoolDownload")
-	c := New(Configure().VideoPath(vPath).Server(s.apiServer.URL()))
-	s.Require().NotNil(c.httpClient)
-
-	cv, dl := c.Get("hls", streamURL, streamSDHash)
-	s.Require().Nil(cv)
-
-	time.Sleep(100 * time.Millisecond)
-	err := dl.Init()
-	s.Require().EqualError(err, "encoding underway")
-
-	s.T().Log("waiting for transcoder to ready up the stream")
-
-	for {
-		req, _ := http.NewRequest(
-			http.MethodGet,
-			"http://127.0.0.1:50808/api/v1/video/hls/lbry:%2F%2F@specialoperationstest%233%2Ffear-of-death-inspirational%23a", nil)
-		r, err := c.httpClient.Do(req)
-		s.Require().NoError(err)
-		if r.StatusCode == http.StatusSeeOther {
-			break
-		}
-		time.Sleep(1000 * time.Millisecond)
-	}
-
-	s.T().Log("transcoder is ready, starting HLSStream download")
-	cv, dl = c.Get("hls", streamURL, streamSDHash)
-	s.Require().Nil(cv)
-
-	PoolDownload(dl)
-	// result := PoolDownload(dl)
-	// time.Sleep(30 * time.Millisecond)
-
-	// cv, dl2 := c.Get("hls", streamURL, streamSDHash)
-	// s.Nil(cv)
-	// err = dl2.Download()
-	// s.EqualError(err, "video is already downloading")
-
-	<-dl.Progress()
-	cv, dl2 := c.Get("hls", streamURL, streamSDHash)
-	s.Require().Nil(cv)
-	err = dl2.Init()
-	s.EqualError(err, "video is already downloading")
-
-	for p := range dl.Progress() {
-		s.T().Logf("got download progress: %+v", p)
-		s.Require().NoError(p.Error)
-
-		if p.Stage == DownloadDone {
-			break
-		}
-	}
-
-	// for {
-	// 	if result.Done() {
-	// 		break
-	// 	} else if result.Failed() {
-	// 		s.FailNow("download task failed", err)
-	// 	}
-	// }
-
-	cv, dl = c.Get("hls", streamURL, streamSDHash)
-	s.Nil(dl)
-}
-
-func (s *ClientSuite) TestGetCachedVideo() {
-	vPath := path.Join(s.assetsPath, "TestGetCachedVideo")
-	c := New(Configure().VideoPath(vPath))
-	hash := randomString(96)
-	cachedPath := path.Join(vPath, hash)
-	os.MkdirAll(cachedPath, os.ModePerm)
-	c.CacheVideo(hash, 6000)
-
-	cv := c.GetCachedVideo(hash)
-	s.Equal(cv.dirName, hash)
-	s.Equal(cv.size, int64(6000))
-
-	s.Require().NoError(os.Remove(cachedPath))
-	s.Nil(c.GetCachedVideo(hash))
-}
-
-func (s *ClientSuite) TestCacheSize() {
-	vPath := path.Join(s.assetsPath, "TestCacheSize")
-
-	cSize := int64(3131915 * 25)
-
-	c := New(Configure().VideoPath(vPath).CacheSize(cSize))
-
-	cvDirs := map[string]int64{}
-	for range [50]int{} {
-		dir := randomString(96)
-		size, err := populateHLSPlaylist(path.Join(vPath, dir))
-		s.Require().NoError(err)
-		cvDirs[dir] = size
-
-		c.CacheVideo(dir, size)
-		cv := c.GetCachedVideo(dir)
-		s.Require().NotNil(cv)
-		s.Require().Equal(size, cv.Size())
-	}
-
-	var storedSize int64
-	for dir := range cvDirs {
-		cv := c.GetCachedVideo(dir)
-		if cv != nil {
-			storedSize += cv.Size()
-		}
-	}
-	s.LessOrEqual(storedSize, cSize)
 }
 
 func randomString(n int) string {
@@ -327,15 +114,15 @@ func randomString(n int) string {
 }
 
 // populateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.
-func populateHLSPlaylist(vPath string) (int64, error) {
-	err := os.MkdirAll(vPath, os.ModePerm)
-	if err != nil {
-		return 0, err
-	}
+func (s *ClientSuite) populateHLSPlaylist(dstPath, sdHash string) {
+	err := os.MkdirAll(path.Join(dstPath, sdHash), os.ModePerm)
+	s.Require().NoError(err)
 
-	plPath, _ := filepath.Abs("./testdata")
-	size, err := HLSPlaylistDive(
-		plPath,
+	srcPath, _ := filepath.Abs("./testdata")
+	storage := storage.Local(srcPath)
+	ls, err := storage.Open("dummystream")
+	s.Require().NoError(err)
+	err = ls.Dive(
 		func(rootPath ...string) ([]byte, error) {
 			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
 				return ioutil.ReadFile(path.Join(rootPath...))
@@ -343,11 +130,8 @@ func populateHLSPlaylist(vPath string) (int64, error) {
 			return make([]byte, 10000), nil
 		},
 		func(data []byte, name string) error {
-			return ioutil.WriteFile(path.Join(vPath, name), data, os.ModePerm)
+			return ioutil.WriteFile(path.Join(dstPath, sdHash, name), data, os.ModePerm)
 		},
 	)
-	if err != nil {
-		return 0, err
-	}
-	return size, nil
+	s.Require().NoError(err)
 }

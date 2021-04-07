@@ -121,6 +121,10 @@ func (f Fragment) Size() int64 {
 	return f.size
 }
 
+func (f Fragment) Path() string {
+	return f.path
+}
+
 func New(cfg *Configuration) Client {
 	c := Client{
 		Configuration: cfg,
@@ -142,18 +146,29 @@ func New(cfg *Configuration) Client {
 	return c
 }
 
+func newFragment(sdHash, name string, size int64) *Fragment {
+	return &Fragment{
+		path: path.Join(sdHash, name),
+		size: size,
+	}
+}
+
 // PlayFragment ...
 func (c Client) PlayFragment(lurl, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
 	ll := c.logger.With("lurl", lurl, "sd_hash", sdHash, "fragment", fragment)
-	path, err := c.getCachedFragment(lurl, sdHash, fragment)
+	fg, err := c.getCachedFragment(lurl, sdHash, fragment)
 	if err != nil {
 		ll.Warnf("failed to serve fragment: %v", err)
 		return err
 	}
 
-	c.logger.Infow("serving fragment", "path", path)
-	http.ServeFile(w, r, path)
+	c.logger.Infow("serving fragment", "path", c.fullFragmentPath(fg))
+	http.ServeFile(w, r, c.fullFragmentPath(fg))
 	return nil
+}
+
+func (c Client) fullFragmentPath(fg *Fragment) string {
+	return path.Join(c.videoPath, fg.path)
 }
 
 func (c Client) GetPlaybackPath(lurl, sdHash string) string {
@@ -237,7 +252,7 @@ func (c Client) fetch(url string) (*http.Response, error) {
 	return r, nil
 }
 
-func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
+func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) {
 	key := cacheFragmentKey(sdHash, name)
 	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
 		c.logger.Debugw("cache miss", "key", key)
@@ -274,27 +289,28 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (string, error) {
 		TranscodedCacheSizeBytes.Add(float64(size))
 		TranscodedCacheItemsCount.Inc()
 
-		return &Fragment{
-			path: path.Join(sdHash, name),
-			size: size,
-		}, nil
+		return newFragment(sdHash, name, size), nil
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	fg, _ := item.Value().(*Fragment)
 	if fg == nil {
-		return "", err
+		return nil, errors.New("cached item does not contain fragment")
 	}
 
-	fullPath := path.Join(c.videoPath, fg.path)
-	_, err = os.Stat(fullPath)
+	_, err = os.Stat(c.fullFragmentPath(fg))
 	if err != nil {
 		c.cache.Delete(key)
-		return "", fmt.Errorf("fragment in cache but not on disk: %v", fullPath)
+		return nil, fmt.Errorf("fragment in cache but not on disk: %v", c.fullFragmentPath(fg))
 	}
-	return fullPath, nil
+
+	return fg, nil
+}
+
+func (c Client) cacheFragment(sdHash, name string, fg *Fragment) {
+	c.cache.Set(cacheFragmentKey(sdHash, name), fg, fragmentCacheDuration)
 }
 
 // RestoreCache ...
@@ -324,11 +340,7 @@ func (c Client) RestoreCache() (int64, error) {
 				c.logger.Warnw("unable to stat cache fragment", "err", err)
 				continue
 			}
-			c.cache.Set(
-				cacheFragmentKey(sdHash, name),
-				&Fragment{path: path.Join(sdHash, name), size: s.Size()},
-				fragmentCacheDuration,
-			)
+			c.cacheFragment(sdHash, name, newFragment(sdHash, name, s.Size()))
 			size += s.Size()
 			fnum++
 		}
