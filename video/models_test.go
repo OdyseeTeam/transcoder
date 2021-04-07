@@ -11,17 +11,17 @@ func TestVideo(t *testing.T) {
 	var url string
 	var remote bool
 
-	v = &Video{Path: "/dasfoyw/master.m3u8", RemotePath: "http://s3/dasfoyw/master.m3u8"}
+	v = &Video{Path: "ashsadasldkhaw", RemotePath: "http://s3/ashsadasldkhaw/master.m3u8"}
 	url, remote = v.GetLocation()
 	assert.False(t, remote)
-	assert.Equal(t, v.Path, url)
+	assert.Equal(t, "ashsadasldkhaw/master.m3u8", url)
 
-	v = &Video{Path: "/dasfoyw/master.m3u8", RemotePath: ""}
+	v = &Video{Path: "ashsadasldkhaw", RemotePath: ""}
 	url, remote = v.GetLocation()
 	assert.False(t, remote)
-	assert.Equal(t, v.Path, url)
+	assert.Equal(t, "ashsadasldkhaw/master.m3u8", url)
 
-	v = &Video{Path: "", RemotePath: "http://s3/dasfoyw/master.m3u8"}
+	v = &Video{Path: "", RemotePath: "http://s3/ashsadasldkhaw/master.m3u8"}
 	url, remote = v.GetLocation()
 	assert.True(t, remote)
 	assert.Equal(t, v.RemotePath, url)

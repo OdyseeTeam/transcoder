@@ -196,7 +196,6 @@ func (c Client) deleteCachedFragment(i *ccache.Item) {
 	} else {
 		TranscodedCacheSizeBytes.Sub(float64(fg.Size()))
 		TranscodedCacheItemsCount.Dec()
-		// c.logger.Infow("purged cache item", "name", cv.DirName(), "size", cv.Size())
 	}
 }
 
@@ -254,8 +253,13 @@ func (c Client) fetch(url string) (*http.Response, error) {
 
 func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) {
 	key := cacheFragmentKey(sdHash, name)
+	TranscodedCacheQueryCount.Inc()
 	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
+		var src string
+
 		c.logger.Debugw("cache miss", "key", key)
+		TranscodedCacheMiss.Inc()
+
 		fpath := path.Join(c.videoPath, sdHash, name)
 
 		if err := os.MkdirAll(path.Join(c.videoPath, sdHash), os.ModePerm); err != nil {
@@ -266,11 +270,25 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) 
 		if err != nil {
 			return nil, err
 		}
+
+		if strings.Contains(url, "/streams/") {
+			src = fetchSourceLocal
+		} else {
+			src = fetchSourceRemote
+		}
+
 		r, err := c.fetch(url)
+		FetchCount.WithLabelValues(src).Inc()
 		if err != nil {
+			if r != nil {
+				FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
+			} else {
+				FetchFailureCount.WithLabelValues(src, "unknown").Inc()
+			}
 			return nil, err
 		}
 		if r.StatusCode != http.StatusOK {
+			FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
 			return r, ErrNotOK
 		}
 		defer r.Body.Close()
@@ -281,6 +299,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) 
 		}
 		defer f.Close()
 		size, err := io.Copy(f, r.Body)
+		FetchSizeBytes.WithLabelValues("").Add(float64(size))
 		if err != nil {
 			return nil, err
 		}

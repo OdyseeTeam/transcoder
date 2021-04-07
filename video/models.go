@@ -2,6 +2,9 @@ package video
 
 import (
 	"database/sql"
+	"fmt"
+
+	"github.com/lbryio/transcoder/storage"
 )
 
 type Video struct {
@@ -24,7 +27,7 @@ type Video struct {
 // Bool in return value signifies if it's a remote location (S3) or local (relative HTTP path).
 func (v Video) GetLocation() (string, bool) {
 	if v.Path != "" {
-		return v.Path, false
+		return fmt.Sprintf("%v/%v", v.Path, storage.MasterPlaylistName), false
 	}
 	return v.RemotePath, true
 }
