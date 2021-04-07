@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/karlseguin/ccache/v2"
@@ -277,6 +278,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) 
 			src = fetchSourceRemote
 		}
 
+		t := timer.Start()
 		r, err := c.fetch(url)
 		FetchCount.WithLabelValues(src).Inc()
 		if err != nil {
@@ -293,16 +295,20 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) 
 		}
 		defer r.Body.Close()
 
+		FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
+
 		f, err := os.Create(fpath)
 		if err != nil {
 			return nil, err
 		}
 		defer f.Close()
 		size, err := io.Copy(f, r.Body)
-		FetchSizeBytes.WithLabelValues("").Add(float64(size))
+
 		if err != nil {
 			return nil, err
 		}
+
+		FetchSizeBytes.WithLabelValues(src).Add(float64(size))
 		c.logger.Debugw("saved fragment", "url", url, "size", size, "path", fpath)
 
 		TranscodedCacheSizeBytes.Add(float64(size))

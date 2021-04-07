@@ -6,12 +6,10 @@ import (
 )
 
 const (
-	resultForbidden   = "forbidden"
-	resultNotFound    = "not_found"
-	resultUnderway    = "underway"
-	resultFound       = "found"
-	resultDownloading = "downloading"
-	resultLocalCache  = "local_cache"
+	resultForbidden = "forbidden"
+	resultNotFound  = "not_found"
+	resultUnderway  = "underway"
+	resultFound     = "found"
 
 	fetchSourceRemote = "remote"
 	fetchSourceLocal  = "local"
@@ -37,6 +35,9 @@ var (
 
 	FetchSizeBytes = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_size_bytes",
+	}, []string{"source"})
+	FetchDurationSeconds = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "fetch_duration_seconds",
 	}, []string{"source"})
 	FetchCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_count",
