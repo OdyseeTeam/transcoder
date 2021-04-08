@@ -121,7 +121,10 @@ func main() {
 			logger.Infow("wasabi storage configured", "bucket", wasabi["bucket"])
 		}
 		lib := video.NewLibrary(libCfg)
-		video.SpawnS3Uploader(lib)
+
+		if wasabi["bucket"] != "" {
+			video.SpawnS3Uploader(lib)
+		}
 
 		q := queue.NewQueue(qdb)
 

@@ -92,15 +92,48 @@ func (s *ClientSuite) TestRestoreCache() {
 		fragments, err := godirwalk.ReadDirnames(path.Join(dstPath, sdHash), nil)
 		s.Require().NoError(err)
 		for _, fname := range fragments {
-			fg, err := c.getCachedFragment("zzz", sdHash, fname)
+			fg, hit, err := c.getCachedFragment("zzz", sdHash, fname)
 			s.Require().NoError(err)
 			s.Require().NotNil(fg)
+			s.Require().True(hit)
 
 			fi, err := os.Stat(c.fullFragmentPath(fg))
 			s.Require().NoError(err)
 			s.EqualValues(fi.Size(), fg.Size())
 		}
 	}
+}
+
+func (s *ClientSuite) Test_sdHashRe() {
+	m := sdHashRe.FindStringSubmatch("http://t0.lbry.tv:18081/streams/85e8ad21f40550ebf0f30f7a0f6f092e8c62c7c697138e977087ac7b7f29554f8e0270447922493ff564457b60f45b18/master.m3u8")
+	s.Equal("85e8ad21f40550ebf0f30f7a0f6f092e8c62c7c697138e977087ac7b7f29554f8e0270447922493ff564457b60f45b18", m[1])
+}
+
+func (s *ClientSuite) Test_fragmentURL() {
+	dstPath := path.Join(s.assetsPath, "Test_fragmentURL")
+	c := New(Configure().Server("http://t0.lbry.tv:18081").VideoPath(dstPath).LogLevel(Dev))
+
+	u, err := c.fragmentURL("morgan", "0b8dfc049b2165fad5829aca24f2ddfae3acef8d73bc5e04ff8b932fce9fc463dc6cf3e638413f04536638d2e7218427", "master.m3u8")
+	s.Require().Error(err)
+	s.Regexp("remote sd hash mismatch", err.Error())
+	s.Equal("", u)
+
+	u, err = c.fragmentURL("morgan", "azazaz", "master.m3u8")
+	s.Require().Error(err)
+	s.Regexp("remote sd hash mismatch", err.Error())
+	s.Equal("", u)
+
+	u, err = c.fragmentURL("vanquish-trailer-(2021)-morgan-freeman,#b7b150d1bbca4650ad4ab921dd8d424bf77c1141", "azazaz", "master.m3u8")
+	s.Require().Error(err)
+	s.Regexp("remote sd hash mismatch", err.Error())
+	s.Equal("", u)
+
+	u, err = c.fragmentURL(
+		"vanquish-trailer-(2021)-morgan-freeman,#b7b150d1bbca4650ad4ab921dd8d424bf77c1141",
+		"bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a",
+		"master.m3u8")
+	s.Require().NoError(err)
+	s.Equal("http://t0.lbry.tv:18081/streams/bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a/master.m3u8", u)
 }
 
 func randomString(n int) string {

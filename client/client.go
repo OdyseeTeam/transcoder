@@ -6,8 +6,10 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -25,15 +27,24 @@ import (
 const (
 	MasterPlaylistName = "master.m3u8"
 
+	cacheHeader         = "x-cache"
+	cacheHeaderHit      = "HIT"
+	cacheHeaderMiss     = "MISS"
+	cacheControlHeader  = "cache-control"
+	clientCacheDuration = 21239
+
+	fragmentCacheDuration = time.Hour * 24 * 30
 	hlsURLTemplate        = "/api/v1/video/hls/%v"
 	fragmentURLTemplate   = "/streams/%v"
-	fragmentCacheDuration = time.Hour * 24 * 30
 	dlStarted             = iota
 	Dev                   = iota
 	Prod
 )
 
-var ErrNotOK = errors.New("http response not OK")
+var (
+	ErrNotOK = errors.New("http response not OK")
+	sdHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/?`)
+)
 
 type HTTPRequester interface {
 	Do(req *http.Request) (res *http.Response, err error)
@@ -156,14 +167,22 @@ func newFragment(sdHash, name string, size int64) *Fragment {
 
 // PlayFragment ...
 func (c Client) PlayFragment(lurl, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
+	var ch string
 	ll := c.logger.With("lurl", lurl, "sd_hash", sdHash, "fragment", fragment)
-	fg, err := c.getCachedFragment(lurl, sdHash, fragment)
+	fg, hit, err := c.getCachedFragment(lurl, sdHash, fragment)
 	if err != nil {
 		ll.Warnf("failed to serve fragment: %v", err)
 		return err
 	}
 
-	c.logger.Infow("serving fragment", "path", c.fullFragmentPath(fg))
+	c.logger.Infow("serving fragment", "path", c.fullFragmentPath(fg), "cache_hit", hit)
+	if hit {
+		ch = cacheHeaderHit
+	} else {
+		ch = cacheHeaderMiss
+	}
+	w.Header().Set(cacheHeader, ch)
+	w.Header().Set(cacheControlHeader, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
 	return nil
 }
@@ -200,10 +219,10 @@ func (c Client) deleteCachedFragment(i *ccache.Item) {
 	}
 }
 
-func (c Client) fragmentURL(url, sdHash, name string) (string, error) {
+func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
 	if d, ok := c.streamURLs.Load(sdHash); !ok {
 		// Getting root playlist location from transcoder.
-		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url))
+		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url.PathEscape(lurl)))
 		if err != nil {
 			return "", err
 		}
@@ -227,6 +246,12 @@ func (c Client) fragmentURL(url, sdHash, name string) (string, error) {
 			}
 			streamURL := strings.TrimSuffix(loc.String(), MasterPlaylistName)
 			c.logger.Debugw("got stream URL", "stream_url", streamURL)
+			rsdHash := sdHashRe.FindStringSubmatch(streamURL)
+			if len(rsdHash) != 2 {
+				return "", fmt.Errorf("malformed remote sd hash in URL: %v", streamURL)
+			} else if rsdHash[1] != sdHash {
+				return "", fmt.Errorf("remote sd hash mismatch: %v != %v", sdHash, rsdHash[1])
+			}
 			c.streamURLs.Store(sdHash, streamURL)
 			return streamURL + name, nil
 		default:
@@ -252,11 +277,15 @@ func (c Client) fetch(url string) (*http.Response, error) {
 	return r, nil
 }
 
-func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) {
+func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, error) {
+	hit := true
+
 	key := cacheFragmentKey(sdHash, name)
 	TranscodedCacheQueryCount.Inc()
 	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
 		var src string
+
+		hit = false
 
 		c.logger.Debugw("cache miss", "key", key)
 		TranscodedCacheMiss.Inc()
@@ -318,23 +347,25 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, error) 
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	fg, _ := item.Value().(*Fragment)
 	if fg == nil {
-		return nil, errors.New("cached item does not contain fragment")
+		return nil, false, errors.New("cached item does not contain fragment")
 	}
 
 	_, err = os.Stat(c.fullFragmentPath(fg))
 	if err != nil {
 		c.cache.Delete(key)
-		return nil, fmt.Errorf("fragment in cache but not on disk: %v", c.fullFragmentPath(fg))
+		return nil, false, fmt.Errorf("fragment in cache but not on disk: %v", c.fullFragmentPath(fg))
 	}
 
-	return fg, nil
+	return fg, hit, nil
 }
 
 func (c Client) cacheFragment(sdHash, name string, fg *Fragment) {
+	TranscodedCacheSizeBytes.Add(float64(fg.Size()))
+	TranscodedCacheItemsCount.Inc()
 	c.cache.Set(cacheFragmentKey(sdHash, name), fg, fragmentCacheDuration)
 }
 
