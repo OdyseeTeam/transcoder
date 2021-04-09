@@ -70,12 +70,15 @@ func (s *DispatcherSuite) TestDispatcher() {
 		results = append(results, r)
 	}
 
-	d.Stop()
+	time.Sleep(100 * time.Millisecond)
+
 	s.Equal(500, len(wl.seenTasks))
 	s.Equal(500, wl.doCalled)
 	for _, r := range results {
-		s.True(r.Done())
+		s.Require().True(r.Done())
 	}
+
+	d.Stop()
 }
 
 func (s *DispatcherSuite) TestDispatcherTryDispatch() {
@@ -92,12 +95,15 @@ func (s *DispatcherSuite) TestDispatcherTryDispatch() {
 		results = append(results, r)
 	}
 
-	d.Stop()
+	time.Sleep(100 * time.Millisecond)
+
 	s.Equal(500000, len(wl.seenTasks))
 	s.Equal(500000, wl.doCalled)
 	for _, r := range results {
-		s.True(r.Done())
+		s.Require().True(r.Done())
 	}
+
+	d.Stop()
 }
 
 func (s *DispatcherSuite) TestDispatcherLeaks() {
