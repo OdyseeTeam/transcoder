@@ -43,7 +43,9 @@ const (
 
 var (
 	ErrNotOK = errors.New("http response not OK")
-	sdHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/?`)
+
+	errRefetch = errors.New("need to refetch")
+	sdHashRe   = regexp.MustCompile(`/([A-Za-z0-9]{96})/?`)
 )
 
 type HTTPRequester interface {
@@ -219,6 +221,10 @@ func (c Client) deleteCachedFragment(i *ccache.Item) {
 	}
 }
 
+func (c Client) discardFragmentURL(sdHash string) {
+	c.streamURLs.Delete(sdHash)
+}
+
 func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
 	if d, ok := c.streamURLs.Load(sdHash); !ok {
 		// Getting root playlist location from transcoder.
@@ -278,77 +284,93 @@ func (c Client) fetch(url string) (*http.Response, error) {
 }
 
 func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, error) {
-	hit := true
+	var (
+		item *ccache.Item
+		err  error
+		miss bool
+	)
 
 	key := cacheFragmentKey(sdHash, name)
 	TranscodedCacheQueryCount.Inc()
-	item, err := c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
-		var src string
+	for i := 0; i <= 2; i++ {
+		item, err = c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
+			var src string
 
-		hit = false
+			miss = true
 
-		c.logger.Debugw("cache miss", "key", key)
-		TranscodedCacheMiss.Inc()
+			c.logger.Debugw("cache miss", "key", key)
+			TranscodedCacheMiss.Inc()
 
-		fpath := path.Join(c.videoPath, sdHash, name)
+			fpath := path.Join(c.videoPath, sdHash, name)
 
-		if err := os.MkdirAll(path.Join(c.videoPath, sdHash), os.ModePerm); err != nil {
-			return nil, err
-		}
-
-		url, err := c.fragmentURL(lurl, sdHash, name)
-		if err != nil {
-			return nil, err
-		}
-
-		if strings.Contains(url, "/streams/") {
-			src = fetchSourceLocal
-		} else {
-			src = fetchSourceRemote
-		}
-
-		t := timer.Start()
-		r, err := c.fetch(url)
-		FetchCount.WithLabelValues(src).Inc()
-		if err != nil {
-			if r != nil {
-				FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
-			} else {
-				FetchFailureCount.WithLabelValues(src, "unknown").Inc()
+			if err := os.MkdirAll(path.Join(c.videoPath, sdHash), os.ModePerm); err != nil {
+				return nil, err
 			}
-			return nil, err
-		}
-		if r.StatusCode != http.StatusOK {
-			FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
-			return r, ErrNotOK
-		}
-		defer r.Body.Close()
 
-		FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
+			url, err := c.fragmentURL(lurl, sdHash, name)
+			if err != nil {
+				return nil, err
+			}
 
-		f, err := os.Create(fpath)
+			if strings.Contains(url, "/streams/") {
+				src = fetchSourceLocal
+			} else {
+				src = fetchSourceRemote
+			}
+
+			t := timer.Start()
+			r, err := c.fetch(url)
+			FetchCount.WithLabelValues(src).Inc()
+			if err != nil {
+				if r != nil {
+					if r.StatusCode == http.StatusNotFound {
+						c.discardFragmentURL(sdHash)
+						FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
+						return nil, errRefetch
+					}
+					FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
+				} else {
+					FetchFailureCount.WithLabelValues(src, "unknown").Inc()
+				}
+				return nil, err
+			}
+			if r.StatusCode != http.StatusOK {
+				FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
+				return r, ErrNotOK
+			}
+			defer r.Body.Close()
+
+			FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
+
+			f, err := os.Create(fpath)
+			if err != nil {
+				return nil, err
+			}
+			defer f.Close()
+			size, err := io.Copy(f, r.Body)
+
+			if err != nil {
+				return nil, err
+			}
+
+			FetchSizeBytes.WithLabelValues(src).Add(float64(size))
+			c.logger.Debugw("saved fragment", "url", url, "size", size, "path", fpath)
+
+			TranscodedCacheSizeBytes.Add(float64(size))
+			TranscodedCacheItemsCount.Inc()
+
+			return newFragment(sdHash, name, size), nil
+		})
+		// TODO: Messy loop logic can be improved
 		if err != nil {
-			return nil, err
+			if err == errRefetch {
+				continue
+			}
+			return nil, false, err
 		}
-		defer f.Close()
-		size, err := io.Copy(f, r.Body)
-
-		if err != nil {
-			return nil, err
-		}
-
-		FetchSizeBytes.WithLabelValues(src).Add(float64(size))
-		c.logger.Debugw("saved fragment", "url", url, "size", size, "path", fpath)
-
-		TranscodedCacheSizeBytes.Add(float64(size))
-		TranscodedCacheItemsCount.Inc()
-
-		return newFragment(sdHash, name, size), nil
-	})
-
-	if err != nil {
-		return nil, false, err
+		break
 	}
+
 	fg, _ := item.Value().(*Fragment)
 	if fg == nil {
 		return nil, false, errors.New("cached item does not contain fragment")
@@ -360,7 +382,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 		return nil, false, fmt.Errorf("fragment in cache but not on disk: %v", c.fullFragmentPath(fg))
 	}
 
-	return fg, hit, nil
+	return fg, !miss, nil
 }
 
 func (c Client) cacheFragment(sdHash, name string, fg *Fragment) {
