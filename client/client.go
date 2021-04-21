@@ -325,6 +325,9 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 				FetchFailureCount.WithLabelValues(src, "unknown").Inc()
 				return nil, err
 			}
+
+			defer r.Body.Close()
+
 			if r.StatusCode != http.StatusOK {
 				FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
 				if r.StatusCode == http.StatusNotFound {
@@ -333,7 +336,6 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 				}
 				return r, ErrNotOK
 			}
-			defer r.Body.Close()
 
 			FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
 
