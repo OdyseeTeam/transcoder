@@ -322,20 +322,15 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 			r, err := c.fetch(url)
 			FetchCount.WithLabelValues(src).Inc()
 			if err != nil {
-				if r != nil {
-					if r.StatusCode == http.StatusNotFound {
-						c.discardFragmentURL(sdHash)
-						FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
-						return nil, errRefetch
-					}
-					FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
-				} else {
-					FetchFailureCount.WithLabelValues(src, "unknown").Inc()
-				}
+				FetchFailureCount.WithLabelValues(src, "unknown").Inc()
 				return nil, err
 			}
 			if r.StatusCode != http.StatusOK {
 				FetchFailureCount.WithLabelValues(src, fmt.Sprintf("%v", r.StatusCode)).Inc()
+				if r.StatusCode == http.StatusNotFound {
+					c.discardFragmentURL(sdHash)
+					return nil, errRefetch
+				}
 				return r, ErrNotOK
 			}
 			defer r.Body.Close()
