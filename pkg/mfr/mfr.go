@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	statusNone   = iota
-	statusQueued // waiting to get to the top
-	statusActive // being processed
-	statusDone   // done processing
+	StatusNone   = iota
+	StatusQueued // waiting to get to the top
+	StatusActive // being processed
+	StatusDone   // done processing
 )
 
 // Item is a queue storage unit.
@@ -45,7 +45,7 @@ func NewQueue() *Queue {
 	return queue
 }
 
-// Hit puts Item stostatusActive at `key` higher up in the queue, or adds it to the bottom of the pile if the item is not present.
+// Hit puts Item stoStatusActive at `key` higher up in the queue, or adds it to the bottom of the pile if the item is not present.
 func (q *Queue) Hit(key string, value interface{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -64,7 +64,7 @@ func (q *Queue) Get(key string) (*Item, int) {
 
 		return e, e.posParent.Value.(*Position).entries[e]
 	}
-	return nil, statusNone
+	return nil, StatusNone
 }
 
 // Peek returns the top-most item of the queue without marking it as being processed.
@@ -99,12 +99,12 @@ func (q *Queue) pop(lockItem bool, minHits uint) *Item {
 				q.mu.Unlock()
 				return nil
 			}
-			if status == statusActive || status == statusDone {
+			if status == StatusActive || status == StatusDone {
 				continue
 			}
 			i = it
 			if lockItem {
-				pos.entries[it] = statusActive
+				pos.entries[it] = StatusActive
 			}
 			break
 		}
@@ -116,12 +116,12 @@ func (q *Queue) pop(lockItem bool, minHits uint) *Item {
 
 // Release returns the item back into the queue for future possibility to be `Pop`ped again.
 func (q *Queue) Release(key string) {
-	q.setStatus(key, statusQueued)
+	q.setStatus(key, StatusQueued)
 }
 
 // Fold marks the queue item as fully processed.
 func (q *Queue) Fold(key string) {
-	q.setStatus(key, statusDone)
+	q.setStatus(key, StatusDone)
 }
 
 func (q *Queue) Hits() uint {
@@ -146,7 +146,7 @@ func (q *Queue) add(key string, value interface{}) {
 		queue:     q,
 		posParent: posParent,
 	}
-	posParent.Value.(*Position).entries[item] = statusQueued
+	posParent.Value.(*Position).entries[item] = StatusQueued
 	q.entries[key] = item
 	q.size++
 	q.hits++
@@ -161,7 +161,7 @@ func (q *Queue) increment(item *Item) {
 	if nextPosParent == nil || nextPosParent.Value.(*Position).freq > nextFreq {
 		nextPosParent = q.positions.InsertAfter(&Position{freq: nextFreq, entries: map[*Item]int{}}, item.posParent)
 	}
-	nextPosParent.Value.(*Position).entries[item] = statusQueued
+	nextPosParent.Value.(*Position).entries[item] = StatusQueued
 	item.posParent = nextPosParent
 	q.hits++
 }

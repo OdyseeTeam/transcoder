@@ -113,26 +113,30 @@ func (s *mfrSuite) TestFold() {
 }
 
 func (s *mfrSuite) TestGet() {
-	item, status := s.q.Get(s.popClaim1.url)
+	item, status := s.q.Get("none")
+	s.Nil(item)
+	s.Equal(StatusNone, status)
+
+	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
-	s.Equal(statusQueued, status)
+	s.Equal(StatusQueued, status)
 
 	item = s.q.Pop()
 	s.Equal(s.popClaim1, item.Value.(*claim))
 
 	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
-	s.Equal(statusActive, status)
+	s.Equal(StatusActive, status)
 
 	s.q.Release(s.popClaim1.url)
 	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
-	s.Equal(statusQueued, status)
+	s.Equal(StatusQueued, status)
 
 	s.q.Fold(item.key)
 	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
-	s.Equal(statusDone, status)
+	s.Equal(StatusDone, status)
 }
 
 func randomString(n int) string {
