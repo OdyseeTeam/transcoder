@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type queueSuite struct {
+type mfrSuite struct {
 	suite.Suite
 	popClaim1,
 	popClaim2,
@@ -21,11 +21,11 @@ type claim struct {
 	sdHash, url string
 }
 
-func TestQueueSuite(t *testing.T) {
-	suite.Run(t, new(queueSuite))
+func TestMFRSuite(t *testing.T) {
+	suite.Run(t, new(mfrSuite))
 }
 
-func (s *queueSuite) SetupTest() {
+func (s *mfrSuite) SetupTest() {
 	rand.Seed(time.Now().UnixNano())
 
 	q := NewQueue()
@@ -45,7 +45,7 @@ func (s *queueSuite) SetupTest() {
 	}()
 	go func() {
 		defer wg.Done()
-		for range [10000]byte{} {
+		for range [9999]byte{} {
 			q.Hit(popClaim2.url, popClaim2)
 			q.Peek()
 		}
@@ -59,7 +59,7 @@ func (s *queueSuite) SetupTest() {
 	}()
 	go func() {
 		defer wg.Done()
-		for range [100000]byte{} {
+		for range [50000]byte{} {
 			c := &claim{randomString(25), randomString(96)}
 			q.Peek()
 			q.Hit(c.url, c)
@@ -72,7 +72,7 @@ func (s *queueSuite) SetupTest() {
 	s.q = q
 }
 
-func (s *queueSuite) TestPeek() {
+func (s *mfrSuite) TestPeek() {
 	item1 := s.q.Pop()
 	s.Require().NotNil(item1)
 	s.Equal(s.popClaim1.url, item1.key)
@@ -83,7 +83,7 @@ func (s *queueSuite) TestPeek() {
 	s.Require().NotNil(item2)
 	s.Equal(s.popClaim2.url, item2.key)
 	s.Equal(s.popClaim2, item2.Value.(*claim))
-	s.EqualValues(10000, item2.Hits())
+	s.EqualValues(9999, item2.Hits())
 
 	item3 := s.q.Pop()
 	s.Require().NotNil(item3)
@@ -91,10 +91,10 @@ func (s *queueSuite) TestPeek() {
 	s.Equal(s.popClaim3, item3.Value.(*claim))
 	s.EqualValues(9000, item3.Hits())
 
-	s.EqualValues(129000, s.q.hits)
+	s.EqualValues(78999, s.q.hits)
 }
 
-func (s *queueSuite) TestRelease() {
+func (s *mfrSuite) TestRelease() {
 	item := s.q.Pop()
 	s.Require().NotNil(item)
 	s.q.Release(item.key)
@@ -103,13 +103,36 @@ func (s *queueSuite) TestRelease() {
 	s.Equal(item, item2)
 }
 
-func (s *queueSuite) TestFold() {
+func (s *mfrSuite) TestFold() {
 	item := s.q.Pop()
 	s.Require().NotNil(item)
 
 	s.q.Fold(item.key)
 	item2 := s.q.Pop()
 	s.NotEqual(item, item2)
+}
+
+func (s *mfrSuite) TestGet() {
+	item, status := s.q.Get(s.popClaim1.url)
+	s.Equal(s.popClaim1, item.Value.(*claim))
+	s.Equal(statusQueued, status)
+
+	item = s.q.Pop()
+	s.Equal(s.popClaim1, item.Value.(*claim))
+
+	item, status = s.q.Get(s.popClaim1.url)
+	s.Equal(s.popClaim1, item.Value.(*claim))
+	s.Equal(statusActive, status)
+
+	s.q.Release(s.popClaim1.url)
+	item, status = s.q.Get(s.popClaim1.url)
+	s.Equal(s.popClaim1, item.Value.(*claim))
+	s.Equal(statusQueued, status)
+
+	s.q.Fold(item.key)
+	item, status = s.q.Get(s.popClaim1.url)
+	s.Equal(s.popClaim1, item.Value.(*claim))
+	s.Equal(statusDone, status)
 }
 
 func randomString(n int) string {
