@@ -79,7 +79,6 @@ func (p *Pool) Start() {
 	}
 	for {
 		r = r.Next()
-		time.Sleep(200 * time.Millisecond)
 		select {
 		case <-p.stopChan:
 			close(p.out)
@@ -90,9 +89,11 @@ func (p *Pool) Start() {
 		l := r.Value.(*level)
 		item := l.queue.MinPop(l.minHits)
 		if item == nil {
+			// Non-stop polling will cause excessive CPU load.
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		logger.Named("pool").Debugw("popping item", "value", item)
+		logger.Named("pool").Debugf("popping item %v (queue: %+v)", item.Value, l.queue)
 		p.out <- item
 	}
 }
@@ -106,7 +107,7 @@ func (p *Pool) Next() *mfr.Item {
 	select {
 	case e := <-p.out:
 		return e
-	case <-time.After(10 * time.Millisecond):
+	case <-time.After(20 * time.Millisecond):
 		return nil
 	}
 }

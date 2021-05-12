@@ -75,7 +75,12 @@ func (s *integSuite) TestStreamQueuedLevel5() {
 
 	time.Sleep(1 * time.Second)
 
+	s.Equal(mfr.StatusActive, s.mgr.RequestStatus("@FreeMovies#a/the-jack-knife-man#f"))
+
 	resp, err = http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), lbryUrl))
+
+	s.Equal(mfr.StatusActive, s.mgr.RequestStatus("@FreeMovies#a/the-jack-knife-man#f"))
+
 	s.Require().NoError(err)
 	s.equalResponse(http.StatusAccepted, manager.ErrTranscodingUnderway.Error(), resp)
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,6 +27,7 @@ func TestMFRSuite(t *testing.T) {
 }
 
 func (s *mfrSuite) SetupTest() {
+	SetLogger(logging.Create("mfr", logging.Prod))
 	rand.Seed(time.Now().UnixNano())
 
 	q := NewQueue()
@@ -72,12 +74,16 @@ func (s *mfrSuite) SetupTest() {
 	s.q = q
 }
 
-func (s *mfrSuite) TestPeek() {
+func (s *mfrSuite) TestPop() {
 	item1 := s.q.Pop()
 	s.Require().NotNil(item1)
 	s.Equal(s.popClaim1.url, item1.key)
 	s.Equal(s.popClaim1, item1.Value.(*claim))
 	s.EqualValues(10000, item1.Hits())
+
+	s.q.Hit(item1.key, item1)
+	_, status := s.q.Get(item1.key)
+	s.Equal(StatusActive, status)
 
 	item2 := s.q.Pop()
 	s.Require().NotNil(item2)
@@ -91,7 +97,7 @@ func (s *mfrSuite) TestPeek() {
 	s.Equal(s.popClaim3, item3.Value.(*claim))
 	s.EqualValues(9000, item3.Hits())
 
-	s.EqualValues(78999, s.q.hits)
+	s.EqualValues(79000, s.q.hits)
 }
 
 func (s *mfrSuite) TestRelease() {
@@ -103,11 +109,11 @@ func (s *mfrSuite) TestRelease() {
 	s.Equal(item, item2)
 }
 
-func (s *mfrSuite) TestFold() {
+func (s *mfrSuite) TestDone() {
 	item := s.q.Pop()
 	s.Require().NotNil(item)
 
-	s.q.Fold(item.key)
+	s.q.Done(item.key)
 	item2 := s.q.Pop()
 	s.NotEqual(item, item2)
 }
@@ -133,7 +139,7 @@ func (s *mfrSuite) TestGet() {
 	s.Equal(s.popClaim1, item.Value.(*claim))
 	s.Equal(StatusQueued, status)
 
-	s.q.Fold(item.key)
+	s.q.Done(item.key)
 	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
 	s.Equal(StatusDone, status)

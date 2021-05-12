@@ -15,7 +15,9 @@ import (
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/config"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
@@ -79,6 +81,8 @@ func main() {
 			manager.SetLogger(logging.Create("claim", logging.Prod))
 			storage.SetLogger(logging.Create("storage", logging.Prod))
 			formats.SetLogger(logging.Create("formats", logging.Prod))
+			mfr.SetLogger(logging.Create("mfr", logging.Prod))
+			dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
 		}
 
 		if CLI.Serve.CDN != "" {

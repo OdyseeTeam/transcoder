@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/mfr"
 
 	"github.com/stretchr/testify/suite"
@@ -23,8 +24,10 @@ func TestPoolSuite(t *testing.T) {
 }
 
 func (s *poolSuite) TestPool() {
-	var p1, p2, p3 int
 	rand.Seed(time.Now().UnixNano())
+	mfr.SetLogger(logging.Create("mfr", logging.Prod))
+
+	var p1, p2, p3 int
 	pool := NewPool()
 
 	s.Nil(pool.Next())
@@ -59,7 +62,7 @@ func (s *poolSuite) TestPool() {
 	s.Nil(pool.Next())
 
 	for range [1000]int{} {
-		c := element{randomString(96), randomString(25)}
+		c := &element{randomString(96), randomString(25)}
 		pool.Admit(c.url, c)
 	}
 

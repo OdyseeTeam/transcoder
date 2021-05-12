@@ -51,8 +51,8 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 
 	enc, err := encoder.NewEncoder(streamFH.Name(), localStream.FullPath())
 	if err != nil {
-		ll.Errorw("transcoding request rejected", "reason", "encoder initialization failure", "err", err)
 		r.Reject()
+		ll.Errorw("transcoding request rejected", "reason", "encoder initialization failure", "err", err)
 		return err
 	}
 
@@ -124,6 +124,7 @@ func SpawnEncoderWorkers(wnum int, mgr *manager.VideoManager) chan<- interface{}
 	requests := mgr.Requests()
 	go func() {
 		for {
+			time.Sleep(100 * time.Millisecond)
 			select {
 			case e := <-requests:
 				if e != nil {

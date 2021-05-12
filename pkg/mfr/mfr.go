@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"fmt"
 	"sync"
-	"time"
 )
 
 const (
@@ -47,15 +46,16 @@ func NewQueue() *Queue {
 	return queue
 }
 
-// Hit puts Item stoStatusActive at `key` higher up in the queue, or adds it to the bottom of the pile if the item is not present.
+// Hit puts Item stoStatusActive at `key` higher up in the queue, or inserts it to the bottom of the pile if the item is not present.
 func (q *Queue) Hit(key string, value interface{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	logger.Debugw("hit", "key", key, "pointer", fmt.Sprintf("%p", value))
 	if item, ok := q.entries[key]; ok {
+		logger.Debugw("increment", "key", key, "pointer", fmt.Sprintf("%p", value))
 		q.increment(item)
 	} else {
-		q.add(key, value)
+		logger.Debugw("insert", "key", key, "pointer", fmt.Sprintf("%p", value))
+		q.insert(key, value)
 	}
 }
 
@@ -107,11 +107,10 @@ func (q *Queue) pop(lockItem bool, minHits uint) *Item {
 				return nil
 			}
 			if status == StatusActive || status == StatusDone {
-				// To prevent high CPU usage
-				time.Sleep(10 * time.Millisecond)
 				continue
 			}
 			i = it
+			logger.Debugw("pop candidate", "key", i.key, "status", pos.entries[i], "neighbors", fmt.Sprintf("%v", pos.entries), "q", fmt.Sprintf("%p", q))
 			if lockItem {
 				pos.entries[i] = StatusActive
 			}
@@ -121,7 +120,7 @@ func (q *Queue) pop(lockItem bool, minHits uint) *Item {
 		top = top.Prev()
 	}
 	if i != nil {
-		logger.Debugw("pop", "key", i.key, "pointer", fmt.Sprintf("%p", i.Value), "hits", i.Hits())
+		logger.Debugw("pop", "key", i.key, "pointer", fmt.Sprintf("%p", i.Value), "hits", i.Hits(), "status", i.posParent.Value.(*Position).entries[i])
 	}
 	return i
 }
@@ -131,8 +130,8 @@ func (q *Queue) Release(key string) {
 	q.setStatus(key, StatusQueued)
 }
 
-// Fold marks the queue item as fully processed.
-func (q *Queue) Fold(key string) {
+// Done marks the queue item as fully processed.
+func (q *Queue) Done(key string) {
 	q.setStatus(key, StatusDone)
 }
 
@@ -150,7 +149,7 @@ func (q *Queue) setStatus(key string, status int) {
 	q.mu.Unlock()
 }
 
-func (q *Queue) add(key string, value interface{}) {
+func (q *Queue) insert(key string, value interface{}) {
 	posParent := q.positions.Front()
 	item := &Item{
 		key:       key,
@@ -166,6 +165,7 @@ func (q *Queue) add(key string, value interface{}) {
 
 func (q *Queue) increment(item *Item) {
 	pos := item.posParent.Value.(*Position)
+	status := pos.entries[item]
 	nextFreq := pos.freq + 1
 	delete(pos.entries, item)
 
@@ -173,7 +173,7 @@ func (q *Queue) increment(item *Item) {
 	if nextPosParent == nil || nextPosParent.Value.(*Position).freq > nextFreq {
 		nextPosParent = q.positions.InsertAfter(&Position{freq: nextFreq, entries: map[*Item]int{}}, item.posParent)
 	}
-	nextPosParent.Value.(*Position).entries[item] = StatusQueued
+	nextPosParent.Value.(*Position).entries[item] = status
 	item.posParent = nextPosParent
 	q.hits++
 }
@@ -185,10 +185,12 @@ func (i *Item) Hits() uint {
 
 // Release returns the item back into the queue for future possibility to be `Pop`ped again (it won't stop registering hits).
 func (i *Item) Release() {
+	logger.Debugw("release", "key", i.key)
 	i.queue.Release(i.key)
 }
 
-// Fold marks the item as fully processed (it won't stop registering hits).
-func (i *Item) Fold() {
-	i.queue.Release(i.key)
+// Done marks the item as fully processed (it won't stop registering hits).
+func (i *Item) Done() {
+	logger.Debugw("done", "key", i.key)
+	i.queue.Done(i.key)
 }

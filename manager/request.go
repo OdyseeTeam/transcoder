@@ -169,12 +169,12 @@ func (r *TranscodingRequest) Release() {
 
 func (r *TranscodingRequest) Reject() {
 	logger.Infow("transcoding request rejected", "lbry_url", r.URI)
-	r.queue.Fold(r.URI)
+	r.queue.Done(r.URI)
 }
 
 func (r *TranscodingRequest) Complete() {
 	logger.Infow("transcoding request completed", "lbry_url", r.URI)
-	r.queue.Fold(r.URI)
+	r.queue.Done(r.URI)
 }
 
 func (c *TranscodingRequest) streamFileName() string {

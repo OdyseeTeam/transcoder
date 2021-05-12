@@ -90,7 +90,7 @@ func (s *managerSuite) TestVideo() {
 	for _, u := range urlsDisabled {
 		v, err := mgr.Video(u)
 		s.Nil(v)
-		s.Equal(ErrChannelNotEnabled, err)
+		s.Equal(ErrTranscodingForbidden, err)
 	}
 
 	for _, u := range urlsNoChannel {
