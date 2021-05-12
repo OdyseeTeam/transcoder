@@ -15,7 +15,7 @@ import (
 
 const (
 	videoPlaylistPath      = "."
-	uriPrefix              = "lbry://"
+	channelURIPrefix       = "lbry://"
 	level5SupportThreshold = 1000
 )
 
@@ -26,7 +26,7 @@ var (
 
 func LoadEnabledChannels(channels []string) {
 	enabledChannels = apply(channels, func(e string) string {
-		return uriPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
+		return channelURIPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
 	})
 	logger.Infof("%v channels enabled", len(enabledChannels))
 }
@@ -47,6 +47,19 @@ func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
 			MaxSize(cacheSize)),
 	}
 
+	m.pool.AddQueue("level5", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
+		r := value.(*TranscodingRequest)
+		s := r.ChannelSupportAmount
+		r.ChannelSupportAmount = 0
+		if s >= level5SupportThreshold {
+			logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
+			r.queue = queue
+			queue.Hit(key, r)
+			return true
+		}
+		return false
+	})
+
 	// Check if channel should be added to enabled queue
 	m.pool.AddQueue("enabled", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
@@ -57,17 +70,6 @@ func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
 				queue.Hit(key, r)
 				return true
 			}
-		}
-		return false
-	})
-
-	m.pool.AddQueue("level5", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
-		r := value.(*TranscodingRequest)
-		if r.ChannelSupportAmount >= level5SupportThreshold {
-			logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
-			r.queue = queue
-			queue.Hit(key, r)
-			return true
 		}
 		return false
 	})
@@ -104,6 +106,7 @@ func (m *VideoManager) Library() video.VideoLibrary {
 // Video checks if video exists in the library or waiting in one of the queues.
 // If neither, it adds claim to the pool for later processing.
 func (m *VideoManager) Video(uri string) (*video.Video, error) {
+	uri = strings.TrimPrefix(uri, "lbry://")
 	tr, err := m.resolveRequest(uri)
 	if err != nil {
 		return nil, err

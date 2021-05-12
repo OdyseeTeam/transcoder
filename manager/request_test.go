@@ -10,14 +10,14 @@ import (
 )
 
 func TestTranscodingRequestResolve(t *testing.T) {
-	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := Resolve(url)
 	require.NoError(t, err)
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
 }
 
 func TestTranscodingRequestDownload(t *testing.T) {
-	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := Resolve(url)
 	require.NoError(t, err)
 

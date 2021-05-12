@@ -103,38 +103,34 @@ func main() {
 			logger.Fatal(err)
 		}
 
-		wasabi := cfg.GetStringMapString("wasabi")
+		s3cfg := cfg.GetStringMapString("s3")
 		local := cfg.GetStringMapString("local")
 
 		libCfg := video.Configure().
 			LocalStorage(storage.Local(CLI.Serve.VideoPath)).
 			MaxLocalSize(local["maxsize"]).
-			MaxRemoteSize(wasabi["maxsize"]).
+			MaxRemoteSize(s3cfg["maxsize"]).
 			DB(vdb)
 
-		if wasabi["bucket"] != "" {
+		if s3cfg["bucket"] != "" {
 			s3d, err := storage.InitS3Driver(
-				storage.S3ConfigureWasabiEU().
-					Credentials(wasabi["key"], wasabi["secret"]).
-					Bucket(wasabi["bucket"]))
+				storage.S3Configure().
+					Endpoint(s3cfg["endpoint"]).
+					Credentials(s3cfg["key"], s3cfg["secret"]).
+					Bucket(s3cfg["bucket"]))
 			if err != nil {
-				logger.Fatalw("wasabi driver initialization failed", "err", err)
+				logger.Fatalw("s3 driver initialization failed", "err", err)
 			}
 			libCfg.RemoteStorage(s3d)
-			logger.Infow("wasabi storage configured", "bucket", wasabi["bucket"])
+			logger.Infow("s3 storage configured", "bucket", s3cfg["bucket"])
 		}
 		lib := video.NewLibrary(libCfg)
 
-		if wasabi["bucket"] != "" {
+		if s3cfg["bucket"] != "" {
 			video.Spawns3uploader(lib)
 		}
 
 		manager.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
-
-		// poller := q.StartPoller(CLI.Serve.Workers)
-		// for i := 0; i < CLI.Serve.Workers; i++ {
-		// go video.SpawnProcessing(lib)
-		// }
 
 		video.SpawnLibraryCleaning(lib)
 

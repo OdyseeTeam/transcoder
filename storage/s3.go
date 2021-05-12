@@ -19,7 +19,7 @@ type S3Configuration struct {
 }
 
 func S3Configure() *S3Configuration {
-	return &S3Configuration{}
+	return &S3Configuration{region: "us-east-1"}
 }
 
 // Endpoint ...
@@ -51,14 +51,6 @@ func (c *S3Configuration) Credentials(accessKey, secretKey string) *S3Configurat
 	c.accessKey = accessKey
 	c.secretKey = secretKey
 	return c
-}
-
-func S3ConfigureWasabi() *S3Configuration {
-	return S3Configure().Region("us-east-1").Endpoint("https://s3.wasabisys.com")
-}
-
-func S3ConfigureWasabiEU() *S3Configuration {
-	return S3ConfigureWasabi().Endpoint("s3.eu-central-1.wasabisys.com")
 }
 
 func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
@@ -97,8 +89,6 @@ type S3Driver struct {
 }
 
 func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
-	var url string
-
 	svc := s3manager.NewUploader(s.session)
 
 	err := lstream.Dive(
@@ -108,8 +98,8 @@ func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
 			if path.Ext(name) == PlaylistExt {
 				ctype = PlaylistContentType
 			}
-			logger.Debugw("preparing upload", "key", s3Key(lstream.sdHash, name), "ctype", ctype, "size", len(data), "bucket", s.bucket)
-			out, err := svc.Upload(&s3manager.UploadInput{
+			logger.Debugw("uploading", "key", s3Key(lstream.sdHash, name), "ctype", ctype, "size", len(data), "bucket", s.bucket)
+			_, err := svc.Upload(&s3manager.UploadInput{
 				Bucket:      aws.String(s.bucket),
 				Key:         aws.String(s3Key(lstream.sdHash, name)),
 				ContentType: aws.String(ctype),
@@ -119,14 +109,11 @@ func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
 			if err != nil {
 				return err
 			}
-			if name == MasterPlaylistName {
-				url = out.Location
-			}
 			return nil
 		},
 	)
 
-	return &RemoteStream{url: url}, err
+	return &RemoteStream{url: lstream.sdHash}, err
 }
 
 func (s *S3Driver) Delete(sdHash string) error {

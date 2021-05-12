@@ -11,7 +11,7 @@ func TestVideo(t *testing.T) {
 	var url string
 	var remote bool
 
-	v = &Video{Path: "ashsadasldkhaw", RemotePath: "http://s3/ashsadasldkhaw/master.m3u8"}
+	v = &Video{Path: "ashsadasldkhaw", RemotePath: "ashsadasldkhaw"}
 	url, remote = v.GetLocation()
 	assert.False(t, remote)
 	assert.Equal(t, "ashsadasldkhaw/master.m3u8", url)
@@ -21,8 +21,8 @@ func TestVideo(t *testing.T) {
 	assert.False(t, remote)
 	assert.Equal(t, "ashsadasldkhaw/master.m3u8", url)
 
-	v = &Video{Path: "", RemotePath: "http://s3/ashsadasldkhaw/master.m3u8"}
+	v = &Video{Path: "", RemotePath: "ashsadasldkhaw"}
 	url, remote = v.GetLocation()
 	assert.True(t, remote)
-	assert.Equal(t, v.RemotePath, url)
+	assert.Equal(t, "https://na-storage-1.transcoder.odysee.com/t-na/ashsadasldkhaw/master.m3u8", url)
 }

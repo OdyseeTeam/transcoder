@@ -95,12 +95,12 @@ func (s *integSuite) TestStreamQueuedLevel5() {
 // }
 
 func (s *integSuite) TestStreamQueuedCommon() {
-	lbryUrl := url.PathEscape("lbry://@specialoperationstest#3/fear-of-death-inspirational#a")
+	lbryUrl := url.PathEscape("@specialoperationstest#3/fear-of-death-inspirational#a")
 
 	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), lbryUrl))
 	s.Require().NoError(err)
 	s.equalResponse(http.StatusForbidden, manager.ErrTranscodingForbidden.Error(), resp)
-	s.Equal(mfr.StatusQueued, s.mgr.RequestStatus("lbry://@specialoperationstest#3/fear-of-death-inspirational#a"))
+	s.Equal(mfr.StatusQueued, s.mgr.RequestStatus("@specialoperationstest#3/fear-of-death-inspirational#a"))
 }
 
 func (s *integSuite) equalResponse(expCode int, expBody string, resp *http.Response) {

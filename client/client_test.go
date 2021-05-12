@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-var streamURL = "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+var streamURL = "@specialoperationstest#3/fear-of-death-inspirational#a"
 var streamSDHash = "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 
 type ClientSuite struct {

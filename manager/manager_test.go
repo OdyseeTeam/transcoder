@@ -2,6 +2,7 @@ package manager
 
 import (
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -57,17 +58,17 @@ func (s *managerSuite) TestVideo() {
 		})
 
 	urlsEnabled := []string{
-		"lbry://@davidpakman#7/vaccination-delays-and-more-biden-picks#8",
-		"lbry://@specialoperationstest#3/fear-of-death-inspirational#a",
+		"@davidpakman#7/vaccination-delays-and-more-biden-picks#8",
+		"@specialoperationstest#3/fear-of-death-inspirational#a",
 	}
 	urlsLevel5 := []string{
-		"lbry://@samtime#1/airpods-max-parody-ehh-pods-max#7",
+		"@samtime#1/airpods-max-parody-ehh-pods-max#7",
 	}
 	urlsDisabled := []string{
-		"lbry://@TRUTH#2/what-do-you-know-what-do-you-believe#2",
+		"@TRUTH#2/what-do-you-know-what-do-you-believe#2",
 	}
 	urlsNoChannel := []string{
-		"lbry://what#1",
+		"what#1",
 	}
 	urlsNotFound := []string{
 		randomString(96),
@@ -114,6 +115,8 @@ func (s *managerSuite) TestVideo() {
 			break
 		}
 	}
+	sort.Strings(expectedUrls)
+	sort.Strings(receivedUrls)
 	s.Equal(expectedUrls, receivedUrls)
 
 }
@@ -127,7 +130,7 @@ func (s *managerSuite) TestRequests() {
 		})
 
 	mgr := NewManager(&vlib{ret: nil}, 0)
-	mgr.Video("lbry://@specialoperationstest#3/fear-of-death-inspirational#a")
+	mgr.Video("@specialoperationstest#3/fear-of-death-inspirational#a")
 	out := mgr.Requests()
 	r1 = <-out
 

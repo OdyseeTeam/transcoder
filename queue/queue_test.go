@@ -32,7 +32,7 @@ func (s *QueueSuite) SetupTest() {
 
 func (s *QueueSuite) TestQueueAdd() {
 	q := NewQueue(s.db)
-	url := "lbry://" + db.RandomString(32)
+	url := "" + db.RandomString(32)
 	sdHash := db.RandomString(96)
 	task, err := q.Add(url, sdHash, formats.TypeHLS)
 	s.Require().NoError(err)
@@ -43,7 +43,7 @@ func (s *QueueSuite) TestQueueAdd() {
 
 func (s *QueueSuite) TestQueueGetBySDHash() {
 	q := NewQueue(s.db)
-	url := "lbry://" + db.RandomString(32)
+	url := "" + db.RandomString(32)
 	sdHash := db.RandomString(96)
 
 	task, err := q.GetBySDHash(sdHash)
@@ -63,7 +63,7 @@ func (s *QueueSuite) TestQueuePoll() {
 	var err error
 	q := NewQueue(s.db)
 	for range [100]int{} {
-		_, err = q.Add(fmt.Sprintf("lbry://%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
+		_, err = q.Add(fmt.Sprintf("%v", db.RandomString(32)), db.RandomString(96), formats.TypeHLS)
 		s.Require().NoError(err)
 	}
 
