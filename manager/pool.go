@@ -7,6 +7,8 @@ import (
 	"github.com/lbryio/transcoder/pkg/mfr"
 )
 
+var pollTimeout = 50 * time.Millisecond
+
 type level struct {
 	name    string
 	queue   *mfr.Queue
@@ -90,10 +92,10 @@ func (p *Pool) Start() {
 		item := l.queue.MinPop(l.minHits)
 		if item == nil {
 			// Non-stop polling will cause excessive CPU load.
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(pollTimeout)
 			continue
 		}
-		logger.Named("pool").Debugf("popping item %v (queue: %+v)", item.Value, l.queue)
+		logger.Named("pool").Debugf("popping item %v", item.Value)
 		p.out <- item
 	}
 }
@@ -107,7 +109,7 @@ func (p *Pool) Next() *mfr.Item {
 	select {
 	case e := <-p.out:
 		return e
-	case <-time.After(20 * time.Millisecond):
+	case <-time.After(pollTimeout + 20*time.Millisecond):
 		return nil
 	}
 }

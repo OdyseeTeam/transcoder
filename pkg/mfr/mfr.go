@@ -51,8 +51,8 @@ func (q *Queue) Hit(key string, value interface{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if item, ok := q.entries[key]; ok {
-		logger.Debugw("increment", "key", key, "pointer", fmt.Sprintf("%p", value))
 		q.increment(item)
+		logger.Debugw("increment", "key", key, "pointer", fmt.Sprintf("%p", value), "hits", item.Hits())
 	} else {
 		logger.Debugw("insert", "key", key, "pointer", fmt.Sprintf("%p", value))
 		q.insert(key, value)
@@ -120,7 +120,7 @@ func (q *Queue) pop(lockItem bool, minHits uint) *Item {
 		top = top.Prev()
 	}
 	if i != nil {
-		logger.Debugw("pop", "key", i.key, "pointer", fmt.Sprintf("%p", i.Value), "hits", i.Hits(), "status", i.posParent.Value.(*Position).entries[i])
+		logger.Debugw("pop", "key", i.key, "pointer", fmt.Sprintf("%p", i.Value), "hits", i.Hits())
 	}
 	return i
 }

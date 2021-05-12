@@ -161,19 +161,6 @@ func (d *Dispatcher) Dispatch(payload interface{}) *Result {
 	return r
 }
 
-func (d *Dispatcher) TryDispatch(payload interface{}) *Result {
-	r := &Result{Status: TaskPending}
-	select {
-	case d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}:
-		DispatcherQueueLength.Inc()
-		DispatcherTasksQueued.Inc()
-	default:
-		DispatcherTasksDropped.Inc()
-		r.Status = TaskDropped
-	}
-	return r
-}
-
 func (d Dispatcher) Stop() {
 	d.sigChan <- sigStop
 	d.gwait.Wait()

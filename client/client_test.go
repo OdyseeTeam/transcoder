@@ -117,7 +117,8 @@ func (s *ClientSuite) Test_sdHashRe() {
 
 func (s *ClientSuite) Test_fragmentURL() {
 	dstPath := path.Join(s.assetsPath, "Test_fragmentURL")
-	c := New(Configure().Server("http://" + s.httpAPI.Addr()).VideoPath(dstPath).LogLevel(Dev))
+	// c := New(Configure().Server("http://" + s.httpAPI.Addr()).VideoPath(dstPath).LogLevel(Dev))
+	c := New(Configure().Server("http://t0.lbry.tv:18018").VideoPath(dstPath).LogLevel(Dev))
 
 	u, err := c.fragmentURL("morgan", "0b8dfc049b2165fad5829aca24f2ddfae3acef8d73bc5e04ff8b932fce9fc463dc6cf3e638413f04536638d2e7218427", "master.m3u8")
 	s.Require().Error(err)

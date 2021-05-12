@@ -61,7 +61,7 @@ func (s *poolSuite) TestPool() {
 
 	s.Nil(pool.Next())
 
-	for range [1000]int{} {
+	for range [10]int{} {
 		c := &element{randomString(96), randomString(25)}
 		pool.Admit(c.url, c)
 	}
@@ -71,12 +71,14 @@ func (s *poolSuite) TestPool() {
 	s.GreaterOrEqual(pool.levels[2].queue.Hits(), uint(1))
 
 	total := 0
-	for total < 1000 {
-		e := pool.Next()
+	for e := range pool.Out() {
 		s.Require().NotNil(e, "pool is exhausted with %v hits", total)
 		total += int(e.Hits())
+		if total >= 10 {
+			break
+		}
 	}
-	s.Equal(total, 1000)
+	s.Equal(10, total)
 }
 
 func (s *poolSuite) TestPoolMinHits() {
@@ -90,7 +92,7 @@ func (s *poolSuite) TestPoolMinHits() {
 	go pool.Start()
 	s.Nil(pool.Next())
 
-	c := element{randomString(96), randomString(25)}
+	c := &element{randomString(96), randomString(25)}
 	pool.Admit(c.url, c)
 	s.Nil(pool.Next())
 
@@ -101,13 +103,10 @@ func (s *poolSuite) TestPoolMinHits() {
 
 	pool.Admit(c.url, c)
 
-	go func() {
-		e := pool.Next()
-		s.Require().NotNil(e)
-		s.Equal(c, e.Value.(element))
-	}()
+	e := pool.Next()
+	s.Require().NotNil(e)
+	s.Equal(c, e.Value.(*element))
 
-	go func() {
-		s.Nil(pool.Next())
-	}()
+	pool.Admit(c.url, c)
+	s.Nil(pool.Next())
 }
