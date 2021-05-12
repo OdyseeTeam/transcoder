@@ -2,7 +2,9 @@ package mfr
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
+	"time"
 )
 
 const (
@@ -49,6 +51,7 @@ func NewQueue() *Queue {
 func (q *Queue) Hit(key string, value interface{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	logger.Debugw("hit", "key", key, "pointer", fmt.Sprintf("%p", value))
 	if item, ok := q.entries[key]; ok {
 		q.increment(item)
 	} else {
@@ -77,39 +80,48 @@ func (q *Queue) Pop() *Item {
 	return q.pop(true, 0)
 }
 
-// Peek returns the top-most item of the queue without marking it as being processed.
+// MinPeek returns the top-most item of the queue if it has a required minimum of hits, without marking it as being processed.
 func (q *Queue) MinPeek(minHits uint) *Item {
 	return q.pop(false, minHits)
 }
 
-// Pop returns the top-most item of the queue and marks it as being processed so consecutive calls will return subsequent items.
+// MinPop returns the top-most item of the queue if it has a required minimum of hits
+// and marks it as being processed so consecutive calls will return subsequent items.
 func (q *Queue) MinPop(minHits uint) *Item {
 	return q.pop(true, minHits)
 }
 
 func (q *Queue) pop(lockItem bool, minHits uint) *Item {
-	var i *Item
+	var (
+		i, it  *Item
+		status int
+	)
 	top := q.positions.Back()
 
 	for top != nil && i == nil {
 		pos := top.Value.(*Position)
 		q.mu.Lock()
-		for it, status := range pos.entries {
+		for it, status = range pos.entries {
 			if it.Hits() < minHits {
 				q.mu.Unlock()
 				return nil
 			}
 			if status == StatusActive || status == StatusDone {
+				// To prevent high CPU usage
+				time.Sleep(10 * time.Millisecond)
 				continue
 			}
 			i = it
 			if lockItem {
-				pos.entries[it] = StatusActive
+				pos.entries[i] = StatusActive
 			}
 			break
 		}
 		q.mu.Unlock()
 		top = top.Prev()
+	}
+	if i != nil {
+		logger.Debugw("pop", "key", i.key, "pointer", fmt.Sprintf("%p", i.Value), "hits", i.Hits())
 	}
 	return i
 }
