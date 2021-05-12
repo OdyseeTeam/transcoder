@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/timer"
-	"github.com/lbryio/transcoder/video"
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"
@@ -236,7 +236,7 @@ func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
 		switch res.StatusCode {
 		case http.StatusForbidden:
 			TranscodedResult.WithLabelValues(resultForbidden).Inc()
-			return "", video.ErrChannelNotEnabled
+			return "", manager.ErrChannelNotEnabled
 		case http.StatusNotFound:
 			TranscodedResult.WithLabelValues(resultNotFound).Inc()
 			return "", errors.New("stream not found")

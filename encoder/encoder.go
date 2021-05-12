@@ -24,9 +24,14 @@ var ffmpegConf = ffmpeg.Config{
 	Verbose:         false,
 }
 
-type Encoder struct {
+type Encoder interface {
+	Encode() (<-chan ffmpegt.Progress, error)
+	Meta() *ffmpeg.Metadata
+}
+
+type encoder struct {
 	in, out string
-	Meta    *ffmpeg.Metadata
+	meta    *ffmpeg.Metadata
 }
 
 func init() {
@@ -52,21 +57,25 @@ func firstExistingFile(paths []string) string {
 	return ""
 }
 
-func NewEncoder(in, out string) (*Encoder, error) {
+func NewEncoder(in, out string) (Encoder, error) {
 	if ffmpegConf.FfmpegBinPath == "" || ffmpegConf.FfprobeBinPath == "" {
 		return nil, errors.New("ffmpeg/ffprobe not found")
 	}
-	e := &Encoder{in: in, out: out}
+	e := &encoder{in: in, out: out}
 	meta, err := GetMetadata(e.in)
 	if err != nil {
 		return nil, err
 	}
-	e.Meta = meta
+	e.meta = meta
 	return e, nil
 }
 
+func (e *encoder) Meta() *ffmpeg.Metadata {
+	return e.meta
+}
+
 // Encode does transcoding of specified video file into a series of HLS streams.
-func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
+func (e *encoder) Encode() (<-chan ffmpegt.Progress, error) {
 	ll := logger.With("in", e.in)
 	conf := ffmpegConf
 	conf.OutputDir = e.out
@@ -75,12 +84,12 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 		return nil, err
 	}
 
-	targetFormats, err := formats.TargetFormats(formats.H264, e.Meta)
+	targetFormats, err := formats.TargetFormats(formats.H264, e.meta)
 	if err != nil {
 		return nil, err
 	}
 
-	fps, err := formats.DetectFPS(e.Meta)
+	fps, err := formats.DetectFPS(e.meta)
 	if err != nil {
 		return nil, err
 	}
@@ -90,18 +99,18 @@ func (e *Encoder) Encode() (<-chan ffmpegt.Progress, error) {
 		return nil, err
 	}
 
-	vs := formats.GetVideoStream(e.Meta)
+	vs := formats.GetVideoStream(e.meta)
 	ll.Infow(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
-		"media_duration", e.Meta.GetFormat().GetDuration(),
-		"media_bitrate", e.Meta.GetFormat().GetBitRate(),
+		"media_duration", e.meta.GetFormat().GetDuration(),
+		"media_bitrate", e.meta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
 	)
 
-	dur, _ := strconv.ParseFloat(e.Meta.GetFormat().GetDuration(), 64)
-	btr, _ := strconv.ParseFloat(e.Meta.GetFormat().GetBitRate(), 64)
+	dur, _ := strconv.ParseFloat(e.meta.GetFormat().GetDuration(), 64)
+	btr, _ := strconv.ParseFloat(e.meta.GetFormat().GetBitRate(), 64)
 	metrics.EncodedDurationSeconds.Add(dur)
 	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
 

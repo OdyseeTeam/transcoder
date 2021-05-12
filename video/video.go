@@ -21,54 +21,56 @@ func Configure() *Config {
 	return &Config{}
 }
 
-// DB ...
+// DB is SQL DB instance which is used for storing videos.
 func (c *Config) DB(db *db.DB) *Config {
 	c.db = db
 	return c
 }
 
-// LocalStorage ...
+// LocalStorage is a local storage driver for accessing videos on disk.
 func (c *Config) LocalStorage(s storage.LocalDriver) *Config {
 	c.local = s
 	return c
 }
 
-// RemoteStorage ...
+// LocalStorage is a remote (S3) storage driver for accessing remote videos.
 func (c *Config) RemoteStorage(s storage.RemoteDriver) *Config {
 	c.remote = s
 	return c
 }
 
-// MaxLocalSize ...
 func (c *Config) MaxLocalSize(s string) *Config {
 	c.maxLocalSize = StringToSize(s)
 	return c
 }
 
-// MaxRemoteSize ...
 func (c *Config) MaxRemoteSize(s string) *Config {
 	c.maxRemoteSize = StringToSize(s)
 	return c
+}
+
+type VideoLibrary interface {
+	Get(sdHash string) (*Video, error)
+	New(sdHash string) *storage.LocalStream
+	Add(params AddParams) (*Video, error)
 }
 
 // Library contains methods for accessing videos database.
 type Library struct {
 	*Config
 	queries Queries
-	sweeper *sweeper
 }
 
 func NewLibrary(cfg *Config) *Library {
 	l := &Library{
 		Config:  cfg,
 		queries: Queries{cfg.db},
-		sweeper: NewSweeper(),
 	}
 	return l
 }
 
-func (q Library) IncViews(uri, sdHash string) {
-	q.sweeper.Inc(uri, sdHash)
+func (q Library) New(sdHash string) *storage.LocalStream {
+	return q.local.New(sdHash)
 }
 
 // Add records data about video into database.

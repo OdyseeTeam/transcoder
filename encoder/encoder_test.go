@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lbryio/transcoder/formats"
-	"github.com/lbryio/transcoder/pkg/claim"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -27,7 +27,7 @@ func (s *EncoderSuite) SetupSuite() {
 	s.out = path.Join(os.TempDir(), "EncoderSuite_out")
 
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := claim.Resolve(url)
+	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}

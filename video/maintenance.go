@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/lbryio/transcoder/formats"
-	"github.com/lbryio/transcoder/queue"
 )
 
 func toGB(s uint64) string {
@@ -61,58 +59,6 @@ func SpawnLibraryCleaning(lib *Library) chan<- bool {
 				}
 			case <-stopChan:
 				logger.Info("stopping library maintenance")
-				return
-			}
-		}
-	}()
-
-	return stopChan
-}
-
-// PopularSweeperOpts sets additional options for SpawnPopularSweeper routine.
-type PopularSweeperOpts struct {
-	// TopNumber limits the number of top viewed videos that will be added to queue every time.
-	TopNumber int
-	// LowerBound sets a lower limit for video views number to be considered.
-	LowerBound int
-	// Interval is the interval at which sweeping routine will be run.
-	Interval time.Duration
-}
-
-// SpawnPopularSweeper will tally up the count of rejected videos and pick top N of them
-// to be added to the queue.
-// For it to work, `lib.IncViews(url, sdHash)` should be called somewhere for every video that is requested but rejected.
-func SpawnPopularSweeper(lib *Library, q *queue.Queue, opts PopularSweeperOpts) chan<- bool {
-	sweepTicker := time.NewTicker(opts.Interval)
-	stopChan := make(chan bool)
-	ll := logger.Named("sweeper")
-	ll.Infow(
-		"starting",
-	)
-
-	go func() {
-		for {
-			select {
-			case <-sweepTicker.C:
-				items := lib.sweeper.Top(opts.TopNumber, opts.LowerBound)
-				added := []string{}
-				for _, i := range items {
-					q.Add(i.URL, i.SDHash, formats.TypeHLS)
-					added = append(added, fmt.Sprintf("{%v}%v", i.Count, i.URL))
-				}
-				lib.sweeper.Sweep(items)
-				if len(added) > 0 {
-					ll.Infow("added popular videos to queue", "urls", added)
-				} else {
-					lowItems := lib.sweeper.Top(3, 0)
-					lowURLs := []string{}
-					for _, i := range lowItems {
-						lowURLs = append(lowURLs, fmt.Sprintf("{%v}%v", i.Count, i.URL))
-					}
-					ll.Infow("not enough popular videos", "top3_urls", lowURLs)
-				}
-			case <-stopChan:
-				ll.Info("stopping")
 				return
 			}
 		}

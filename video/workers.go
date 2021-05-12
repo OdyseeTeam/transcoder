@@ -3,134 +3,127 @@ package video
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"path"
 	"time"
 
-	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/internal/metrics"
-	"github.com/lbryio/transcoder/pkg/claim"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
-	"github.com/lbryio/transcoder/pkg/timer"
-	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/pkg/mfr"
 
 	cmap "github.com/orcaman/concurrent-map"
 )
 
-func SpawnProcessing(q *queue.Queue, lib *Library, p *queue.Poller) {
+func SpawnProcessing(m *mfr.Queue, lib *Library) {
 	logger.Info("started video processor")
 	defer logger.Info("quit video processor")
 
-	for t := range p.IncomingTasks() {
-		ll := logger.Named("worker").With("url", t.URL, "task_id", t.ID)
+	// for t := range p.IncomingTasks() {
+	// 	ll := logger.Named("worker").With("url", t.URL, "task_id", t.ID)
 
-		c, err := claim.Resolve(t.URL)
-		if err != nil {
-			ll.Errorw("resolve failed", "err", err)
-			p.RejectTask(t)
-			continue
-		}
+	// 	c, err := claim.Resolve(t.URL)
+	// 	if err != nil {
+	// 		ll.Errorw("resolve failed", "err", err)
+	// 		p.RejectTask(t)
+	// 		continue
+	// 	}
 
-		ll.Infow("starting task")
-		p.StartTask(t)
-		streamFH, streamSize, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
-		metrics.DownloadedSizeMB.Add(float64(streamSize) / 1024 / 1024)
+	// 	ll.Infow("starting task")
+	// 	p.StartTask(t)
+	// 	streamFH, streamSize, err := c.Download(path.Join(os.TempDir(), "transcoder", "streams"))
+	// 	metrics.DownloadedSizeMB.Add(float64(streamSize) / 1024 / 1024)
 
-		if err != nil {
-			ll.Errorw("task released", "reason", "download failed", "err", err)
-			tErr := p.ReleaseTask(t)
-			if tErr != nil {
-				ll.Errorw("error releasing task", "tid", t.ID, "err", tErr)
-			}
-			continue
-		}
+	// 	if err != nil {
+	// 		ll.Errorw("task released", "reason", "download failed", "err", err)
+	// 		tErr := p.ReleaseTask(t)
+	// 		if tErr != nil {
+	// 			ll.Errorw("error releasing task", "tid", t.ID, "err", tErr)
+	// 		}
+	// 		continue
+	// 	}
 
-		ll = ll.With("file", streamFH.Name())
+	// 	ll = ll.With("file", streamFH.Name())
 
-		if err := streamFH.Close(); err != nil {
-			ll.Errorw("task released", "reason", "closing downloaded file failed", "err", err)
-			p.ReleaseTask(t)
-			continue
-		}
+	// 	if err := streamFH.Close(); err != nil {
+	// 		ll.Errorw("task released", "reason", "closing downloaded file failed", "err", err)
+	// 		p.ReleaseTask(t)
+	// 		continue
+	// 	}
 
-		tmr := timer.Start()
+	// 	tmr := timer.Start()
 
-		localStream := lib.local.New(c.SDHash)
+	// 	localStream := lib.local.New(c.SDHash)
 
-		enc, err := encoder.NewEncoder(streamFH.Name(), localStream.FullPath())
-		if err != nil {
-			ll.Errorw("task rejected", "reason", "encoder initialization failure", "err", err)
-			p.RejectTask(t)
-			continue
-		}
+	// 	enc, err := encoder.NewEncoder(streamFH.Name(), localStream.FullPath())
+	// 	if err != nil {
+	// 		ll.Errorw("task rejected", "reason", "encoder initialization failure", "err", err)
+	// 		p.RejectTask(t)
+	// 		continue
+	// 	}
 
-		ll.Infow("starting encoding")
+	// 	ll.Infow("starting encoding")
 
-		metrics.TranscodingRunning.Inc()
-		e, err := enc.Encode()
-		if err != nil {
-			ll.Errorw("task rejected", "reason", "encoding failure", "err", err)
-			p.RejectTask(t)
-			metrics.TranscodingRunning.Dec()
-			continue
-		}
+	// 	metrics.TranscodingRunning.Inc()
+	// 	e, err := enc.Encode()
+	// 	if err != nil {
+	// 		ll.Errorw("task rejected", "reason", "encoding failure", "err", err)
+	// 		p.RejectTask(t)
+	// 		metrics.TranscodingRunning.Dec()
+	// 		continue
+	// 	}
 
-		for i := range e {
-			ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
-			p.ProgressTask(t, i.GetProgress())
+	// 	for i := range e {
+	// 		ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
+	// 		p.ProgressTask(t, i.GetProgress())
 
-			if i.GetProgress() >= 99.9 {
-				p.CompleteTask(t)
-				metrics.TranscodingRunning.Dec()
-				metrics.TranscodingSpentSeconds.Add(tmr.Duration())
-				ll.Infow(
-					"encoding complete",
-					"out", localStream.FullPath(),
-					"seconds_spent", tmr.String(),
-					"duration", enc.Meta.Format.Duration,
-					"bitrate", enc.Meta.Format.GetBitRate(),
-				)
-				break
-			}
-		}
+	// 		if i.GetProgress() >= 99.9 {
+	// 			p.CompleteTask(t)
+	// 			metrics.TranscodingRunning.Dec()
+	// 			metrics.TranscodingSpentSeconds.Add(tmr.Duration())
+	// 			ll.Infow(
+	// 				"encoding complete",
+	// 				"out", localStream.FullPath(),
+	// 				"seconds_spent", tmr.String(),
+	// 				"duration", enc.Meta.Format.Duration,
+	// 				"bitrate", enc.Meta.Format.GetBitRate(),
+	// 			)
+	// 			break
+	// 		}
+	// 	}
 
-		time.Sleep(10 * time.Second)
-		err = localStream.ReadMeta()
-		if err != nil {
-			logger.Errorw("filling stream metadata failed", "err", err)
-		}
+	// 	time.Sleep(10 * time.Second)
+	// 	err = localStream.ReadMeta()
+	// 	if err != nil {
+	// 		logger.Errorw("filling stream metadata failed", "err", err)
+	// 	}
 
-		_, err = lib.Add(AddParams{
-			URL:      t.URL,
-			SDHash:   t.SDHash,
-			Type:     formats.TypeHLS,
-			Channel:  c.SigningChannel.CanonicalURL,
-			Path:     localStream.LastPath(),
-			Size:     localStream.Size(),
-			Checksum: localStream.Checksum(),
-		})
-		if err != nil {
-			logger.Errorw("adding to video library failed", "err", err)
-		}
+	// 	_, err = lib.Add(AddParams{
+	// 		URL:      t.URL,
+	// 		SDHash:   t.SDHash,
+	// 		Type:     formats.TypeHLS,
+	// 		Channel:  c.SigningChannel.CanonicalURL,
+	// 		Path:     localStream.LastPath(),
+	// 		Size:     localStream.Size(),
+	// 		Checksum: localStream.Checksum(),
+	// 	})
+	// 	if err != nil {
+	// 		logger.Errorw("adding to video library failed", "err", err)
+	// 	}
 
-		metrics.TranscodedCount.Inc()
-		metrics.TranscodedSizeMB.Add(float64(localStream.Size()) / 1024 / 1024)
+	// 	metrics.TranscodedCount.Inc()
+	// 	metrics.TranscodedSizeMB.Add(float64(localStream.Size()) / 1024 / 1024)
 
-		err = os.Remove(streamFH.Name())
-		if err != nil {
-			logger.Errorw("cleanup failed", "err", err)
-		}
-	}
+	// 	err = os.Remove(streamFH.Name())
+	// 	if err != nil {
+	// 		logger.Errorw("cleanup failed", "err", err)
+	// 	}
+	// }
 }
 
-type S3Uploader struct {
+type s3uploader struct {
 	lib        *Library
 	processing cmap.ConcurrentMap
 }
 
-func (u S3Uploader) Do(t dispatcher.Task) error {
+func (u s3uploader) Do(t dispatcher.Task) error {
 	v := t.Payload.(*Video)
 	u.processing.Set(v.SDHash, v)
 
@@ -172,10 +165,10 @@ func (u S3Uploader) Do(t dispatcher.Task) error {
 	return nil
 }
 
-func SpawnS3Uploader(lib *Library) dispatcher.Dispatcher {
+func Spawns3uploader(lib *Library) dispatcher.Dispatcher {
 	logger.Info("starting s3 uploader")
-	s3up := S3Uploader{lib: lib, processing: cmap.New()}
-	d := dispatcher.Start(5, s3up)
+	s3up := s3uploader{lib: lib, processing: cmap.New()}
+	d := dispatcher.Start(5, s3up, 100)
 	ticker := time.NewTicker(5 * time.Second)
 
 	go func() {

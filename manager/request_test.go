@@ -1,4 +1,4 @@
-package claim
+package manager
 
 import (
 	"os"
@@ -9,18 +9,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClaimResolve(t *testing.T) {
+func TestTranscodingRequestResolve(t *testing.T) {
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := Resolve(url)
 	require.NoError(t, err)
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
 }
 
-func TestClaimDownload(t *testing.T) {
+func TestTranscodingRequestDownload(t *testing.T) {
 	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := Resolve(url)
 	require.NoError(t, err)
-	f, n, err := c.Download(path.Join(os.TempDir(), "transcoder_test"))
+
+	r, err := ResolveRequest(url)
+	require.NoError(t, err)
+	f, n, err := r.Download(path.Join(os.TempDir(), "transcoder_test"))
 	f.Close()
 	require.NoError(t, err)
 

@@ -1,4 +1,4 @@
-package claim
+package manager
 
 import (
 	"encoding/hex"
@@ -6,21 +6,23 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	ljsonrpc "github.com/lbryio/lbry.go/v2/extras/jsonrpc"
+	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/pkg/timer"
 )
 
 var (
 	lbrytvAPI = "https://api.lbry.tv/api/v1/proxy"
 	cdnServer = "https://cdn.lbryplayer.xyz/api/v3/streams"
-)
 
-var (
 	lbrytvClient   = ljsonrpc.NewClient(lbrytvAPI)
 	downloadClient = &http.Client{
 		Timeout: 1200 * time.Second,
@@ -33,8 +35,6 @@ var (
 			ResponseHeaderTimeout: 15 * time.Second,
 		},
 	}
-
-	ErrStreamNotFound = errors.New("could not resolve stream URI")
 )
 
 type WriteCounter struct {
@@ -42,6 +42,13 @@ type WriteCounter struct {
 	Started        time.Time
 	URL            string
 	progressLogged map[int]bool
+}
+
+type TranscodingRequest struct {
+	queue *mfr.Queue
+
+	URI, Name, ClaimID, SDHash, ChannelURI, NormalizedName string
+	ChannelSupportAmount                                   int64
 }
 
 func (wc *WriteCounter) Write(p []byte) (int, error) {
@@ -60,43 +67,58 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-type Claim struct {
-	*ljsonrpc.Claim
-	SDHash string
+func ResolveRequest(uri string) (*TranscodingRequest, error) {
+	c, err := Resolve(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.SigningChannel == nil {
+		return nil, ErrNoSigningChannel
+	}
+
+	src := c.Value.GetStream().GetSource()
+	if src == nil {
+		return nil, errors.New("stream doesn't have source data")
+	}
+	h := hex.EncodeToString(src.SdHash)
+
+	ch := strings.Replace(strings.ToLower(c.SigningChannel.CanonicalURL), "#", ":", 1)
+	sup, _ := strconv.ParseFloat(c.SigningChannel.Meta.SupportAmount, 64)
+
+	r := &TranscodingRequest{
+		URI:                  uri,
+		SDHash:               h,
+		Name:                 c.Name,
+		NormalizedName:       c.NormalizedName,
+		ClaimID:              c.ClaimID,
+		ChannelURI:           ch,
+		ChannelSupportAmount: int64(math.Floor(sup)),
+	}
+	return r, nil
 }
 
-func Resolve(uri string) (*Claim, error) {
+func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	resolved, err := lbrytvClient.Resolve(uri)
 	if err != nil {
 		return nil, err
 	}
 
-	claim := (*resolved)[uri]
-	if claim.CanonicalURL == "" {
+	c, ok := (*resolved)[uri]
+	if !ok || c.CanonicalURL == "" {
 		return nil, ErrStreamNotFound
 	}
-	wc, err := wrapClaim(&claim)
-	if err != nil {
-		return nil, err
-	}
-	return wc, nil
-}
-
-func wrapClaim(lc *ljsonrpc.Claim) (*Claim, error) {
-	c := &Claim{lc, ""}
-	h, err := c.getSDHash()
-	if err != nil {
-		return nil, err
-	}
-	c.SDHash = h
-	return c, err
+	return &c, nil
 }
 
 // Download retrieves a video stream from the lbrytv CDN and saves it to a temporary file.
-func (c *Claim) Download(dest string) (*os.File, int64, error) {
+func (c *TranscodingRequest) Download(dest string) (*os.File, int64, error) {
 	var readLen int64
 
 	req, err := http.NewRequest("GET", c.cdnURL(), nil)
+	if err != nil {
+		return nil, 0, err
+	}
 	logger.Infow("downloading stream", "url", c.cdnURL())
 
 	tmr := timer.Start()
@@ -136,19 +158,26 @@ func (c *Claim) Download(dest string) (*os.File, int64, error) {
 	return out, readLen, nil
 }
 
-func (c *Claim) cdnURL() string {
+func (c *TranscodingRequest) cdnURL() string {
 	return fmt.Sprintf("%s/free/%s/%s/%s", cdnServer, c.Name, c.ClaimID, c.SDHash[:6])
 }
 
-func (c *Claim) getSDHash() (string, error) {
-	src := c.Value.GetStream().GetSource()
-	if src == nil {
-		return "", errors.New("stream doesn't have source data")
-	}
-	return hex.EncodeToString(src.SdHash), nil
+func (r *TranscodingRequest) Release() {
+	logger.Infow("transcoding request released", "lbry_url", r.URI)
+	r.queue.Release(r.URI)
 }
 
-func (c *Claim) streamFileName() string {
+func (r *TranscodingRequest) Reject() {
+	logger.Infow("transcoding request rejected", "lbry_url", r.URI)
+	r.queue.Fold(r.URI)
+}
+
+func (r *TranscodingRequest) Complete() {
+	logger.Infow("transcoding request completed", "lbry_url", r.URI)
+	r.queue.Fold(r.URI)
+}
+
+func (c *TranscodingRequest) streamFileName() string {
 	return c.SDHash
 }
 

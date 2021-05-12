@@ -9,11 +9,12 @@ import (
 	"testing"
 
 	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
+	"github.com/lbryio/transcoder/workers"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -23,7 +24,7 @@ var streamSDHash = "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c5
 type ClientSuite struct {
 	suite.Suite
 	assetsPath string
-	apiServer  *api.APIServer
+	httpAPI    *manager.HttpAPI
 }
 
 func TestClientSuite(t *testing.T) {
@@ -31,43 +32,48 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *ClientSuite) SetupTest() {
-	s.assetsPath = path.Join(os.TempDir(), "transcoder_test")
 	os.RemoveAll(s.assetsPath)
-	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "sqlite"), os.ModePerm))
 	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "videos"), os.ModePerm))
 	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "client"), os.ModePerm))
 
-	vdb := db.OpenDB(path.Join(s.assetsPath, "sqlite", "video.sqlite"))
-	vdb.MigrateUp(video.InitialMigration)
+	vdb := db.OpenTestDB()
+	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
 	qdb := db.OpenDB(path.Join(s.assetsPath, "sqlite", "queue.sqlite"))
 	qdb.MigrateUp(queue.InitialMigration)
 
-	lib := video.NewLibrary(
-		video.Configure().
-			LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
-			DB(vdb),
-	)
-	q := queue.NewQueue(qdb)
+	libCfg := video.Configure().
+		LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
+		DB(vdb)
+	lib := video.NewLibrary(libCfg)
 
-	poller := q.StartPoller(1)
-	go video.SpawnProcessing(q, lib, poller)
-	s.apiServer = api.NewServer(
-		api.Configure().
+	vdb = db.OpenTestDB()
+	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
+
+	mgr := manager.NewManager(lib, 0)
+
+	workers.SpawnEncoderWorkers(1, mgr)
+	s.httpAPI = manager.NewHttpAPI(
+		manager.ConfigureHttpAPI().
 			Debug(true).
 			Addr("127.0.0.1:50808").
 			VideoPath(path.Join(s.assetsPath, "videos")).
-			VideoManager(api.NewManager(q, lib)),
+			VideoManager(mgr),
 	)
-	go s.apiServer.Start()
+	go func() {
+		err := s.httpAPI.Start()
+		if err != nil {
+			s.FailNow(err.Error())
+		}
+	}()
 
-	video.LoadEnabledChannels(
+	manager.LoadEnabledChannels(
 		[]string{
 			"@specialoperationstest#3",
 		})
 }
 
 func (s *ClientSuite) TearDownTest() {
-	go s.apiServer.Shutdown()
+	go s.httpAPI.Shutdown()
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
@@ -111,7 +117,7 @@ func (s *ClientSuite) Test_sdHashRe() {
 
 func (s *ClientSuite) Test_fragmentURL() {
 	dstPath := path.Join(s.assetsPath, "Test_fragmentURL")
-	c := New(Configure().Server("http://t0.lbry.tv:18081").VideoPath(dstPath).LogLevel(Dev))
+	c := New(Configure().Server("http://" + s.httpAPI.Addr()).VideoPath(dstPath).LogLevel(Dev))
 
 	u, err := c.fragmentURL("morgan", "0b8dfc049b2165fad5829aca24f2ddfae3acef8d73bc5e04ff8b932fce9fc463dc6cf3e638413f04536638d2e7218427", "master.m3u8")
 	s.Require().Error(err)
