@@ -18,7 +18,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 	"github.com/lbryio/transcoder/workers"
@@ -75,7 +74,6 @@ func main() {
 
 		if !CLI.Serve.Debug {
 			db.SetLogger(logging.Create("db", logging.Prod))
-			queue.SetLogger(logging.Create("queue", logging.Prod))
 			encoder.SetLogger(logging.Create("encoder", logging.Prod))
 			video.SetLogger(logging.Create("video", logging.Prod))
 			manager.SetLogger(logging.Create("claim", logging.Prod))
@@ -93,12 +91,6 @@ func main() {
 
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
 		err := vdb.MigrateUp(video.InitialMigration)
-		if err != nil {
-			logger.Fatal(err)
-		}
-
-		qdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "queue.sqlite"))
-		err = qdb.MigrateUp(queue.InitialMigration)
 		if err != nil {
 			logger.Fatal(err)
 		}
