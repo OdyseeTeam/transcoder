@@ -7,6 +7,8 @@ import (
 )
 
 var (
+	once = sync.Once{}
+
 	QueueLength = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "transcoding_queue_length",
 		Help: "Video queue length",
@@ -24,7 +26,6 @@ var (
 )
 
 func RegisterMetrics() {
-	once := sync.Once{}
 	once.Do(func() {
 		prometheus.MustRegister(QueueLength, QueueHits, QueueItemAge)
 	})

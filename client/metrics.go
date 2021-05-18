@@ -17,6 +17,8 @@ const (
 )
 
 var (
+	once = sync.Once{}
+
 	TranscodedCacheSizeBytes = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoded_cache_size_bytes",
 	})
@@ -49,7 +51,6 @@ var (
 )
 
 func RegisterMetrics() {
-	once := sync.Once{}
 	once.Do(func() {
 		prometheus.MustRegister(
 			TranscodedCacheSizeBytes, TranscodedCacheItemsCount, TranscodedResult,

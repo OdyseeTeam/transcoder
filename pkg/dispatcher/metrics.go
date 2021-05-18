@@ -16,6 +16,8 @@ const (
 )
 
 var (
+	once = sync.Once{}
+
 	DispatcherQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "dispatcher_queue_length",
 	})
@@ -37,7 +39,6 @@ var (
 )
 
 func RegisterMetrics() {
-	once := sync.Once{}
 	once.Do(func() {
 		prometheus.MustRegister(
 			DispatcherQueueLength, DispatcherTasksActive, DispatcherTasksQueued,

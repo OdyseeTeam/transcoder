@@ -12,6 +12,8 @@ const (
 )
 
 var (
+	once = sync.Once{}
+
 	TranscodingRunning = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoding_running",
 	})
@@ -58,7 +60,6 @@ var (
 )
 
 func RegisterMetrics() {
-	once := sync.Once{}
 	once.Do(func() {
 		prometheus.MustRegister(
 			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount,

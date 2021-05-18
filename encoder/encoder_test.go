@@ -50,12 +50,12 @@ func (s *EncoderSuite) TestEncode() {
 	progress := 0.0
 	for p := range ch {
 		progress = p.GetProgress()
-		if progress >= 99.9 {
+		if progress >= 99.5 {
 			break
 		}
 	}
 
-	s.Require().GreaterOrEqual(progress, 99.9)
+	s.Require().GreaterOrEqual(progress, 99.5)
 
 	outFiles := map[string]string{
 		"master.m3u8": `
