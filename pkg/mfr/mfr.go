@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"sync"
+	"time"
 )
 
 const (
@@ -19,6 +20,7 @@ type Item struct {
 	Value     interface{}
 	queue     *Queue
 	posParent *list.Element
+	created   time.Time
 }
 
 type Position struct {
@@ -34,6 +36,8 @@ type Queue struct {
 	hits      uint
 	mu        sync.RWMutex
 }
+
+var now = func() time.Time { return time.Now() }
 
 // NewQueue initializes an empty priority queue suitable for registering Hits right away.
 func NewQueue() *Queue {
@@ -156,6 +160,7 @@ func (q *Queue) insert(key string, value interface{}) {
 		Value:     value,
 		queue:     q,
 		posParent: posParent,
+		created:   now(),
 	}
 	posParent.Value.(*Position).entries[item] = StatusQueued
 	q.entries[key] = item
@@ -178,6 +183,10 @@ func (q *Queue) increment(item *Item) {
 	q.hits++
 }
 
+func (q *Queue) Size() uint {
+	return q.size
+}
+
 // Hits returns the number of hits for the item.
 func (i *Item) Hits() uint {
 	return i.posParent.Value.(*Position).freq
@@ -193,4 +202,9 @@ func (i *Item) Release() {
 func (i *Item) Done() {
 	logger.Debugw("done", "key", i.key)
 	i.queue.Done(i.key)
+}
+
+// Age returns how many seconds have passed since the item was created.
+func (i *Item) Age() int {
+	return int(time.Since(i.created).Seconds())
 }

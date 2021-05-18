@@ -27,6 +27,8 @@ func TestMFRSuite(t *testing.T) {
 }
 
 func (s *mfrSuite) SetupTest() {
+	now = func() time.Time { return time.Now().Add(-30 * time.Second) }
+
 	SetLogger(logging.Create("mfr", logging.Prod))
 	rand.Seed(time.Now().UnixNano())
 
@@ -143,6 +145,8 @@ func (s *mfrSuite) TestGet() {
 	item, status = s.q.Get(s.popClaim1.url)
 	s.Equal(s.popClaim1, item.Value.(*claim))
 	s.Equal(StatusDone, status)
+
+	s.GreaterOrEqual(item.Age(), 30)
 }
 
 func randomString(n int) string {
