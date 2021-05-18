@@ -118,13 +118,14 @@ func main() {
 		}
 		lib := video.NewLibrary(libCfg)
 
+		var s3StopChan chan<- interface{}
 		if s3cfg["bucket"] != "" {
-			video.Spawns3uploader(lib)
+			s3StopChan = video.SpawnS3uploader(lib)
 		}
 
 		manager.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
 
-		video.SpawnLibraryCleaning(lib)
+		cleanStopChan := video.SpawnLibraryCleaning(lib)
 
 		adQueue := cfg.GetStringMapString("adaptivequeue")
 		minHits, _ := strconv.Atoi(adQueue["minhits"])
@@ -152,13 +153,24 @@ func main() {
 		signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 		sig := <-stopChan
+		logger.Infof("caught an %v signal, shutting down...", sig)
 
 		encStopChan <- true
+		logger.Infof("encoder shut down")
+
+		cleanStopChan <- true
+		logger.Infof("cleanup shut down")
 
 		mgr.Pool().Stop()
+		logger.Infof("manager shut down")
 
-		logger.Infof("caught an %v signal, shutting down", sig)
+		if s3StopChan != nil {
+			s3StopChan <- true
+			logger.Infof("S3 uploader shut down")
+		}
+
 		httpAPI.Shutdown()
+		logger.Infof("http API shut down")
 	default:
 		logger.Fatal(ctx.Command())
 	}

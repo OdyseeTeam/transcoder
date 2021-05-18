@@ -75,6 +75,9 @@ func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
 	r.GET("/api/v1/video/{kind:hls}/{url}", s.handleVideo)
 	r.GET("/api/v2/video/{url}", s.handleVideo)
 	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
+
+	metrics.RegisterMetrics()
+	RegisterMetrics()
 	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 
 	if !s.debug {

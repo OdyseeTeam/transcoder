@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path"
 
@@ -12,6 +13,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
+
+var ErrStreamExists = errors.New("stream already exists")
+
+type discardAt struct{}
+
+func (discardAt) WriteAt(p []byte, off int64) (int, error) {
+	return len(p), nil
+}
 
 type S3Configuration struct {
 	endpoint, region, accessKey, secretKey, bucket string
@@ -89,17 +98,26 @@ type S3Driver struct {
 }
 
 func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
-	svc := s3manager.NewUploader(s.session)
+	dl := s3manager.NewDownloader(s.session)
+	_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s3Key(lstream.sdHash, MasterPlaylistName)),
+	})
+	if err == nil {
+		return &RemoteStream{url: lstream.sdHash}, ErrStreamExists
+	}
 
-	err := lstream.Dive(
+	ul := s3manager.NewUploader(s.session)
+	err = lstream.Dive(
 		readFile,
 		func(data []byte, name string) error {
+
 			ctype := FragmentContentType
 			if path.Ext(name) == PlaylistExt {
 				ctype = PlaylistContentType
 			}
 			logger.Debugw("uploading", "key", s3Key(lstream.sdHash, name), "ctype", ctype, "size", len(data), "bucket", s.bucket)
-			_, err := svc.Upload(&s3manager.UploadInput{
+			_, err := ul.Upload(&s3manager.UploadInput{
 				Bucket:      aws.String(s.bucket),
 				Key:         aws.String(s3Key(lstream.sdHash, name)),
 				ContentType: aws.String(ctype),

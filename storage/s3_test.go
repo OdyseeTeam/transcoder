@@ -22,7 +22,7 @@ type s3suite struct {
 	sdHash  string
 }
 
-func Tests3suite(t *testing.T) {
+func TestS3suite(t *testing.T) {
 	suite.Run(t, new(s3suite))
 }
 
@@ -62,6 +62,10 @@ func (s *s3suite) TestPutDelete() {
 	p, err := s3drv.GetFragment(s.sdHash, MasterPlaylistName)
 	s.Require().NoError(err)
 	s.Require().NotNil(p)
+
+	rstream2, err := s3drv.Put(stream)
+	s.Equal(rstream2.URL(), rstream.URL())
+	s.Equal(err, ErrStreamExists)
 
 	err = s3drv.Delete(s.sdHash)
 	s.Require().NoError(err)

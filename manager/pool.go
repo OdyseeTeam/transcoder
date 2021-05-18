@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/mfr"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var pollTimeout = 50 * time.Millisecond
@@ -47,21 +48,29 @@ func (p *Pool) Admit(key string, value interface{}) error {
 	for i, level := range p.levels {
 		q := level.queue
 		_, s := level.queue.Get(key)
+
+		mql := QueueLength.With(prometheus.Labels{"queue": level.name})
+		mqh := QueueHits.With(prometheus.Labels{"queue": level.name})
 		switch s {
 		case mfr.StatusNone:
 			if level.keeper(key, value, level.queue) {
+				mql.Inc()
+				mqh.Inc()
 				if i == len(p.levels)-1 {
 					return ErrTranscodingForbidden
 				}
 				return ErrTranscodingQueued
 			}
 		case mfr.StatusActive:
+			mqh.Inc()
 			q.Hit(key, value)
 			return ErrTranscodingUnderway
 		case mfr.StatusQueued:
+			mqh.Inc()
 			q.Hit(key, value)
 			return ErrTranscodingQueued
 		case mfr.StatusDone:
+			mqh.Inc()
 			q.Hit(key, value)
 			// This is to prevent race conditions when the item has been transcoded already
 			// while the request is still in flight.
@@ -96,6 +105,8 @@ func (p *Pool) Start() {
 			continue
 		}
 		logger.Named("pool").Debugf("popping item %v", item.Value)
+		QueueLength.With(prometheus.Labels{"queue": l.name}).Dec()
+		QueueItemAge.With(prometheus.Labels{"queue": l.name}).Observe(float64(item.Age()))
 		p.out <- item
 	}
 }

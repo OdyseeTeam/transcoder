@@ -47,20 +47,6 @@ func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
 			MaxSize(cacheSize)),
 	}
 
-	m.pool.AddQueue("level5", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
-		r := value.(*TranscodingRequest)
-		s := r.ChannelSupportAmount
-		r.ChannelSupportAmount = 0
-		if s >= level5SupportThreshold {
-			logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
-			r.queue = queue
-			queue.Hit(key, r)
-			return true
-		}
-		return false
-	})
-
-	// Check if channel should be added to enabled queue
 	m.pool.AddQueue("enabled", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
 		for _, e := range enabledChannels {
@@ -70,6 +56,19 @@ func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
 				queue.Hit(key, r)
 				return true
 			}
+		}
+		return false
+	})
+
+	m.pool.AddQueue("level5", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
+		r := value.(*TranscodingRequest)
+		s := r.ChannelSupportAmount
+		r.ChannelSupportAmount = 0
+		if s >= level5SupportThreshold {
+			logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
+			r.queue = queue
+			queue.Hit(key, r)
+			return true
 		}
 		return false
 	})

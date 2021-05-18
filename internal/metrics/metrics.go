@@ -1,8 +1,9 @@
 package metrics
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -11,30 +12,30 @@ const (
 )
 
 var (
-	TranscodingRunning = promauto.NewGauge(prometheus.GaugeOpts{
+	TranscodingRunning = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoding_running",
 	})
 
-	TranscodingSpentSeconds = promauto.NewCounter(prometheus.CounterOpts{
+	TranscodingSpentSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_spent_seconds",
 	})
-	TranscodedSizeMB = promauto.NewCounter(prometheus.CounterOpts{
+	TranscodedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_size_mb",
 	})
-	TranscodedCount = promauto.NewCounter(prometheus.CounterOpts{
+	TranscodedCount = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_count",
 	})
-	DownloadedSizeMB = promauto.NewCounter(prometheus.CounterOpts{
+	DownloadedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "downloaded_size_mb",
 	})
-	S3UploadedSizeMB = promauto.NewCounter(prometheus.CounterOpts{
+	S3UploadedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "s3_uploaded_size_mb",
 	})
 
-	EncodedDurationSeconds = promauto.NewCounter(prometheus.CounterOpts{
+	EncodedDurationSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "encoded_duration_seconds",
 	})
-	EncodedBitrateMbit = promauto.NewHistogramVec(
+	EncodedBitrateMbit = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "encoded_bitrate_mbit",
 			Buckets: []float64{0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 10, 15, 20, 25, 30},
@@ -42,11 +43,11 @@ var (
 		[]string{"resolution"},
 	)
 
-	StreamsRequestedCount = promauto.NewCounterVec(prometheus.CounterOpts{
+	StreamsRequestedCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "streams_requested_count",
 	}, []string{"storage"})
 
-	HTTPAPIRequests = promauto.NewHistogramVec(
+	HTTPAPIRequests = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "http_api_requests",
 			Help:    "Method call latency distributions",
@@ -55,3 +56,15 @@ var (
 		[]string{"status_code"},
 	)
 )
+
+func RegisterMetrics() {
+	once := sync.Once{}
+	once.Do(func() {
+		prometheus.MustRegister(
+			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount,
+			DownloadedSizeMB, S3UploadedSizeMB, EncodedDurationSeconds, EncodedBitrateMbit,
+			StreamsRequestedCount, HTTPAPIRequests,
+		)
+	})
+
+}

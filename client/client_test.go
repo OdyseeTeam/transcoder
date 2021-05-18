@@ -11,7 +11,6 @@ import (
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/manager"
-	"github.com/lbryio/transcoder/queue"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 	"github.com/lbryio/transcoder/workers"
@@ -38,8 +37,6 @@ func (s *ClientSuite) SetupTest() {
 
 	vdb := db.OpenTestDB()
 	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
-	qdb := db.OpenDB(path.Join(s.assetsPath, "sqlite", "queue.sqlite"))
-	qdb.MigrateUp(queue.InitialMigration)
 
 	libCfg := video.Configure().
 		LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).

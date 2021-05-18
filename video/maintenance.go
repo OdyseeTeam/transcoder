@@ -11,7 +11,7 @@ func toGB(s uint64) string {
 	return fmt.Sprintf("%.2fGB", datasize.ByteSize(s).GBytes())
 }
 
-func SpawnLibraryCleaning(lib *Library) chan<- bool {
+func SpawnLibraryCleaning(lib *Library) chan<- interface{} {
 	mls := toGB(lib.maxLocalSize)
 	mrs := toGB(lib.maxRemoteSize)
 	logger.Infow(
@@ -21,7 +21,7 @@ func SpawnLibraryCleaning(lib *Library) chan<- bool {
 	)
 	furloughTicker := time.NewTicker(5 * time.Minute)
 	retireTicker := time.NewTicker(24 * time.Hour)
-	stopChan := make(chan bool)
+	stopChan := make(chan interface{})
 
 	go func() {
 		for {

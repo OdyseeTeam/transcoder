@@ -156,6 +156,9 @@ func New(cfg *Configuration) Client {
 		ItemsToPrune(c.itemsToPrune).
 		OnDelete(c.deleteCachedFragment),
 	)
+
+	RegisterMetrics()
+
 	c.logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
 	return c
 }
