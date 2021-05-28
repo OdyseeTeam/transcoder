@@ -50,9 +50,6 @@ func (s *EncoderSuite) TestEncode() {
 	progress := 0.0
 	for p := range ch {
 		progress = p.GetProgress()
-		if progress >= 99.5 {
-			break
-		}
 	}
 
 	s.Require().GreaterOrEqual(progress, 99.5)

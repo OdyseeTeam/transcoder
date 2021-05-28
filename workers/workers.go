@@ -69,22 +69,17 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 
 	for i := range e {
 		ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
-		// p.ProgressTask(t, i.GetProgress())
-
-		if i.GetProgress() >= 99.9 {
-			r.Complete()
-			metrics.TranscodingRunning.Dec()
-			metrics.TranscodingSpentSeconds.Add(tmr.Duration())
-			ll.Infow(
-				"encoding complete",
-				"out", localStream.FullPath(),
-				"seconds_spent", tmr.String(),
-				"duration", enc.Meta().Format.Duration,
-				"bitrate", enc.Meta().Format.GetBitRate(),
-			)
-			break
-		}
 	}
+	r.Complete()
+	metrics.TranscodingRunning.Dec()
+	metrics.TranscodingSpentSeconds.Add(tmr.Duration())
+	ll.Infow(
+		"encoding complete",
+		"out", localStream.FullPath(),
+		"seconds_spent", tmr.String(),
+		"duration", enc.Meta().Format.Duration,
+		"bitrate", enc.Meta().Format.GetBitRate(),
+	)
 
 	time.Sleep(2 * time.Second)
 	err = localStream.ReadMeta()

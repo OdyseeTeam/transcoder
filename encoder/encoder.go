@@ -114,10 +114,15 @@ func (e *encoder) Encode() (<-chan ffmpegt.Progress, error) {
 	metrics.EncodedDurationSeconds.Add(dur)
 	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
 
-	return ffmpeg.New(&conf).
+	progress, err := ffmpeg.New(&conf).
 		Input(e.in).
 		Output("stream_%v.m3u8").
 		Start(args)
+	if err != nil {
+		return nil, err
+	}
+
+	return progress, nil
 }
 
 // GetMetadata uses ffprobe to parse video file metadata.
