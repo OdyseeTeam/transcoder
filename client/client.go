@@ -368,7 +368,13 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 		break
 	}
 
-	fg, _ := item.Value().(*Fragment)
+	// TODO: Why is it nil?
+	cv := item.Value()
+	if cv == nil {
+		return nil, false, errors.New("cached value is nil")
+	}
+
+	fg, _ := cv.(*Fragment)
 	if fg == nil {
 		return nil, false, errors.New("cached item does not contain fragment")
 	}
