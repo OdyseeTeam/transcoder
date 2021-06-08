@@ -292,7 +292,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 
 	key := cacheFragmentKey(sdHash, name)
 	TranscodedCacheQueryCount.Inc()
-	for i := 0; i <= 2; i++ {
+	for i := 0; i <= 3; i++ {
 		item, err = c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
 			var src string
 
@@ -358,7 +358,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 
 			return newFragment(sdHash, name, size), nil
 		})
-		// TODO: Messy loop logic can be improved
+		// TODO: Messy loop logic can be improved.
 		if err != nil {
 			if err == errRefetch {
 				continue
@@ -368,14 +368,12 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 		break
 	}
 
-	// TODO: Why is it nil?
-	cv := item.Value()
-	if cv == nil {
-		c.cache.Delete(key)
-		return nil, false, errors.New("cached value is nil")
+	// TODO: Handle better when we're giving up on re-fetch.
+	if item == nil {
+		return nil, false, errors.New("cache could not retrieve item")
 	}
 
-	fg, _ := cv.(*Fragment)
+	fg, _ := item.Value().(*Fragment)
 	if fg == nil {
 		return nil, false, errors.New("cached item does not contain fragment")
 	}
