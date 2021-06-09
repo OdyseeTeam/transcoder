@@ -12,12 +12,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
 
+	"github.com/brk0v/directio"
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
@@ -339,12 +341,21 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 
 			FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
 
-			f, err := os.Create(fpath)
+			//TODO: like in reflector this should be written to a tmp path and then moved to avoid data corruption on crashes
+			f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_DIRECT, 0666)
 			if err != nil {
 				return nil, err
 			}
 			defer f.Close()
-			size, err := io.Copy(f, r.Body)
+
+			// Use directio writer
+			dio, err := directio.New(f)
+			if err != nil {
+				return nil, err
+			}
+			defer dio.Flush()
+			// Write the body to file
+			size, err := io.Copy(dio, r.Body)
 
 			if err != nil {
 				return nil, err
