@@ -21,9 +21,9 @@ import (
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 	"github.com/lbryio/transcoder/workers"
-	"github.com/pkg/profile"
 
 	"github.com/alecthomas/kong"
+	"github.com/pkg/profile"
 )
 
 var logger = logging.Create("main", logging.Dev)

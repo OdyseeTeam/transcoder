@@ -22,18 +22,6 @@ func (u s3uploader) Do(t dispatcher.Task) error {
 
 	logger.Infow("uploading stream to S3", "sd_hash", v.SDHash, "size", v.GetSize())
 
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
-	// err := dispatcher.WaitUntilTrue(ctx, 300*time.Millisecond, func() bool {
-	// 	if _, err := u.lib.local.Open(v.SDHash); err == nil {
-	// 		return true
-	// 	}
-	// 	return false
-	// })
-	// if err != nil {
-	// 	return errors.New("timed out waiting for master playlist to appear")
-	// }
-
 	lv, err := u.lib.local.Open(v.Path)
 	if err != nil {
 		return err

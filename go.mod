@@ -29,6 +29,6 @@ require (
 	golang.org/x/tools v0.1.0 // indirect
 )
 
-replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
+// replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-// replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/ExternalForks/transcoder
+replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/ExternalForks/transcoder

@@ -14,19 +14,6 @@ const (
 var (
 	once = sync.Once{}
 
-	TranscodingRunning = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "transcoding_running",
-	})
-
-	TranscodingSpentSeconds = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "transcoded_spent_seconds",
-	})
-	TranscodedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "transcoded_size_mb",
-	})
-	TranscodedCount = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "transcoded_count",
-	})
 	DownloadedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "downloaded_size_mb",
 	})
@@ -62,7 +49,6 @@ var (
 func RegisterMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
-			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount,
 			DownloadedSizeMB, S3UploadedSizeMB, EncodedDurationSeconds, EncodedBitrateMbit,
 			StreamsRequestedCount, HTTPAPIRequests,
 		)
