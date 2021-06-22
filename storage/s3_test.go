@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -15,7 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type S3Suite struct {
+type s3suite struct {
 	suite.Suite
 	cleanup func() error
 	addr    string
@@ -23,11 +22,11 @@ type S3Suite struct {
 	sdHash  string
 }
 
-func TestS3Suite(t *testing.T) {
-	suite.Run(t, new(S3Suite))
+func TestS3suite(t *testing.T) {
+	suite.Run(t, new(s3suite))
 }
 
-func (s *S3Suite) SetupSuite() {
+func (s *s3suite) SetupSuite() {
 	var err error
 
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -38,11 +37,11 @@ func (s *S3Suite) SetupSuite() {
 	s.Require().NoError(err)
 }
 
-func (s *S3Suite) SetupTest() {
+func (s *s3suite) SetupTest() {
 	s.populateHLSPlaylist()
 }
 
-func (s *S3Suite) TestPutDelete() {
+func (s *s3suite) TestPutDelete() {
 	s3drv, err := InitS3Driver(
 		S3Configure().
 			Endpoint(s.addr).
@@ -58,11 +57,15 @@ func (s *S3Suite) TestPutDelete() {
 
 	rstream, err := s3drv.Put(stream)
 	s.Require().NoError(err)
-	s.Equal(fmt.Sprintf("http://%v/storage-s3-test/%v/master.m3u8", s.addr, s.sdHash), rstream.URL())
+	s.Equal(s.sdHash, rstream.URL())
 
 	p, err := s3drv.GetFragment(s.sdHash, MasterPlaylistName)
 	s.Require().NoError(err)
 	s.Require().NotNil(p)
+
+	rstream2, err := s3drv.Put(stream)
+	s.Equal(rstream2.URL(), rstream.URL())
+	s.Equal(err, ErrStreamExists)
 
 	err = s3drv.Delete(s.sdHash)
 	s.Require().NoError(err)
@@ -76,12 +79,12 @@ func (s *S3Suite) TestPutDelete() {
 	}
 }
 
-func (s *S3Suite) TearDownSuite() {
+func (s *s3suite) TearDownSuite() {
 	s.NoError(s.cleanup())
 	s.NoError(os.RemoveAll(s.local.path))
 }
 
-func (s *S3Suite) populateHLSPlaylist() {
+func (s *s3suite) populateHLSPlaylist() {
 	stream := s.local.New(s.sdHash)
 	err := os.MkdirAll(stream.FullPath(), os.ModePerm)
 	s.Require().NoError(err)

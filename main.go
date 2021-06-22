@@ -10,19 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lbryio/transcoder/api"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/formats"
-	"github.com/lbryio/transcoder/pkg/claim"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/config"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/queue"
+	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
-	"github.com/pkg/profile"
+	"github.com/lbryio/transcoder/workers"
 
 	"github.com/alecthomas/kong"
+	"github.com/pkg/profile"
 )
 
 var logger = logging.Create("main", logging.Dev)
@@ -43,7 +44,7 @@ var CLI struct {
 const cpuPF = "cpu.pprof"
 
 func main() {
-	rand.Seed(time.Now().UTC().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 
 	cfg, err := config.Read()
 	cfg.SetDefault("CDNServer", "https://cdn.lbryplayer.xyz/api/v3/streams")
@@ -72,20 +73,20 @@ func main() {
 		}
 
 		if !CLI.Serve.Debug {
-			api.SetLogger(logging.Create("api", logging.Prod))
 			db.SetLogger(logging.Create("db", logging.Prod))
-			queue.SetLogger(logging.Create("queue", logging.Prod))
 			encoder.SetLogger(logging.Create("encoder", logging.Prod))
 			video.SetLogger(logging.Create("video", logging.Prod))
-			claim.SetLogger(logging.Create("claim", logging.Prod))
+			manager.SetLogger(logging.Create("claim", logging.Prod))
 			storage.SetLogger(logging.Create("storage", logging.Prod))
 			formats.SetLogger(logging.Create("formats", logging.Prod))
+			mfr.SetLogger(logging.Create("mfr", logging.Prod))
+			dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
 		}
 
 		if CLI.Serve.CDN != "" {
-			claim.SetCDNServer(CLI.Serve.CDN)
+			manager.SetCDNServer(CLI.Serve.CDN)
 		} else {
-			claim.SetCDNServer(cfg.GetString("CDNServer"))
+			manager.SetCDNServer(cfg.GetString("CDNServer"))
 		}
 
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
@@ -94,75 +95,55 @@ func main() {
 			logger.Fatal(err)
 		}
 
-		qdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "queue.sqlite"))
-		err = qdb.MigrateUp(queue.InitialMigration)
-		if err != nil {
-			logger.Fatal(err)
-		}
-
-		wasabi := cfg.GetStringMapString("wasabi")
+		s3cfg := cfg.GetStringMapString("s3")
 		local := cfg.GetStringMapString("local")
 
 		libCfg := video.Configure().
 			LocalStorage(storage.Local(CLI.Serve.VideoPath)).
 			MaxLocalSize(local["maxsize"]).
-			MaxRemoteSize(wasabi["maxsize"]).
+			MaxRemoteSize(s3cfg["maxsize"]).
 			DB(vdb)
 
-		if wasabi["bucket"] != "" {
+		if s3cfg["bucket"] != "" {
 			s3d, err := storage.InitS3Driver(
-				storage.S3ConfigureWasabiEU().
-					Credentials(wasabi["key"], wasabi["secret"]).
-					Bucket(wasabi["bucket"]))
+				storage.S3Configure().
+					Endpoint(s3cfg["endpoint"]).
+					Credentials(s3cfg["key"], s3cfg["secret"]).
+					Bucket(s3cfg["bucket"]))
 			if err != nil {
-				logger.Fatalw("wasabi driver initialization failed", "err", err)
+				logger.Fatalw("s3 driver initialization failed", "err", err)
 			}
 			libCfg.RemoteStorage(s3d)
-			logger.Infow("wasabi storage configured", "bucket", wasabi["bucket"])
+			logger.Infow("s3 storage configured", "bucket", s3cfg["bucket"])
 		}
 		lib := video.NewLibrary(libCfg)
 
-		if wasabi["bucket"] != "" {
-			video.SpawnS3Uploader(lib)
+		var s3StopChan chan<- interface{}
+		if s3cfg["bucket"] != "" {
+			s3StopChan = video.SpawnS3uploader(lib)
 		}
 
-		q := queue.NewQueue(qdb)
+		manager.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
 
-		video.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
+		cleanStopChan := video.SpawnLibraryCleaning(lib)
 
-		poller := q.StartPoller(CLI.Serve.Workers)
-		for i := 0; i < CLI.Serve.Workers; i++ {
-			go video.SpawnProcessing(q, lib, poller)
-		}
+		adQueue := cfg.GetStringMapString("adaptivequeue")
+		minHits, _ := strconv.Atoi(adQueue["minhits"])
+		mgr := manager.NewManager(lib, minHits)
 
-		video.SpawnLibraryCleaning(lib)
-		sweeperCfg := cfg.GetStringMapString("sweeper")
-		if sweeperCfg != nil {
-			interval, err := strconv.Atoi(sweeperCfg["intervalminutes"])
-			if err != nil {
-				interval = 10
-				logger.Warnf("invalid sweeper interval: %v, setting to 10 min", sweeperCfg["intervalminutes"])
-			}
-			lowerBound, _ := strconv.Atoi(sweeperCfg["lowerbound"])
-			topNumber, _ := strconv.Atoi(sweeperCfg["topnumber"])
-			video.SpawnPopularSweeper(lib, q, video.PopularSweeperOpts{
-				Interval:   time.Duration(interval) * time.Minute,
-				LowerBound: lowerBound,
-				TopNumber:  topNumber,
-			})
-		}
+		encStopChan := workers.SpawnEncoderWorkers(CLI.Serve.Workers, mgr)
 
-		apiServer := api.NewServer(
-			api.Configure().
+		httpAPI := manager.NewHttpAPI(
+			manager.ConfigureHttpAPI().
 				Debug(CLI.Serve.Debug).
 				Addr(CLI.Serve.Bind).
 				VideoPath(CLI.Serve.VideoPath).
-				VideoManager(api.NewManager(q, lib)),
+				VideoManager(mgr),
 		)
 		logger.Infow("configured api server", "addr", CLI.Serve.Bind)
 
 		go func() {
-			err = apiServer.Start()
+			err = httpAPI.Start()
 			if err != nil {
 				logger.Fatal(err)
 			}
@@ -170,10 +151,26 @@ func main() {
 
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
 		sig := <-stopChan
-		logger.Infof("caught an %v signal, shutting down", sig)
-		apiServer.Shutdown()
-		poller.Shutdown()
+		logger.Infof("caught an %v signal, shutting down...", sig)
+
+		encStopChan <- true
+		logger.Infof("encoder shut down")
+
+		cleanStopChan <- true
+		logger.Infof("cleanup shut down")
+
+		mgr.Pool().Stop()
+		logger.Infof("manager shut down")
+
+		if s3StopChan != nil {
+			s3StopChan <- true
+			logger.Infof("S3 uploader shut down")
+		}
+
+		httpAPI.Shutdown()
+		logger.Infof("http API shut down")
 	default:
 		logger.Fatal(ctx.Command())
 	}

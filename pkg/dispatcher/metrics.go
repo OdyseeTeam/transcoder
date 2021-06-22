@@ -1,8 +1,9 @@
 package dispatcher
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -15,22 +16,33 @@ const (
 )
 
 var (
-	DispatcherQueueLength = promauto.NewGauge(prometheus.GaugeOpts{
+	once = sync.Once{}
+
+	DispatcherQueueLength = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "dispatcher_queue_length",
 	})
-	DispatcherTasksActive = promauto.NewGauge(prometheus.GaugeOpts{
+	DispatcherTasksActive = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "dispatcher_tasks_active",
 	})
-	DispatcherTasksQueued = promauto.NewCounter(prometheus.CounterOpts{
+	DispatcherTasksQueued = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_queued",
 	})
-	DispatcherTasksDropped = promauto.NewCounter(prometheus.CounterOpts{
+	DispatcherTasksDropped = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_dropped",
 	})
-	DispatcherTasksDone = promauto.NewCounterVec(prometheus.CounterOpts{
+	DispatcherTasksDone = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_done",
 	}, []string{"worker_id"})
-	DispatcherTasksFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	DispatcherTasksFailed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_failed",
 	}, []string{"worker_id"})
 )
+
+func RegisterMetrics() {
+	once.Do(func() {
+		prometheus.MustRegister(
+			DispatcherQueueLength, DispatcherTasksActive, DispatcherTasksQueued,
+			DispatcherTasksDropped, DispatcherTasksDone, DispatcherTasksFailed,
+		)
+	})
+}

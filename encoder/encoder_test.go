@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lbryio/transcoder/formats"
-	"github.com/lbryio/transcoder/pkg/claim"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,8 +26,8 @@ func TestEncoderSuite(t *testing.T) {
 func (s *EncoderSuite) SetupSuite() {
 	s.out = path.Join(os.TempDir(), "EncoderSuite_out")
 
-	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := claim.Resolve(url)
+	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
+	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}
@@ -50,12 +50,9 @@ func (s *EncoderSuite) TestEncode() {
 	progress := 0.0
 	for p := range ch {
 		progress = p.GetProgress()
-		if progress >= 99.9 {
-			break
-		}
 	}
 
-	s.Require().GreaterOrEqual(progress, 99.9)
+	s.Require().GreaterOrEqual(progress, 99.5)
 
 	outFiles := map[string]string{
 		"master.m3u8": `

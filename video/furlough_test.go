@@ -68,7 +68,7 @@ func (s FurloughSuite) TestFurloughVideos() {
 	for i := range [100]int{} {
 		v, err := lib.Add(AddParams{
 			SDHash: randomString(96),
-			URL:    "lbry://" + randomString(32),
+			URL:    randomString(32),
 			Path:   randomString(96),
 			Size:   int64(1000000 + rand.Intn(1000000)),
 		})
@@ -119,7 +119,7 @@ func (s FurloughSuite) TestRetireVideos() {
 	for i := range [100]int{} {
 		v, err := lib.Add(AddParams{
 			SDHash: randomString(96),
-			URL:    "lbry://" + randomString(32),
+			URL:    randomString(32),
 			Size:   int64(1000000 + rand.Intn(1000000)),
 		})
 		s.Require().NoError(err)

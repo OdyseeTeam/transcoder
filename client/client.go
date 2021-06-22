@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/timer"
-	"github.com/lbryio/transcoder/video"
 
 	"github.com/brk0v/directio"
 	"github.com/karlseguin/ccache/v2"
@@ -158,6 +158,9 @@ func New(cfg *Configuration) Client {
 		ItemsToPrune(c.itemsToPrune).
 		OnDelete(c.deleteCachedFragment),
 	)
+
+	RegisterMetrics()
+
 	c.logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
 	return c
 }
@@ -238,7 +241,7 @@ func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
 		switch res.StatusCode {
 		case http.StatusForbidden:
 			TranscodedResult.WithLabelValues(resultForbidden).Inc()
-			return "", video.ErrChannelNotEnabled
+			return "", manager.ErrChannelNotEnabled
 		case http.StatusNotFound:
 			TranscodedResult.WithLabelValues(resultNotFound).Inc()
 			return "", errors.New("stream not found")

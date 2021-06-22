@@ -1,8 +1,9 @@
 package client
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -16,33 +17,45 @@ const (
 )
 
 var (
-	TranscodedCacheSizeBytes = promauto.NewGauge(prometheus.GaugeOpts{
+	once = sync.Once{}
+
+	TranscodedCacheSizeBytes = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoded_cache_size_bytes",
 	})
-	TranscodedCacheItemsCount = promauto.NewGauge(prometheus.GaugeOpts{
+	TranscodedCacheItemsCount = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoded_cache_items_count",
 	})
-	TranscodedResult = promauto.NewCounterVec(prometheus.CounterOpts{
+	TranscodedResult = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoded_request_result",
 	}, []string{"type"})
 
-	TranscodedCacheQueryCount = promauto.NewCounter(prometheus.CounterOpts{
+	TranscodedCacheQueryCount = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_cache_query_count",
 	})
-	TranscodedCacheMiss = promauto.NewCounter(prometheus.CounterOpts{
+	TranscodedCacheMiss = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_cache_miss",
 	})
 
-	FetchSizeBytes = promauto.NewCounterVec(prometheus.CounterOpts{
+	FetchSizeBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_size_bytes",
 	}, []string{"source"})
-	FetchDurationSeconds = promauto.NewCounterVec(prometheus.CounterOpts{
+	FetchDurationSeconds = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_duration_seconds",
 	}, []string{"source"})
-	FetchCount = promauto.NewCounterVec(prometheus.CounterOpts{
+	FetchCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_count",
 	}, []string{"source"})
-	FetchFailureCount = promauto.NewCounterVec(prometheus.CounterOpts{
+	FetchFailureCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_failure_count",
 	}, []string{"source", "http_code"})
 )
+
+func RegisterMetrics() {
+	once.Do(func() {
+		prometheus.MustRegister(
+			TranscodedCacheSizeBytes, TranscodedCacheItemsCount, TranscodedResult,
+			TranscodedCacheQueryCount, TranscodedCacheMiss, FetchSizeBytes, FetchDurationSeconds,
+			FetchCount, FetchFailureCount,
+		)
+	})
+}

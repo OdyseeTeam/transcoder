@@ -117,10 +117,10 @@ type Dispatcher struct {
 	gwait      *sync.WaitGroup
 }
 
-func Start(workers int, wl Workload) Dispatcher {
+func Start(workers int, wl Workload, tasksLen int) Dispatcher {
 	d := Dispatcher{
-		workerPool: make(chan chan Task, 100000),
-		tasks:      make(chan Task, 100000),
+		workerPool: make(chan chan Task, 1000),
+		tasks:      make(chan Task, tasksLen),
 		sigChan:    make(chan int, 1),
 		gwait:      &sync.WaitGroup{},
 	}
@@ -137,8 +137,8 @@ func Start(workers int, wl Workload) Dispatcher {
 			case task := <-d.tasks:
 				DispatcherQueueLength.Dec()
 				logger.Debugw("dispatching incoming task", "task", fmt.Sprintf("%+v", task))
-				wq := <-d.workerPool
-				wq <- task
+				workerQueue := <-d.workerPool
+				workerQueue <- task
 			case sig := <-d.sigChan:
 				if sig == sigStop {
 					for _, w := range d.workers {
@@ -158,19 +158,6 @@ func (d *Dispatcher) Dispatch(payload interface{}) *Result {
 	d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}
 	DispatcherQueueLength.Inc()
 	DispatcherTasksQueued.Inc()
-	return r
-}
-
-func (d *Dispatcher) TryDispatch(payload interface{}) *Result {
-	r := &Result{Status: TaskPending}
-	select {
-	case d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}:
-		DispatcherQueueLength.Inc()
-		DispatcherTasksQueued.Inc()
-	default:
-		DispatcherTasksDropped.Inc()
-		r.Status = TaskDropped
-	}
 	return r
 }
 

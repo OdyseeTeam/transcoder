@@ -60,7 +60,7 @@ func (s *DispatcherSuite) TestDispatcher() {
 	defer goleak.VerifyNone(s.T())
 
 	wl := testWorkload{seenTasks: []string{}}
-	d := Start(20, &wl)
+	d := Start(20, &wl, 1000)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
 	results := []*Result{}
@@ -81,24 +81,23 @@ func (s *DispatcherSuite) TestDispatcher() {
 	d.Stop()
 }
 
-func (s *DispatcherSuite) TestDispatcherTryDispatch() {
+func (s *DispatcherSuite) TestBlockingDispatch() {
 	defer goleak.VerifyNone(s.T())
 
 	wl := testWorkload{seenTasks: []string{}}
-	d := Start(20, &wl)
+	d := Start(5, &wl, 0)
 
-	SetLogger(logging.Create("dispatcher", logging.Prod))
 	results := []*Result{}
 
-	for range [500000]bool{} {
-		r := d.TryDispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+	for range [20]bool{} {
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
 		results = append(results, r)
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
-	s.Equal(500000, len(wl.seenTasks))
-	s.Equal(500000, wl.doCalled)
+	s.Equal(20, len(wl.seenTasks))
+	s.Equal(20, wl.doCalled)
 	for _, r := range results {
 		s.Require().True(r.Done())
 	}
@@ -108,7 +107,7 @@ func (s *DispatcherSuite) TestDispatcherTryDispatch() {
 
 func (s *DispatcherSuite) TestDispatcherLeaks() {
 	wl := testWorkload{seenTasks: []string{}}
-	d := Start(20, &wl)
+	d := Start(20, &wl, 1000)
 
 	grc := runtime.NumGoroutine()
 
