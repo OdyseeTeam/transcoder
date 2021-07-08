@@ -30,7 +30,8 @@ func (v Video) GetLocation() (string, bool) {
 		return fmt.Sprintf("%v/%v", v.Path, storage.MasterPlaylistName), false
 	}
 	// TODO: Move that out
-	return fmt.Sprintf("https://na-storage-1.transcoder.odysee.com/t-na/%v/%v", v.RemotePath, storage.MasterPlaylistName), true
+	// return fmt.Sprintf("https://na-storage-1.transcoder.odysee.com/t-na/%v/%v", v.RemotePath, storage.MasterPlaylistName), true
+	return fmt.Sprintf("remote://%v/%v", v.RemotePath, storage.MasterPlaylistName), true
 }
 
 func (v Video) GetSize() int64 {

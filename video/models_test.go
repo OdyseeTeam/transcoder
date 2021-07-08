@@ -24,5 +24,5 @@ func TestVideo(t *testing.T) {
 	v = &Video{Path: "", RemotePath: "ashsadasldkhaw"}
 	url, remote = v.GetLocation()
 	assert.True(t, remote)
-	assert.Equal(t, "https://na-storage-1.transcoder.odysee.com/t-na/ashsadasldkhaw/master.m3u8", url)
+	assert.Equal(t, "remote://ashsadasldkhaw/master.m3u8", url)
 }
