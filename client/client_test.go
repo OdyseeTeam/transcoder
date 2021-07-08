@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -122,6 +123,30 @@ func (s *clientSuite) TestRestoreCache() {
 func (s *clientSuite) Test_sdHashRe() {
 	m := sdHashRe.FindStringSubmatch("http://t0.lbry.tv:18081/streams/85e8ad21f40550ebf0f30f7a0f6f092e8c62c7c697138e977087ac7b7f29554f8e0270447922493ff564457b60f45b18/master.m3u8")
 	s.Equal("85e8ad21f40550ebf0f30f7a0f6f092e8c62c7c697138e977087ac7b7f29554f8e0270447922493ff564457b60f45b18", m[1])
+}
+
+func (s *clientSuite) TestRemoteURL() {
+	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
+	cl := dummyRedirectClient(fmt.Sprintf("remote://%v/master.m3u8", sdhash))
+	c := New(Configure().HTTPClient(cl))
+	u, err := c.fragmentURL("morgan", sdhash, "master.m3u8")
+	s.Require().NoError(err)
+	s.Equal(
+		fmt.Sprintf("%v/%v/%v", defaultRemoteServer, sdhash, "master.m3u8"),
+		u,
+	)
+}
+
+func (s *clientSuite) TestLocalURL() {
+	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
+	cl := dummyRedirectClient(fmt.Sprintf("http://transcoder.com/streams/%v/master.m3u8", sdhash))
+	c := New(Configure().HTTPClient(cl))
+	u, err := c.fragmentURL("morgan", sdhash, "master.m3u8")
+	s.Require().NoError(err)
+	s.Equal(
+		fmt.Sprintf("http://transcoder.com/streams/%v/%v", sdhash, "master.m3u8"),
+		u,
+	)
 }
 
 func (s *clientSuite) Test_fragmentURL() {

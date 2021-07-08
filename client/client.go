@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/lbryio/transcoder/manager"
@@ -29,17 +28,21 @@ import (
 const (
 	MasterPlaylistName = "master.m3u8"
 
+	SchemaRemote = "remote://"
+
 	cacheHeader         = "x-cache"
 	cacheHeaderHit      = "HIT"
 	cacheHeaderMiss     = "MISS"
 	cacheControlHeader  = "cache-control"
 	clientCacheDuration = 21239
 
+	defaultRemoteServer = "https://cache.transcoder.odysee.com/t-na"
+
 	fragmentCacheDuration = time.Hour * 24 * 30
 	hlsURLTemplate        = "/api/v1/video/hls/%v"
 	fragmentURLTemplate   = "/streams/%v"
 	dlStarted             = iota
-	Dev                   = iota
+	Dev                   = iota + 1
 	Prod
 )
 
@@ -67,6 +70,7 @@ type Configuration struct {
 	itemsToPrune uint32
 	server       string
 	videoPath    string
+	remoteServer string
 	httpClient   HTTPRequester
 	logLevel     int
 }
@@ -78,6 +82,7 @@ type Fragment struct {
 
 func Configure() *Configuration {
 	return &Configuration{
+		remoteServer: defaultRemoteServer,
 		cacheSize:    int64(math.Pow(1024, 3)),
 		itemsToPrune: 100,
 		httpClient: &http.Client{
@@ -116,9 +121,15 @@ func (c *Configuration) Server(server string) *Configuration {
 	return c
 }
 
-// Server sets transcoder server API address.
+// VideoPath is where transcoded videos will be downloaded and stored.
 func (c *Configuration) VideoPath(videoPath string) *Configuration {
 	c.videoPath = videoPath
+	return c
+}
+
+// RemoteServer is full URL of remote transcoded videos storage server (sans forward slash at the end).
+func (c *Configuration) RemoteServer(s string) *Configuration {
+	c.remoteServer = s
 	return c
 }
 
@@ -173,10 +184,10 @@ func newFragment(sdHash, name string, size int64) *Fragment {
 }
 
 // PlayFragment ...
-func (c Client) PlayFragment(lurl, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
+func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
 	var ch string
-	ll := c.logger.With("lurl", lurl, "sd_hash", sdHash, "fragment", fragment)
-	fg, hit, err := c.getCachedFragment(lurl, sdHash, fragment)
+	ll := c.logger.With("lbryURL", lbryURL, "sd_hash", sdHash, "fragment", fragment)
+	fg, hit, err := c.getCachedFragment(lbryURL, sdHash, fragment)
 	if err != nil {
 		ll.Warnf("failed to serve fragment: %v", err)
 		return err
@@ -198,13 +209,21 @@ func (c Client) fullFragmentPath(fg *Fragment) string {
 	return path.Join(c.videoPath, fg.path)
 }
 
-func (c Client) GetPlaybackPath(lurl, sdHash string) string {
-	if _, err := c.fragmentURL(lurl, sdHash, MasterPlaylistName); err != nil {
-		c.logger.Debugw("playback path not found", "lurl", lurl, "sd_hash", sdHash, "err", err)
+func (c Client) buildUrl(url string) string {
+	url = strings.TrimSuffix(url, MasterPlaylistName)
+	if !strings.HasPrefix(url, SchemaRemote) {
+		return url
+	}
+	return fmt.Sprintf("%v/%v", c.remoteServer, strings.TrimPrefix(url, SchemaRemote))
+}
+
+func (c Client) GetPlaybackPath(lbryURL, sdHash string) string {
+	if _, err := c.fragmentURL(lbryURL, sdHash, MasterPlaylistName); err != nil {
+		c.logger.Debugw("playback path not found", "lbryURL", lbryURL, "sd_hash", sdHash, "err", err)
 		return ""
 	}
-	c.logger.Debugw("playback path found", "lurl", lurl, "sd_hash", sdHash)
-	return fmt.Sprintf("%v/%v/%v", strings.Replace(lurl, "#", "/", 1), sdHash, MasterPlaylistName)
+	c.logger.Debugw("playback path found", "lbryURL", lbryURL, "sd_hash", sdHash)
+	return fmt.Sprintf("%v/%v/%v", strings.Replace(lbryURL, "#", "/", 1), sdHash, MasterPlaylistName)
 }
 
 func cacheFragmentKey(sdHash, name string) string {
@@ -230,10 +249,10 @@ func (c Client) discardFragmentURL(sdHash string) {
 	c.streamURLs.Delete(sdHash)
 }
 
-func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
+func (c Client) fragmentURL(lbryURL, sdHash, name string) (string, error) {
 	if d, ok := c.streamURLs.Load(sdHash); !ok {
 		// Getting root playlist location from transcoder.
-		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url.PathEscape(lurl)))
+		res, err := c.fetch(c.server + fmt.Sprintf(hlsURLTemplate, url.PathEscape(lbryURL)))
 		if err != nil {
 			return "", err
 		}
@@ -255,7 +274,7 @@ func (c Client) fragmentURL(lurl, sdHash, name string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			streamURL := strings.TrimSuffix(loc.String(), MasterPlaylistName)
+			streamURL := c.buildUrl(loc.String())
 			c.logger.Debugw("got stream URL", "stream_url", streamURL)
 			rsdHash := sdHashRe.FindStringSubmatch(streamURL)
 			if len(rsdHash) != 2 {
@@ -288,7 +307,7 @@ func (c Client) fetch(url string) (*http.Response, error) {
 	return r, nil
 }
 
-func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, error) {
+func (c Client) getCachedFragment(lbryURL, sdHash, name string) (*Fragment, bool, error) {
 	var (
 		item *ccache.Item
 		err  error
@@ -312,15 +331,15 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 				return nil, err
 			}
 
-			url, err := c.fragmentURL(lurl, sdHash, name)
+			url, err := c.fragmentURL(lbryURL, sdHash, name)
 			if err != nil {
 				return nil, err
 			}
 
-			if strings.Contains(url, "/streams/") {
-				src = fetchSourceLocal
-			} else {
+			if strings.HasPrefix(url, SchemaRemote) {
 				src = fetchSourceRemote
+			} else {
+				src = fetchSourceLocal
 			}
 
 			t := timer.Start()
@@ -345,7 +364,7 @@ func (c Client) getCachedFragment(lurl, sdHash, name string) (*Fragment, bool, e
 			FetchDurationSeconds.WithLabelValues(src).Add(t.Stop())
 
 			//TODO: like in reflector this should be written to a tmp path and then moved to avoid data corruption on crashes
-			f, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_DIRECT, 0666)
+			f, err := openFile(fpath)
 			if err != nil {
 				return nil, err
 			}
