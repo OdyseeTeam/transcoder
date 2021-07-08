@@ -47,7 +47,8 @@ const (
 )
 
 var (
-	ErrNotOK = errors.New("http response not OK")
+	ErrNotOK             = errors.New("http response not OK")
+	ErrChannelNotEnabled = manager.ErrChannelNotEnabled
 
 	errRefetch = errors.New("need to refetch")
 	sdHashRe   = regexp.MustCompile(`/([A-Za-z0-9]{96})/?`)
