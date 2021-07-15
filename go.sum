@@ -74,6 +74,8 @@ github.com/andybalholm/brotli v1.0.0 h1:7UCwP93aiSfvWpapti8g88vVVGp2qqtGyePsSuDa
 github.com/andybalholm/brotli v1.0.0/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
 github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed2 h1:xFS5vZFDpYMX4OSowuONKHo0wI9lE91Nyz6QRl3fc1M=
 github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed2/go.mod h1:Kt/92129xWVagjiz/kRDcjXK4URDDd0mFxeIuUYJe0E=
+github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed3 h1:VlyZzJLJOLPmgITNj/mQp+XBDN+9KDz7CRtZIZO619g=
+github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed3/go.mod h1:Kt/92129xWVagjiz/kRDcjXK4URDDd0mFxeIuUYJe0E=
 github.com/andybeletsky/transcoder v1.2.1 h1:0g7MoRYmCzooy/90PSwCNi6RnDLmWx5tmhAMktu+Y3g=
 github.com/andybeletsky/transcoder v1.2.1/go.mod h1:lT+f8NEGaHP6AVeYLicas0EI0+TforD+DRuLziJg6bY=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=

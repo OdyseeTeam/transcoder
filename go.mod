@@ -33,6 +33,6 @@ require (
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-replace github.com/nikooo777/lbry-blobs-downloader => github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed2
+replace github.com/nikooo777/lbry-blobs-downloader => github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed3
 
 //  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/ExternalForks/transcoder

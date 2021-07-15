@@ -81,6 +81,7 @@ func main() {
 			formats.SetLogger(logging.Create("formats", logging.Prod))
 			mfr.SetLogger(logging.Create("mfr", logging.Prod))
 			dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+			workers.SetLogger(logging.Create("workers", logging.Prod))
 		}
 
 		if CLI.Serve.CDN != "" {
@@ -123,7 +124,7 @@ func main() {
 			s3StopChan = video.SpawnS3uploader(lib)
 		}
 
-		manager.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
+		manager.LoadConfiguredChannels(cfg.GetStringSlice("prioritychannels"), cfg.GetStringSlice("enabledchannels"))
 
 		cleanStopChan := video.SpawnLibraryCleaning(lib)
 

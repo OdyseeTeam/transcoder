@@ -20,15 +20,18 @@ const (
 )
 
 var (
-	enabledChannels = []string{}
-	cacheSize       = int64(math.Pow(1024, 4))
+	priorityChannels = []string{}
+	enabledChannels  = []string{}
+	cacheSize        = int64(math.Pow(1024, 4))
 )
 
-func LoadEnabledChannels(channels []string) {
-	enabledChannels = apply(channels, func(e string) string {
+func LoadConfiguredChannels(priority, enabled []string) {
+	tweakURL := func(e string) string {
 		return channelURIPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
-	})
-	logger.Infof("%v channels enabled", len(enabledChannels))
+	}
+	priorityChannels = apply(priority, tweakURL)
+	enabledChannels = apply(enabled, tweakURL)
+	logger.Infof("%v priority channels, %v channels enabled", len(priorityChannels), len(enabledChannels))
 }
 
 type VideoManager struct {
@@ -46,6 +49,19 @@ func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
 			Configure().
 			MaxSize(cacheSize)),
 	}
+
+	m.pool.AddQueue("priority", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
+		r := value.(*TranscodingRequest)
+		for _, e := range priorityChannels {
+			if e == r.ChannelURI {
+				logger.Infow("accepted for 'priority' queue", "uri", r.URI)
+				r.queue = queue
+				queue.Hit(key, r)
+				return true
+			}
+		}
+		return false
+	})
 
 	m.pool.AddQueue("enabled", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
@@ -119,7 +135,7 @@ func (m *VideoManager) Video(uri string) (*video.Video, error) {
 	return v, nil
 }
 
-// Requests returns next transcoding request to be processed.
+// Requests returns next transcoding request to be processed. It polls all queues in the pool evenly.
 func (m *VideoManager) Requests() <-chan *TranscodingRequest {
 	out := make(chan *TranscodingRequest)
 	go func() {

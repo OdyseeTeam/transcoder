@@ -76,10 +76,12 @@ func (s *clientSuite) SetupTest() {
 		}
 	}()
 
-	manager.LoadEnabledChannels(
+	manager.LoadConfiguredChannels(
 		[]string{
 			"@specialoperationstest#3",
-		})
+		},
+		[]string{},
+	)
 }
 
 func (s *clientSuite) TearDownTest() {
