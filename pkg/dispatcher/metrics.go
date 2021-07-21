@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	resultForbidden   = "forbidden"
-	resultNotFound    = "not_found"
+	failureForbidden  = "forbidden"
+	failureNotFound   = "not_found"
 	resultUnderway    = "underway"
 	resultFound       = "found"
 	resultDownloading = "downloading"

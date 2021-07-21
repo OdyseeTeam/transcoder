@@ -7,10 +7,13 @@ import (
 )
 
 const (
-	resultForbidden = "forbidden"
-	resultNotFound  = "not_found"
-	resultUnderway  = "underway"
-	resultFound     = "found"
+	failureForbidden   = "forbidden"
+	failureNotFound    = "not_found"
+	failureTransport   = "transport_error"
+	failureServerError = "server_error"
+
+	resultUnderway = "underway"
+	resultFound    = "found"
 
 	fetchSourceRemote = "remote"
 	fetchSourceLocal  = "local"
@@ -35,6 +38,9 @@ var (
 	TranscodedCacheMiss = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_cache_miss",
 	})
+	TranscodedCacheRetry = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "transcoded_cache_retry",
+	})
 
 	FetchSizeBytes = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_size_bytes",
@@ -47,14 +53,15 @@ var (
 	}, []string{"source"})
 	FetchFailureCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fetch_failure_count",
-	}, []string{"source", "http_code"})
+	}, []string{"source", "type"})
 )
 
 func RegisterMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
 			TranscodedCacheSizeBytes, TranscodedCacheItemsCount, TranscodedResult,
-			TranscodedCacheQueryCount, TranscodedCacheMiss, FetchSizeBytes, FetchDurationSeconds,
+			TranscodedCacheQueryCount, TranscodedCacheMiss, TranscodedCacheRetry,
+			FetchSizeBytes, FetchDurationSeconds,
 			FetchCount, FetchFailureCount,
 		)
 	})

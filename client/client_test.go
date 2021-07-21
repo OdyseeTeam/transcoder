@@ -1,14 +1,18 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/db"
@@ -38,6 +42,15 @@ type clientSuite struct {
 	assetsPath string
 	httpAPI    *manager.HttpAPI
 }
+
+type library struct{}
+
+// Get(sdHash string) (*Video, error)
+// New(sdHash string) *storage.LocalStream
+// Add(params AddParams) (*Video, error)
+// func (l library) Get(sdHash string) (*video.Video, error)
+// func (l library) New(sdHash string) *storage.LocalStream
+// func (l library) Add(_ video.AddParams) (*video.Video, error)
 
 func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(clientSuite))
@@ -76,6 +89,22 @@ func (s *clientSuite) SetupTest() {
 		}
 	}()
 
+	// mgr := manager.NewManager(library{}, 10)
+
+	// httpAPI := manager.NewHttpAPI(
+	// 	manager.ConfigureHttpAPI().
+	// 		Debug(true).
+	// 		Addr("127.0.0.1:58018").
+	// 		VideoPath(assetsPath).
+	// 		VideoManager(s.mgr),
+	// )
+	// go func() {
+	// 	err := s.httpAPI.Start()
+	// 	if err != nil {
+	// 		s.FailNow(err.Error())
+	// 	}
+	// }()
+
 	manager.LoadConfiguredChannels(
 		[]string{
 			"@specialoperationstest#3",
@@ -87,6 +116,63 @@ func (s *clientSuite) SetupTest() {
 func (s *clientSuite) TearDownTest() {
 	go s.httpAPI.Shutdown()
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
+}
+
+func (s *clientSuite) TestPlayFragment() {
+	c := New(Configure().VideoPath(s.assetsPath).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
+
+	// Request stream and wait until it's available.
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	wait := time.NewTicker(500 * time.Millisecond)
+Waiting:
+	for {
+		select {
+		case <-ctx.Done():
+			s.FailNow("transcoding is taking too long")
+		case <-wait.C:
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			if err != nil {
+				s.Require().ErrorIs(err, manager.ErrTranscodingUnderway)
+			} else {
+				break Waiting
+			}
+		}
+	}
+	cancel()
+
+	// Compare stream playlists and fragments against known content or size.
+	cases := []struct {
+		name string
+		size int64
+	}{
+		{"master.m3u8", 0},
+		{"stream_0.m3u8", 0},
+		{"stream_1.m3u8", 0},
+		{"stream_2.m3u8", 0},
+		{"seg_0_000000.ts", 3007812},
+		{"seg_1_000000.ts", 1882632},
+		{"seg_2_000000.ts", 678492},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+			rbody, err := ioutil.ReadAll(rr.Result().Body)
+			s.Require().NoError(err)
+			if tc.size > 0 {
+				// Every transcoding run produces slightly different files.
+				s.Require().InDelta(tc.size, len(rbody), 2000)
+			} else {
+				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
+				s.Require().NoError(err)
+				tbody, err := ioutil.ReadFile(absPath)
+				s.Require().NoError(err)
+				s.Require().Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
+			}
+		})
+	}
 }
 
 func (s *clientSuite) TestRestoreCache() {
