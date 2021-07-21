@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
@@ -45,6 +47,8 @@ const (
 	dlStarted             = iota
 	Dev                   = iota + 1
 	Prod
+
+	noccToken = "CLOSED-CAPTIONS=NONE"
 )
 
 var (
@@ -332,7 +336,10 @@ func (c Client) callAPI(lbryURL string) (*http.Response, error) {
 }
 
 func (c Client) fetchFragment(url, dstFile string) (int64, error) {
-	var src string
+	var (
+		src        string
+		bodyReader io.Reader
+	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -375,7 +382,23 @@ func (c Client) fetchFragment(url, dstFile string) (int64, error) {
 		return 0, err
 	}
 	tmpFile.Close()
-	size, err := directCopy(tmpFile.Name(), r.Body)
+
+	if strings.HasSuffix(dstFile, MasterPlaylistName) {
+		b := []string{}
+		scanner := bufio.NewScanner(r.Body)
+		for scanner.Scan() {
+			s := scanner.Text()
+			if strings.HasPrefix(s, "#EXT-X-STREAM-INF") && !strings.Contains(s, noccToken) {
+				s = fmt.Sprintf("%s,%s", s, noccToken)
+			}
+			b = append(b, s)
+		}
+		bodyReader = strings.NewReader(strings.Join(b, "\n"))
+	} else {
+		bodyReader = r.Body
+	}
+
+	size, err := directCopy(tmpFile.Name(), bodyReader)
 	FetchSizeBytes.WithLabelValues(src).Add(float64(size))
 
 	if err != nil {

@@ -43,23 +43,13 @@ type clientSuite struct {
 	httpAPI    *manager.HttpAPI
 }
 
-type library struct{}
-
-// Get(sdHash string) (*Video, error)
-// New(sdHash string) *storage.LocalStream
-// Add(params AddParams) (*Video, error)
-// func (l library) Get(sdHash string) (*video.Video, error)
-// func (l library) New(sdHash string) *storage.LocalStream
-// func (l library) Add(_ video.AddParams) (*video.Video, error)
-
 func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(clientSuite))
 }
 
 func (s *clientSuite) SetupTest() {
-	os.RemoveAll(s.assetsPath)
+	s.assetsPath = os.TempDir()
 	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "videos"), os.ModePerm))
-	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "client"), os.ModePerm))
 
 	vdb := db.OpenTestDB()
 	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
@@ -89,22 +79,6 @@ func (s *clientSuite) SetupTest() {
 		}
 	}()
 
-	// mgr := manager.NewManager(library{}, 10)
-
-	// httpAPI := manager.NewHttpAPI(
-	// 	manager.ConfigureHttpAPI().
-	// 		Debug(true).
-	// 		Addr("127.0.0.1:58018").
-	// 		VideoPath(assetsPath).
-	// 		VideoManager(s.mgr),
-	// )
-	// go func() {
-	// 	err := s.httpAPI.Start()
-	// 	if err != nil {
-	// 		s.FailNow(err.Error())
-	// 	}
-	// }()
-
 	manager.LoadConfiguredChannels(
 		[]string{
 			"@specialoperationstest#3",
@@ -119,7 +93,7 @@ func (s *clientSuite) TearDownTest() {
 }
 
 func (s *clientSuite) TestPlayFragment() {
-	c := New(Configure().VideoPath(s.assetsPath).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
+	c := New(Configure().VideoPath(path.Join(s.assetsPath, "TestPlayFragment")).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
 
 	// Request stream and wait until it's available.
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
@@ -162,7 +136,7 @@ Waiting:
 			rbody, err := ioutil.ReadAll(rr.Result().Body)
 			s.Require().NoError(err)
 			if tc.size > 0 {
-				// Every transcoding run produces slightly different files.
+				// Different transcoding runs produce slightly different files.
 				s.Require().InDelta(tc.size, len(rbody), 2000)
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
@@ -171,6 +145,21 @@ Waiting:
 				s.Require().NoError(err)
 				s.Require().Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
 			}
+			if tc.name == MasterPlaylistName {
+				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
+			} else {
+				s.Equal(cacheHeaderMiss, rr.Result().Header.Get(cacheHeader))
+			}
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+		})
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
 		})
 	}
 }

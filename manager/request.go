@@ -100,8 +100,8 @@ func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	return &c, nil
 }
 
-// Download retrieves a video stream from the lbrytv CDN and saves it to a temporary file.
-func (c *TranscodingRequest) Download(dest string) (*os.File, int64, error) {
+// Download retrieves a stream from LBRY CDN and saves it into the dstPathination folder under original name.
+func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
 	UDPPort := 5568
 	TCPPort := 5567
 	HTTPPort := 5569
@@ -112,25 +112,27 @@ func (c *TranscodingRequest) Download(dest string) (*os.File, int64, error) {
 	shared.ReflectorHttpServer = fmt.Sprintf("%s:%d", blobServer, HTTPPort)
 
 	var readLen int64
+	dstFile := path.Join(dstPath, c.streamFileName())
+
 	logger.Infow("downloading stream", "url", c.URI)
 	t := timer.Start()
 
-	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
 		return nil, 0, err
 	}
 
-	if err := downloader.DownloadAndBuild(c.SDHash, false, downloader.HTTP, c.streamFileName(), dest); err != nil {
+	if err := downloader.DownloadAndBuild(c.SDHash, false, downloader.HTTP, c.streamFileName(), dstPath); err != nil {
 		return nil, 0, err
 	}
 	t.Stop()
 
-	fi, err := os.Stat(path.Join(dest, c.streamFileName()))
+	fi, err := os.Stat(dstFile)
 	if err != nil {
 		return nil, 0, err
 	}
 	readLen = fi.Size()
 
-	f, err := os.Open(path.Join(dest, c.streamFileName()))
+	f, err := os.Open(dstFile)
 	if err != nil {
 		return nil, 0, err
 	}

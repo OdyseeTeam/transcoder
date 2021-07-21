@@ -39,7 +39,7 @@ var (
 func RegisterMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
-			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount,
+			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount, TranscodingErrors,
 		)
 	})
 
