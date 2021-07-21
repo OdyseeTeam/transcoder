@@ -41,7 +41,7 @@ func HLSArguments() Arguments {
 			// Stream map items go here (in `GetStrArguments`)
 			{"c:a", "aac"},
 			{"b:a", "128k"},
-			{"ac", "1"},
+			{"ac", "2"},
 			{"ar", "44100"},
 			{"f", "hls"},
 			{"hls_time", hlsTime},
