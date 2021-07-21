@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/alecthomas/kong v0.2.12
 	github.com/aws/aws-sdk-go v1.36.29
+	github.com/brk0v/directio v0.0.0-20190225130936-69406e757cf7
 	github.com/c2h5oh/datasize v0.0.0-20200825124411-48ed595a09d2
 	github.com/draganm/miniotest v0.1.0
 	github.com/fasthttp/router v1.3.3

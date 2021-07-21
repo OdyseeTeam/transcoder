@@ -20,10 +20,10 @@ import (
 )
 
 var (
-	lbrytvAPI  = "https://api.lbry.tv/api/v1/proxy"
+	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
 	blobServer = "blobcache-eu.lbry.com"
 
-	lbrytvClient = ljsonrpc.NewClient(lbrytvAPI)
+	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
 )
 
 type WriteCounter struct {

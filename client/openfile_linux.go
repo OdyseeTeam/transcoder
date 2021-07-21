@@ -5,6 +5,8 @@ package client
 import (
 	"os"
 	"syscall"
+
+	"github.com/brk0v/directio"
 )
 
 func directCopy(path string) (*os.File, error) {
