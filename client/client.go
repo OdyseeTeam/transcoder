@@ -233,6 +233,9 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWr
 	}
 	w.Header().Set(cacheHeader, ch)
 	w.Header().Set(cacheControlHeader, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
+	w.Header().Set("content-type", "video/MP2T")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
 	return nil
 }
@@ -241,7 +244,7 @@ func (c Client) fullFragmentPath(fg *Fragment) string {
 	return path.Join(c.videoPath, fg.path)
 }
 
-func (c Client) buildUrl(url string) string {
+func (c Client) BuildUrl(url string) string {
 	url = strings.TrimSuffix(url, MasterPlaylistName)
 	if !strings.HasPrefix(url, SchemaRemote) {
 		return url
@@ -307,7 +310,7 @@ func (c Client) fragmentURL(lbryURL, sdHash, name string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			streamURL := c.buildUrl(loc.String())
+			streamURL := c.BuildUrl(loc.String())
 			c.logger.Debugw("got stream URL", "stream_url", streamURL)
 			rsdHash := sdHashRe.FindStringSubmatch(streamURL)
 			if len(rsdHash) != 2 {

@@ -137,13 +137,13 @@ Waiting:
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.Require().InDelta(tc.size, len(rbody), 2000)
+				s.InDelta(tc.size, len(rbody), 6000)
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
 				tbody, err := ioutil.ReadFile(absPath)
 				s.Require().NoError(err)
-				s.Require().Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
+				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
 			}
 			if tc.name == MasterPlaylistName {
 				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
@@ -151,6 +151,9 @@ Waiting:
 				s.Equal(cacheHeaderMiss, rr.Result().Header.Get(cacheHeader))
 			}
 			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
+			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
+			s.Equal("video/MP2T", rr.Result().Header.Get("content-type"))
 		})
 	}
 	for _, tc := range cases {
