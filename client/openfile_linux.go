@@ -3,6 +3,7 @@
 package client
 
 import (
+	"io"
 	"os"
 	"syscall"
 
