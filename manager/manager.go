@@ -129,7 +129,7 @@ func (m *VideoManager) Video(uri string) (*video.Video, error) {
 
 	v, err := m.getVideo(tr.SDHash)
 	if v == nil || err == sql.ErrNoRows {
-		return nil, m.pool.Admit(uri, tr)
+		return nil, m.pool.Admit(tr.SDHash, tr)
 	}
 
 	return v, nil
