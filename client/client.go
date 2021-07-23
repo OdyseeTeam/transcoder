@@ -184,6 +184,7 @@ func New(cfg *Configuration) Client {
 
 	RegisterMetrics()
 
+	os.MkdirAll(c.tmpDir(), os.ModePerm)
 	c.logger.Infow("transcoder client configured", "cache_size", c.cacheSize, "server", c.server, "video_path", c.videoPath)
 	return c
 }
@@ -234,14 +235,18 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWr
 	w.Header().Set(cacheHeader, ch)
 	w.Header().Set(cacheControlHeader, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
 	w.Header().Set("content-type", "video/MP2T")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("access-aontrol-allow-origin", "*")
+	w.Header().Set("access-control-allow-methods", "GET, OPTIONS")
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
 	return nil
 }
 
 func (c Client) fullFragmentPath(fg *Fragment) string {
 	return path.Join(c.videoPath, fg.path)
+}
+
+func (c Client) tmpDir() string {
+	return path.Join(c.videoPath, "tmp")
 }
 
 func (c Client) BuildUrl(url string) string {
@@ -380,7 +385,8 @@ func (c Client) fetchFragment(url, dstFile string) (int64, error) {
 		return 0, ret
 	}
 
-	tmpFile, err := ioutil.TempFile(os.TempDir(), "fragment")
+	// This should not be created outside of configured tmpDir to avoid docker container volume leak.
+	tmpFile, err := ioutil.TempFile(c.tmpDir(), "fragment")
 	if err != nil {
 		return 0, err
 	}
