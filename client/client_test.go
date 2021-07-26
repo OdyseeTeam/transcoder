@@ -133,6 +133,7 @@ Waiting:
 			rr := httptest.NewRecorder()
 			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
+			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
 			rbody, err := ioutil.ReadAll(rr.Result().Body)
 			s.Require().NoError(err)
 			if tc.size > 0 {

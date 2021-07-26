@@ -235,7 +235,7 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWr
 	w.Header().Set(cacheHeader, ch)
 	w.Header().Set(cacheControlHeader, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
 	w.Header().Set("content-type", "video/MP2T")
-	w.Header().Set("access-aontrol-allow-origin", "*")
+	w.Header().Set("access-control-allow-origin", "*")
 	w.Header().Set("access-control-allow-methods", "GET, OPTIONS")
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
 	return nil
