@@ -148,7 +148,7 @@ func (s *managerSuite) TestRequests() {
 	out := mgr.Requests()
 	r1 = <-out
 
-	s.Equal(mfr.StatusActive, mgr.RequestStatus(r1.URI))
+	s.Equal(mfr.StatusActive, mgr.RequestStatus(r1.SDHash))
 	select {
 	case r2 = <-out:
 		s.Failf("got output from Requests channel", "%v", r2)

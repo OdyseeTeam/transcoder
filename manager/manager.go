@@ -105,9 +105,9 @@ func (m *VideoManager) Pool() *Pool {
 	return m.pool
 }
 
-func (m *VideoManager) RequestStatus(uri string) int {
+func (m *VideoManager) RequestStatus(sdHash string) int {
 	for _, l := range m.pool.levels {
-		if _, status := l.queue.Get(uri); status != mfr.StatusNone {
+		if _, status := l.queue.Get(sdHash); status != mfr.StatusNone {
 			return status
 		}
 	}
