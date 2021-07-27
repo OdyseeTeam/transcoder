@@ -87,6 +87,7 @@ func (s *clientSuite) SetupTest() {
 			"@specialoperationstest#3",
 		},
 		[]string{},
+		[]string{},
 	)
 }
 

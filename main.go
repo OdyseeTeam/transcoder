@@ -124,7 +124,11 @@ func main() {
 			s3StopChan = video.SpawnS3uploader(lib)
 		}
 
-		manager.LoadConfiguredChannels(cfg.GetStringSlice("prioritychannels"), cfg.GetStringSlice("enabledchannels"))
+		manager.LoadConfiguredChannels(
+			cfg.GetStringSlice("prioritychannels"),
+			cfg.GetStringSlice("enabledchannels"),
+			cfg.GetStringSlice("disabledchannels"),
+		)
 
 		cleanStopChan := video.SpawnLibraryCleaning(lib)
 

@@ -22,16 +22,23 @@ const (
 var (
 	priorityChannels = []string{}
 	enabledChannels  = []string{}
+	disabledChannels = []string{}
 	cacheSize        = int64(math.Pow(1024, 4))
 )
 
-func LoadConfiguredChannels(priority, enabled []string) {
+func LoadConfiguredChannels(priority, enabled, disabled []string) {
 	tweakURL := func(e string) string {
 		return channelURIPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
 	}
 	priorityChannels = apply(priority, tweakURL)
 	enabledChannels = apply(enabled, tweakURL)
-	logger.Infof("%v priority channels, %v channels enabled", len(priorityChannels), len(enabledChannels))
+	disabledChannels = apply(disabled, tweakURL)
+	logger.Infof(
+		"%v priority channels, %v channels enabled, %v channels disabled",
+		len(priorityChannels),
+		len(enabledChannels),
+		len(disabledChannels),
+	)
 }
 
 type VideoManager struct {
@@ -127,6 +134,12 @@ func (m *VideoManager) Video(uri string) (*video.Video, error) {
 		return nil, err
 	}
 
+	for _, e := range disabledChannels {
+		if e == tr.ChannelURI {
+			return nil, ErrTranscodingDisabled
+		}
+	}
+
 	v, err := m.getVideo(tr.SDHash)
 	if v == nil || err == sql.ErrNoRows {
 		return nil, m.pool.Admit(tr.SDHash, tr)
@@ -165,7 +178,7 @@ func (m *VideoManager) getVideo(h string) (*video.Video, error) {
 }
 
 func (m *VideoManager) resolveRequest(uri string) (*TranscodingRequest, error) {
-	item, err := m.cache.Fetch(fmt.Sprintf("claim:%v", uri), 120*time.Second, func() (interface{}, error) {
+	item, err := m.cache.Fetch(fmt.Sprintf("claim:%v", uri), 300*time.Second, func() (interface{}, error) {
 		return ResolveRequest(uri)
 	})
 	if err != nil {

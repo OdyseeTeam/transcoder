@@ -137,7 +137,7 @@ func (h *HttpAPI) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if err == ErrChannelNotEnabled || err == ErrNoSigningChannel {
+	if err == ErrChannelNotEnabled || err == ErrNoSigningChannel || err == ErrTranscodingDisabled {
 		ctx.SetStatusCode(http.StatusForbidden)
 		ll.Debug("transcoding disabled")
 		return
