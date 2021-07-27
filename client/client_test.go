@@ -1,14 +1,18 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/db"
@@ -44,15 +48,17 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *clientSuite) SetupTest() {
-	os.RemoveAll(s.assetsPath)
-	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "videos"), os.ModePerm))
-	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "client"), os.ModePerm))
+	p, err := ioutil.TempDir("", "")
+	s.Require().NoError(err)
+	s.assetsPath = p
+	vPath := path.Join(s.assetsPath, "videos")
+	s.Require().NoError(os.MkdirAll(vPath, os.ModePerm))
 
 	vdb := db.OpenTestDB()
 	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
 
 	libCfg := video.Configure().
-		LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
+		LocalStorage(storage.Local(vPath)).
 		DB(vdb)
 	lib := video.NewLibrary(libCfg)
 
@@ -66,7 +72,7 @@ func (s *clientSuite) SetupTest() {
 		manager.ConfigureHttpAPI().
 			Debug(true).
 			Addr("127.0.0.1:50808").
-			VideoPath(path.Join(s.assetsPath, "videos")).
+			VideoPath(vPath).
 			VideoManager(mgr),
 	)
 	go func() {
@@ -76,15 +82,94 @@ func (s *clientSuite) SetupTest() {
 		}
 	}()
 
-	manager.LoadEnabledChannels(
+	manager.LoadConfiguredChannels(
 		[]string{
 			"@specialoperationstest#3",
-		})
+		},
+		[]string{},
+		[]string{},
+	)
 }
 
 func (s *clientSuite) TearDownTest() {
 	go s.httpAPI.Shutdown()
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
+}
+
+func (s *clientSuite) TestPlayFragment() {
+	c := New(Configure().VideoPath(path.Join(s.assetsPath, "TestPlayFragment")).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
+
+	// Request stream and wait until it's available.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	wait := time.NewTicker(500 * time.Millisecond)
+Waiting:
+	for {
+		select {
+		case <-ctx.Done():
+			s.FailNow("transcoding is taking too long")
+		case <-wait.C:
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			if err != nil {
+				s.Require().ErrorIs(err, manager.ErrTranscodingUnderway)
+			} else {
+				break Waiting
+			}
+		}
+	}
+	cancel()
+
+	// Compare stream playlists and fragments against known content or size.
+	cases := []struct {
+		name string
+		size int64
+	}{
+		{"master.m3u8", 0},
+		{"stream_0.m3u8", 0},
+		{"stream_1.m3u8", 0},
+		{"stream_2.m3u8", 0},
+		{"seg_0_000000.ts", 3007812},
+		{"seg_1_000000.ts", 1882632},
+		{"seg_2_000000.ts", 678492},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
+			rbody, err := ioutil.ReadAll(rr.Result().Body)
+			s.Require().NoError(err)
+			if tc.size > 0 {
+				// Different transcoding runs produce slightly different files.
+				s.InDelta(tc.size, len(rbody), 6000)
+			} else {
+				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
+				s.Require().NoError(err)
+				tbody, err := ioutil.ReadFile(absPath)
+				s.Require().NoError(err)
+				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
+			}
+			if tc.name == MasterPlaylistName {
+				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
+			} else {
+				s.Equal(cacheHeaderMiss, rr.Result().Header.Get(cacheHeader))
+			}
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
+			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
+			s.Equal("video/MP2T", rr.Result().Header.Get("content-type"))
+		})
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+		})
+	}
 }
 
 func (s *clientSuite) TestRestoreCache() {

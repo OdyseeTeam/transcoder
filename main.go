@@ -34,7 +34,7 @@ var CLI struct {
 		DataPath     string `optional name:"data-path" help:"Path to store database files and configs." type:"existingdir" default:"."`
 		VideoPath    string `optional name:"video-path" help:"Path to store video." type:"existingdir" default:"."`
 		Workers      int    `optional name:"workers" help:"Number of workers to start." type:"int" default:"10"`
-		CDN          string `optional name:"cdn" help:"LBRY CDN endpoint address."`
+		BlobServer   string `optional name:"blob-server" help:"LBRY blobserver address."`
 		Debug        bool   `optional name:"debug" help:"Debug mode."`
 		ProfileCPU   bool   `optional name:"profile-cpu" help:"Enable CPU profiling."`
 		ProfileTrace bool   `optional name:"profile-trace" help:"Enable execution tracer."`
@@ -47,7 +47,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	cfg, err := config.Read()
-	cfg.SetDefault("CDNServer", "https://cdn.lbryplayer.xyz/api/v3/streams")
+	cfg.SetDefault("blobserver", "blobcache-eu.lbry.com")
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -81,12 +81,13 @@ func main() {
 			formats.SetLogger(logging.Create("formats", logging.Prod))
 			mfr.SetLogger(logging.Create("mfr", logging.Prod))
 			dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+			workers.SetLogger(logging.Create("workers", logging.Prod))
 		}
 
-		if CLI.Serve.CDN != "" {
-			manager.SetCDNServer(CLI.Serve.CDN)
+		if CLI.Serve.BlobServer != "" {
+			manager.SetBlobServer(CLI.Serve.BlobServer)
 		} else {
-			manager.SetCDNServer(cfg.GetString("CDNServer"))
+			manager.SetBlobServer(cfg.GetString("blobserver"))
 		}
 
 		vdb := db.OpenDB(path.Join(CLI.Serve.DataPath, "video.sqlite"))
@@ -123,7 +124,11 @@ func main() {
 			s3StopChan = video.SpawnS3uploader(lib)
 		}
 
-		manager.LoadEnabledChannels(cfg.GetStringSlice("enabledchannels"))
+		manager.LoadConfiguredChannels(
+			cfg.GetStringSlice("prioritychannels"),
+			cfg.GetStringSlice("enabledchannels"),
+			cfg.GetStringSlice("disabledchannels"),
+		)
 
 		cleanStopChan := video.SpawnLibraryCleaning(lib)
 

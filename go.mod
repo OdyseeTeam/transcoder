@@ -14,12 +14,13 @@ require (
 	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
 	github.com/lbryio/lbry.go/v2 v2.7.2-0.20210416195322-6516df1418e3
+	github.com/lbryio/reflector.go v1.1.3-0.20210715113740-f72e68abde25
 	github.com/mattn/go-sqlite3 v1.14.4
-	github.com/nikooo777/lbry-blobs-downloader v1.0.4
+	github.com/nikooo777/lbry-blobs-downloader v1.0.5
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
-	github.com/prometheus/client_golang v1.9.0
+	github.com/prometheus/client_golang v1.10.0
 	github.com/simukti/sqldb-logger v0.0.0-20201125162808-c35f87e285f2
 	github.com/simukti/sqldb-logger/logadapter/zapadapter v0.0.0-20201125162808-c35f87e285f2
 	github.com/spf13/viper v1.7.1
@@ -28,11 +29,12 @@ require (
 	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.16.0
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
-	golang.org/x/tools v0.1.0 // indirect
+	golang.org/x/tools v0.1.3-0.20210608163600-9ed039809d4c // indirect
+	honnef.co/go/tools v0.2.0 // indirect
 )
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-replace github.com/nikooo777/lbry-blobs-downloader => github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed2
+replace github.com/nikooo777/lbry-blobs-downloader => github.com/andybeletsky/lbry-blobs-downloader v1.0.4-fixed6
 
 //  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/ExternalForks/transcoder

@@ -68,18 +68,22 @@ func (s *integSuite) TestStreamNotFound() {
 }
 
 func (s *integSuite) TestStreamQueuedLevel5() {
-	lbryUrl := url.PathEscape("@FreeMovies#a/the-jack-knife-man#f")
-	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), lbryUrl))
+	lbryUrl := "@FreeMovies#a/the-jack-knife-man#f"
+	escUrl := url.PathEscape("@FreeMovies#a/the-jack-knife-man#f")
+	tr, err := manager.ResolveRequest(lbryUrl)
+	s.Require().NoError(err)
+
+	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), escUrl))
 	s.Require().NoError(err)
 	s.equalResponse(http.StatusAccepted, manager.ErrTranscodingQueued.Error(), resp)
 
 	time.Sleep(1 * time.Second)
 
-	s.Equal(mfr.StatusActive, s.mgr.RequestStatus("@FreeMovies#a/the-jack-knife-man#f"))
+	s.Equal(mfr.StatusActive, s.mgr.RequestStatus(tr.SDHash))
 
-	resp, err = http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), lbryUrl))
+	resp, err = http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), escUrl))
 
-	s.Equal(mfr.StatusActive, s.mgr.RequestStatus("@FreeMovies#a/the-jack-knife-man#f"))
+	s.Equal(mfr.StatusActive, s.mgr.RequestStatus(tr.SDHash))
 
 	s.Require().NoError(err)
 	s.equalResponse(http.StatusAccepted, manager.ErrTranscodingUnderway.Error(), resp)
@@ -95,12 +99,15 @@ func (s *integSuite) TestStreamQueuedLevel5() {
 // }
 
 func (s *integSuite) TestStreamQueuedCommon() {
-	lbryUrl := url.PathEscape("@specialoperationstest#3/fear-of-death-inspirational#a")
+	lbryUrl := "@specialoperationstest#3/fear-of-death-inspirational#a"
+	escUrl := url.PathEscape("@specialoperationstest#3/fear-of-death-inspirational#a")
+	tr, err := manager.ResolveRequest(lbryUrl)
+	s.Require().NoError(err)
 
-	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), lbryUrl))
+	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), escUrl))
 	s.Require().NoError(err)
 	s.equalResponse(http.StatusForbidden, manager.ErrTranscodingForbidden.Error(), resp)
-	s.Equal(mfr.StatusQueued, s.mgr.RequestStatus("@specialoperationstest#3/fear-of-death-inspirational#a"))
+	s.Equal(mfr.StatusQueued, s.mgr.RequestStatus(tr.SDHash))
 }
 
 func (s *integSuite) equalResponse(expCode int, expBody string, resp *http.Response) {

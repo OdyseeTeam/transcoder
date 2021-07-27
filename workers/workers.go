@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/lbryio/transcoder/encoder"
@@ -35,8 +36,13 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 	metrics.DownloadedSizeMB.Add(float64(streamSize) / 1024 / 1024)
 
 	if err != nil {
-		r.Release()
-		ll.Errorw("transcoding request released", "reason", "download failed", "err", err)
+		if strings.HasSuffix(err.Error(), "503") || strings.Contains(err.Error(), "blob not found") {
+			r.Reject()
+			ll.Errorw("transcoding request rejected", "reason", "download failed fatally", "err", err)
+		} else {
+			r.Release()
+			ll.Errorw("transcoding request released", "reason", "download failed", "err", err)
+		}
 		TranscodingErrors.WithLabelValues("download").Inc()
 		return err
 	}

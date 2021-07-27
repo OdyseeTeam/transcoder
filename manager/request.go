@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
-	"net/http"
 	"os"
 	"path"
 	"strconv"
@@ -22,24 +20,10 @@ import (
 )
 
 var (
-	lbrytvAPI  = "https://api.lbry.tv/api/v1/proxy"
-	cdnServer  = "https://cdn.lbryplayer.xyz/api/v3/streams"
-	blobServer = "cdn.lbryplayer.xyz"
-	udpPort    = 5568
-	tcpPort    = 5567
+	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
+	blobServer = "blobcache-eu.lbry.com"
 
-	lbrytvClient   = ljsonrpc.NewClient(lbrytvAPI)
-	downloadClient = &http.Client{
-		Timeout: 1200 * time.Second,
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 120 * time.Second,
-			}).Dial,
-			TLSHandshakeTimeout:   30 * time.Second,
-			ResponseHeaderTimeout: 15 * time.Second,
-		},
-	}
+	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
 )
 
 type WriteCounter struct {
@@ -116,31 +100,39 @@ func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	return &c, nil
 }
 
-// Download retrieves a video stream from the lbrytv CDN and saves it to a temporary file.
-func (c *TranscodingRequest) Download(dest string) (*os.File, int64, error) {
-	shared.ReflectorPeerServer = fmt.Sprintf("%s:%d", blobServer, tcpPort)
-	shared.ReflectorQuicServer = fmt.Sprintf("%s:%d", blobServer, udpPort)
+// Download retrieves a stream from LBRY CDN and saves it into the dstPathination folder under original name.
+func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
+	UDPPort := 5568
+	TCPPort := 5567
+	HTTPPort := 5569
+
+	// TODO: Fix this
+	shared.ReflectorPeerServer = fmt.Sprintf("%s:%d", blobServer, TCPPort)
+	shared.ReflectorQuicServer = fmt.Sprintf("%s:%d", blobServer, UDPPort)
+	shared.ReflectorHttpServer = fmt.Sprintf("%s:%d", blobServer, HTTPPort)
 
 	var readLen int64
+	dstFile := path.Join(dstPath, c.streamFileName())
+
 	logger.Infow("downloading stream", "url", c.URI)
 	t := timer.Start()
 
-	if err := os.MkdirAll(dest, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
 		return nil, 0, err
 	}
 
-	if err := downloader.DownloadAndBuild(c.SDHash, false, downloader.UDP, c.streamFileName(), dest); err != nil {
+	if err := downloader.DownloadAndBuild(c.SDHash, false, downloader.HTTP, c.streamFileName(), dstPath); err != nil {
 		return nil, 0, err
 	}
 	t.Stop()
 
-	fi, err := os.Stat(path.Join(dest, c.streamFileName()))
+	fi, err := os.Stat(dstFile)
 	if err != nil {
 		return nil, 0, err
 	}
 	readLen = fi.Size()
 
-	f, err := os.Open(path.Join(dest, c.streamFileName()))
+	f, err := os.Open(dstFile)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -169,6 +161,6 @@ func (c *TranscodingRequest) streamFileName() string {
 	return c.SDHash
 }
 
-func SetCDNServer(s string) {
-	cdnServer = s
+func SetBlobServer(s string) {
+	blobServer = s
 }
