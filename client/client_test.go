@@ -99,7 +99,7 @@ func (s *clientSuite) TestPlayFragment() {
 	c := New(Configure().VideoPath(path.Join(s.assetsPath, "TestPlayFragment")).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
 
 	// Request stream and wait until it's available.
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	wait := time.NewTicker(500 * time.Millisecond)
 Waiting:
 	for {
