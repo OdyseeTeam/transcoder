@@ -48,14 +48,17 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *clientSuite) SetupTest() {
-	s.assetsPath = os.TempDir()
-	s.Require().NoError(os.MkdirAll(path.Join(s.assetsPath, "videos"), os.ModePerm))
+	p, err := ioutil.TempDir("", "")
+	s.Require().NoError(err)
+	s.assetsPath = p
+	vPath := path.Join(s.assetsPath, "videos")
+	s.Require().NoError(os.MkdirAll(vPath, os.ModePerm))
 
 	vdb := db.OpenTestDB()
 	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
 
 	libCfg := video.Configure().
-		LocalStorage(storage.Local(path.Join(s.assetsPath, "videos"))).
+		LocalStorage(storage.Local(vPath)).
 		DB(vdb)
 	lib := video.NewLibrary(libCfg)
 
@@ -69,7 +72,7 @@ func (s *clientSuite) SetupTest() {
 		manager.ConfigureHttpAPI().
 			Debug(true).
 			Addr("127.0.0.1:50808").
-			VideoPath(path.Join(s.assetsPath, "videos")).
+			VideoPath(vPath).
 			VideoManager(mgr),
 	)
 	go func() {

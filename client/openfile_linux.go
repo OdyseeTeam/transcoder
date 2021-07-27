@@ -20,7 +20,9 @@ func directCopy(dst string, from io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer df.Flush()
-	defer f.Close()
-	return io.Copy(df, from)
+	n, err := io.Copy(df, from)
+	df.Flush()
+	f.Close()
+
+	return n, err
 }

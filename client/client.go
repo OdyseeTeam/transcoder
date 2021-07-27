@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -343,7 +342,7 @@ func (c Client) callAPI(lbryURL string) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
-func (c Client) fetchFragment(url, dstFile string) (int64, error) {
+func (c Client) fetchFragment(url, sdHash, name string) (int64, error) {
 	var (
 		src        string
 		bodyReader io.Reader
@@ -385,14 +384,7 @@ func (c Client) fetchFragment(url, dstFile string) (int64, error) {
 		return 0, ret
 	}
 
-	// This should not be created outside of configured tmpDir to avoid docker container volume leak.
-	tmpFile, err := ioutil.TempFile(c.tmpDir(), "fragment")
-	if err != nil {
-		return 0, err
-	}
-	tmpFile.Close()
-
-	if strings.HasSuffix(dstFile, MasterPlaylistName) {
+	if name == MasterPlaylistName {
 		b := []string{}
 		scanner := bufio.NewScanner(r.Body)
 		for scanner.Scan() {
@@ -406,19 +398,26 @@ func (c Client) fetchFragment(url, dstFile string) (int64, error) {
 	} else {
 		bodyReader = r.Body
 	}
+	// This should not be created outside of configured tmpDir to avoid docker container volume leak.
+	// tmpFile := filepath.Join(c.tmpDir(), )
+	if err := os.MkdirAll(path.Join(c.videoPath, sdHash), os.ModePerm); err != nil {
+		return 0, err
+	}
+	dstName := path.Join(c.videoPath, sdHash, name)
+	tmpName := path.Join(c.tmpDir(), fmt.Sprintf("%s-%s", sdHash, name))
 
-	size, err := directCopy(tmpFile.Name(), bodyReader)
+	size, err := directCopy(tmpName, bodyReader)
 	FetchSizeBytes.WithLabelValues(src).Add(float64(size))
 
 	if err != nil {
 		return size, err
 	}
-	err = os.Rename(tmpFile.Name(), dstFile)
+	err = os.Rename(tmpName, dstName)
 	if err != nil {
 		return size, err
 	}
 
-	c.logger.Debugw("saved fragment", "url", url, "size", size, "path", dstFile)
+	c.logger.Debugw("saved fragment", "url", url, "size", size, "dest", dstName)
 	return size, nil
 }
 
@@ -433,18 +432,13 @@ func (c Client) getCachedFragment(lbryURL, sdHash, name string) (*Fragment, bool
 	item, err = c.cache.Fetch(key, fragmentCacheDuration, func() (interface{}, error) {
 		miss = true
 		c.logger.Debugw("cache miss", "key", key)
-		dstPath := path.Join(c.videoPath, sdHash)
-		dstFile := path.Join(dstPath, name)
-		if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
-			return nil, err
-		}
 
 		url, err := c.fragmentURL(lbryURL, sdHash, name)
 		if err != nil {
 			return nil, err
 		}
 
-		size, err := c.fetchFragment(url, dstFile)
+		size, err := c.fetchFragment(url, sdHash, name)
 		if err != nil {
 			if err == ErrNotFound {
 				c.discardFragmentURL(sdHash)
