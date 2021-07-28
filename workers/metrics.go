@@ -20,9 +20,12 @@ var (
 	TranscodingDownloading = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoding_downloading",
 	})
-
 	TranscodingSpentSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_spent_seconds",
+	})
+
+	TranscodedSeconds = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "transcoded_seconds",
 	})
 	TranscodedSizeMB = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_size_mb",
@@ -39,7 +42,8 @@ var (
 func RegisterMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
-			TranscodingRunning, TranscodingSpentSeconds, TranscodedSizeMB, TranscodedCount, TranscodingErrors,
+			TranscodingRunning, TranscodingSpentSeconds,
+			TranscodedSeconds, TranscodedSizeMB, TranscodedCount, TranscodingErrors,
 		)
 	})
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -89,12 +90,16 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 
 	TranscodingRunning.Dec()
 	TranscodingSpentSeconds.Add(tmr.Duration())
+
+	md, _ := strconv.ParseFloat(enc.Meta().Format.Duration, 64)
+	TranscodedSeconds.Add(md)
 	ll.Infow(
 		"encoding complete",
 		"out", localStream.FullPath(),
 		"seconds_spent", tmr.String(),
 		"duration", enc.Meta().Format.Duration,
 		"bitrate", enc.Meta().Format.GetBitRate(),
+		"channel", r.ChannelURI,
 	)
 
 	time.Sleep(2 * time.Second)
