@@ -34,6 +34,7 @@ func (s *poolSuite) TestPool() {
 
 	// Level 5 channel queue
 	pool.AddQueue("level5", 0, func(k string, v interface{}, q *mfr.Queue) bool {
+		// Randomly determined as level 5
 		if isLevel5(k) {
 			p1++
 			q.Hit(k, v)
@@ -43,6 +44,7 @@ func (s *poolSuite) TestPool() {
 	})
 	// Hardcoded channel queue
 	pool.AddQueue("hardcoded", 0, func(k string, v interface{}, q *mfr.Queue) bool {
+		// Randomly enabled
 		if isChannelEnabled(k) {
 			p2++
 			q.Hit(k, v)
@@ -61,24 +63,24 @@ func (s *poolSuite) TestPool() {
 
 	s.Nil(pool.Next())
 
-	for range [10]int{} {
+	for range [20]int{} {
 		c := &element{randomString(96), randomString(25)}
 		pool.Admit(c.url, c)
 	}
 
-	s.GreaterOrEqual(pool.levels[0].queue.Hits(), uint(1))
-	s.GreaterOrEqual(pool.levels[1].queue.Hits(), uint(1))
-	s.GreaterOrEqual(pool.levels[2].queue.Hits(), uint(1))
+	s.GreaterOrEqual(p1, 1)
+	s.GreaterOrEqual(p2, 1)
+	s.GreaterOrEqual(p3, 1)
 
 	total := 0
 	for e := range pool.Out() {
 		s.Require().NotNil(e, "pool is exhausted with %v hits", total)
 		total += int(e.Hits())
-		if total >= 10 {
+		if total >= 20 {
 			break
 		}
 	}
-	s.Equal(10, total)
+	s.Equal(20, total)
 }
 
 func (s *poolSuite) TestPoolMinHits() {

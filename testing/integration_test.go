@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -53,10 +54,29 @@ func (s *integSuite) SetupSuite() {
 			VideoPath(assetsPath).
 			VideoManager(s.mgr),
 	)
+
 	go func() {
 		err := s.httpAPI.Start()
 		if err != nil {
 			s.FailNow(err.Error())
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	wait := time.NewTicker(50 * time.Millisecond)
+	defer cancel()
+
+	func() {
+		for {
+			select {
+			case <-ctx.Done():
+				s.FailNow("server startup taking too long")
+			case <-wait.C:
+				_, err := http.Get(fmt.Sprintf("http://%v/", s.httpAPI.Addr()))
+				if err == nil {
+					return
+				}
+			}
 		}
 	}()
 }

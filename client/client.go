@@ -18,6 +18,7 @@ import (
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/timer"
+	"github.com/lbryio/transcoder/storage"
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"
@@ -30,11 +31,14 @@ const (
 
 	SchemaRemote = "remote://"
 
-	cacheHeader         = "x-cache"
-	cacheHeaderHit      = "HIT"
-	cacheHeaderMiss     = "MISS"
-	cacheControlHeader  = "cache-control"
+	ctypeHeaderName        = "content-type"
+	cacheHeaderName        = "x-cache"
+	cacheControlHeaderName = "cache-control"
+
 	clientCacheDuration = 21239
+
+	cacheHeaderHit  = "HIT"
+	cacheHeaderMiss = "MISS"
 
 	fragmentRetrievalRetries = 3
 
@@ -196,18 +200,17 @@ func newFragment(sdHash, name string, size int64) *Fragment {
 }
 
 // PlayFragment retrieves requested stream fragment and serves it into the provided HTTP response.
-func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWriter, r *http.Request) error {
+func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.ResponseWriter, r *http.Request) error {
 	var (
-		ch  string
 		fg  *Fragment
 		err error
 		hit bool
 	)
-	ll := c.logger.With("lbryURL", lbryURL, "sd_hash", sdHash, "fragment", fragment)
+	ll := c.logger.With("lbryURL", lbryURL, "sd_hash", sdHash, "fragment", fragmentName)
 
 	TranscodedCacheQueryCount.Inc()
 	for i := 0; i < fragmentRetrievalRetries; i++ {
-		fg, hit, err = c.getCachedFragment(lbryURL, sdHash, fragment)
+		fg, hit, err = c.getCachedFragment(lbryURL, sdHash, fragmentName)
 		if err == nil {
 			break
 		}
@@ -225,15 +228,21 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragment string, w http.ResponseWr
 	}
 
 	c.logger.Infow("serving fragment", "path", c.fullFragmentPath(fg), "cache_hit", hit)
+
 	if hit {
-		ch = cacheHeaderHit
+		w.Header().Set(cacheHeaderName, cacheHeaderHit)
 	} else {
-		ch = cacheHeaderMiss
+		w.Header().Set(cacheHeaderName, cacheHeaderMiss)
 		TranscodedCacheMiss.Inc()
 	}
-	w.Header().Set(cacheHeader, ch)
-	w.Header().Set(cacheControlHeader, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
-	w.Header().Set("content-type", "video/MP2T")
+
+	if strings.HasSuffix(fragmentName, storage.PlaylistExt) {
+		w.Header().Set(ctypeHeaderName, storage.PlaylistContentType)
+	} else if strings.HasSuffix(fragmentName, storage.FragmentExt) {
+		w.Header().Set(ctypeHeaderName, storage.FragmentContentType)
+	}
+
+	w.Header().Set(cacheControlHeaderName, fmt.Sprintf("public, max-age=%v", clientCacheDuration))
 	w.Header().Set("access-control-allow-origin", "*")
 	w.Header().Set("access-control-allow-methods", "GET, OPTIONS")
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
