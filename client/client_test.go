@@ -142,7 +142,7 @@ Waiting:
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.InDelta(tc.size, len(rbody), 6000)
+				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.01)
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
