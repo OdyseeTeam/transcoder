@@ -151,14 +151,19 @@ Waiting:
 				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
 			}
 			if tc.name == MasterPlaylistName {
-				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
+				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
 			} else {
-				s.Equal(cacheHeaderMiss, rr.Result().Header.Get(cacheHeader))
+				s.Equal(cacheHeaderMiss, rr.Result().Header.Get(cacheHeaderName))
 			}
-			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
 			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
 			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
-			s.Equal("video/MP2T", rr.Result().Header.Get("content-type"))
+
+			if strings.HasSuffix(tc.name, "m3u8") {
+				s.Equal("application/x-mpegurl", rr.Result().Header.Get("content-type"))
+			} else {
+				s.Equal("video/mp2t", rr.Result().Header.Get("content-type"))
+			}
 		})
 	}
 	for _, tc := range cases {
@@ -166,8 +171,8 @@ Waiting:
 			rr := httptest.NewRecorder()
 			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
-			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeader))
-			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeader))
+			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
 		})
 	}
 }

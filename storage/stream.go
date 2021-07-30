@@ -16,8 +16,9 @@ import (
 const (
 	MasterPlaylistName  = "master.m3u8"
 	PlaylistExt         = ".m3u8"
-	PlaylistContentType = "application/x-mpegURL"
-	FragmentContentType = "video/mp4"
+	FragmentExt         = ".ts"
+	PlaylistContentType = "application/x-mpegurl"
+	FragmentContentType = "video/mp2t"
 )
 
 type RemoteStream struct {
