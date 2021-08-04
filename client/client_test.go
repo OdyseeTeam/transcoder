@@ -47,7 +47,7 @@ func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(clientSuite))
 }
 
-func (s *clientSuite) SetupTest() {
+func (s *clientSuite) SetupSuite() {
 	p, err := ioutil.TempDir("", "")
 	s.Require().NoError(err)
 	s.assetsPath = p
@@ -91,7 +91,7 @@ func (s *clientSuite) SetupTest() {
 	)
 }
 
-func (s *clientSuite) TearDownTest() {
+func (s *clientSuite) TearDownSuite() {
 	go s.httpAPI.Shutdown()
 	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
