@@ -2,7 +2,23 @@
 
 ## Building
 
-To build an x86 Linux binary: `make linux`
+To build an x86 Linux binary:
+
+```
+make linux
+```
+
+#### Building on MacOS
+
+To build for a Linux target on macos, you need to have musl toolchain installed. Using homebrew:
+
+```
+brew install filosottile/musl-cross/musl-cross
+```
+
+## Running
+
+On most systems, if you have `golang >= 1.16` installed, you can just `go run .`.
 
 ## Configuring
 
@@ -16,13 +32,9 @@ go run . serve --debug --video-path=/tmp/transcoder --bind=:18081
 
 Run `go run . serve --help` for a list of options.
 
-## Running
-
-
-
 ## Versioning
 
-This project is using [CalVer](https://calver.org) YY.MM.MINOR[.MICRO].
+This project is using [SemVer](https://semver.org) YY.MM.MINOR[.MICRO].
 
 ## Contributing
 
