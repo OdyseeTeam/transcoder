@@ -40,6 +40,7 @@ type Task struct {
 type Result struct {
 	Status int
 	Error  error
+	value  chan interface{}
 }
 
 const (
@@ -57,12 +58,20 @@ type agent struct {
 	wait    *sync.WaitGroup
 }
 
+func (t Task) SetResult(v interface{}) {
+	t.result.value <- v
+}
+
 func (r Result) Failed() bool {
 	return r.Status == TaskFailed
 }
 
 func (r Result) Done() bool {
 	return r.Status == TaskDone
+}
+
+func (r Result) Value() interface{} {
+	return <-r.value
 }
 
 func newAgent(id int, agentPool chan chan Task, worker Worker, gwait *sync.WaitGroup) agent {
@@ -121,22 +130,25 @@ func (a *agent) Stop() {
 }
 
 type Dispatcher struct {
-	agentPool chan chan Task
-	agents    []*agent
-	tasks     chan Task
-	sigChan   chan int
-	gwait     *sync.WaitGroup
+	agentPool     chan chan Task
+	agents        []*agent
+	incomingTasks chan Task
+	sigChan       chan int
+	gwait         *sync.WaitGroup
 }
 
-func Start(agentsNum int, worker Worker, tasksBuffer int) Dispatcher {
+// Start spawns a pool of workers.
+// tasksBuffer sets how many tasks should be pre-emptively put into each worker's
+// incoming queue. Set to 0 for prevent greedy tasks assignment (this will make `Dispatch` blocking).
+func Start(parallel int, worker Worker, tasksBuffer int) Dispatcher {
 	d := Dispatcher{
-		agentPool: make(chan chan Task, 1000),
-		tasks:     make(chan Task, tasksBuffer),
-		sigChan:   make(chan int, 1),
-		gwait:     &sync.WaitGroup{},
+		agentPool:     make(chan chan Task, 1000),
+		incomingTasks: make(chan Task, tasksBuffer),
+		sigChan:       make(chan int, 1),
+		gwait:         &sync.WaitGroup{},
 	}
 
-	for i := 0; i < agentsNum; i++ {
+	for i := 0; i < parallel; i++ {
 		a := newAgent(i, d.agentPool, worker, d.gwait)
 		d.agents = append(d.agents, &a)
 		a.Start()
@@ -145,7 +157,7 @@ func Start(agentsNum int, worker Worker, tasksBuffer int) Dispatcher {
 	go func() {
 		for {
 			select {
-			case task := <-d.tasks:
+			case task := <-d.incomingTasks:
 				DispatcherQueueLength.Dec()
 				logger.Debugw("dispatching incoming task", "task", fmt.Sprintf("%+v", task))
 				agentQueue := <-d.agentPool
@@ -166,8 +178,8 @@ func Start(agentsNum int, worker Worker, tasksBuffer int) Dispatcher {
 
 // Dispatch takes `payload`, wraps it into a `Task` and dispatches to the first available `Worker`.
 func (d *Dispatcher) Dispatch(payload interface{}) *Result {
-	r := &Result{Status: TaskPending}
-	d.tasks <- Task{Payload: payload, Dispatcher: d, result: r}
+	r := &Result{Status: TaskPending, value: make(chan interface{}, 1)}
+	d.incomingTasks <- Task{Payload: payload, Dispatcher: d, result: r}
 	DispatcherQueueLength.Inc()
 	DispatcherTasksQueued.Inc()
 	return r

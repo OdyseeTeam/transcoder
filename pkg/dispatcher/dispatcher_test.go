@@ -19,22 +19,23 @@ type DispatcherSuite struct {
 
 type testWorker struct {
 	sync.Mutex
-	doCalled  int
+	called    int
 	seenTasks []string
 }
 
 func (worker *testWorker) Work(t Task) error {
 	worker.Lock()
-	worker.doCalled++
+	worker.called++
 	pl := t.Payload.(struct{ URL, SDHash string })
 	worker.seenTasks = append(worker.seenTasks, pl.URL+pl.SDHash)
 	worker.Unlock()
+	t.SetResult(pl.URL + pl.SDHash)
 	return nil
 }
 
 type slowWorker struct {
 	sync.Mutex
-	doCalled  int
+	called    int
 	seenTasks []string
 }
 
@@ -71,9 +72,10 @@ func (s *DispatcherSuite) TestDispatcher() {
 	time.Sleep(100 * time.Millisecond)
 
 	s.Equal(500, len(worker.seenTasks))
-	s.Equal(500, worker.doCalled)
+	s.Equal(500, worker.called)
 	for _, r := range results {
 		s.Require().True(r.Done())
+		s.Require().Equal(25+96, len(r.Value().(string)))
 	}
 
 	d.Stop()
@@ -95,7 +97,7 @@ func (s *DispatcherSuite) TestBlockingDispatch() {
 	time.Sleep(100 * time.Millisecond)
 
 	s.Equal(20, len(worker.seenTasks))
-	s.Equal(20, worker.doCalled)
+	s.Equal(20, worker.called)
 	for _, r := range results {
 		s.Require().True(r.Done())
 	}
