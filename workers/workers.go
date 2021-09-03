@@ -13,13 +13,16 @@ import (
 	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
+	zapa "github.com/lbryio/transcoder/pkg/logging/adapter-zap"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
+
 	"github.com/pkg/errors"
 )
 
 type encoderWorker struct {
-	mgr *manager.VideoManager
+	mgr     *manager.VideoManager
+	encoder encoder.Encoder
 }
 
 func (w encoderWorker) Do(t dispatcher.Task) error {
@@ -65,7 +68,7 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 		}
 	}
 
-	enc, err := encoder.NewEncoder(streamFH.Name(), localStream.FullPath())
+	res, err := w.encoder.Encode(streamFH.Name(), localStream.FullPath())
 	if err != nil {
 		r.Reject()
 		TranscodingErrors.WithLabelValues("encode").Inc()
@@ -73,32 +76,23 @@ func (w encoderWorker) Do(t dispatcher.Task) error {
 		return err
 	}
 	ll.Infow("starting encoding")
-
 	TranscodingRunning.Inc()
-	e, err := enc.Encode()
-	if err != nil {
-		r.Reject()
-		TranscodingRunning.Dec()
-		TranscodingErrors.WithLabelValues("encode").Inc()
-		cleanupLocalStream()
-		return err
-	}
 
-	for i := range e {
+	for i := range res.Progress {
 		ll.Debugw("encoding", "progress", fmt.Sprintf("%.2f", i.GetProgress()))
 	}
 
 	TranscodingRunning.Dec()
 	TranscodingSpentSeconds.Add(tmr.Duration())
 
-	md, _ := strconv.ParseFloat(enc.Meta().Format.Duration, 64)
+	md, _ := strconv.ParseFloat(res.Meta.Format.Duration, 64)
 	TranscodedSeconds.Add(md)
 	ll.Infow(
 		"encoding complete",
 		"out", localStream.FullPath(),
 		"seconds_spent", tmr.String(),
-		"duration", enc.Meta().Format.Duration,
-		"bitrate", enc.Meta().Format.GetBitRate(),
+		"duration", res.Meta.Format.Duration,
+		"bitrate", res.Meta.Format.GetBitRate(),
 		"channel", r.ChannelURI,
 	)
 
@@ -141,7 +135,11 @@ func SpawnEncoderWorkers(wnum int, mgr *manager.VideoManager) chan<- interface{}
 	RegisterMetrics()
 
 	logger.Infof("starting %v encoders", wnum)
-	worker := encoderWorker{mgr: mgr}
+	enc, err := encoder.NewEncoder(encoder.Configure().Log(zapa.NewKV(logger.Desugar())))
+	if err != nil {
+		logger.Fatal(err)
+	}
+	worker := encoderWorker{mgr: mgr, encoder: enc}
 	d := dispatcher.Start(wnum, worker, 0)
 	stopChan := make(chan interface{})
 

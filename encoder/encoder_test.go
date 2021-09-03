@@ -43,12 +43,18 @@ func (s *EncoderSuite) TearDownSuite() {
 
 func (s *EncoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(absPath, s.out)
+	e, err := NewEncoder(Configure())
 	s.Require().NoError(err)
-	ch, err := e.Encode()
+
+	res, err := e.Encode(absPath, s.out)
 	s.Require().NoError(err)
+
+	vs := formats.GetVideoStream(res.Meta)
+	s.Equal(1920, vs.GetWidth())
+	s.Equal(1080, vs.GetHeight())
+
 	progress := 0.0
-	for p := range ch {
+	for p := range res.Progress {
 		progress = p.GetProgress()
 	}
 
@@ -83,12 +89,4 @@ stream_2.m3u8
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
 
-}
-
-func (s *EncoderSuite) Test_GetMetadata() {
-	meta, err := GetMetadata(s.file.Name())
-	s.Require().NoError(err)
-	vs := formats.GetVideoStream(meta)
-	s.Equal(1920, vs.GetWidth())
-	s.Equal(1080, vs.GetHeight())
 }

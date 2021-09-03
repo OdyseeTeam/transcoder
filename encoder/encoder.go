@@ -3,7 +3,6 @@ package encoder
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,128 +11,148 @@ import (
 
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/pkg/logging"
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
 )
 
-var ffmpegConf = ffmpeg.Config{
-	FfmpegBinPath:   "",
-	FfprobeBinPath:  "",
-	ProgressEnabled: true,
-	Verbose:         false,
-}
-
 type Encoder interface {
-	Encode() (<-chan ffmpegt.Progress, error)
-	Meta() *ffmpeg.Metadata
+	Encode(in, out string) (*Result, error)
 }
 
 type encoder struct {
-	in, out string
-	meta    *ffmpeg.Metadata
+	*Configuration
 }
 
-func init() {
-	var err error
-	ffmpegConf.FfmpegBinPath, err = exec.LookPath("ffmpeg")
-	if err != nil {
-		ffmpegConf.FfmpegBinPath = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
-	}
-	ffmpegConf.FfprobeBinPath, err = exec.LookPath("ffprobe")
-	if err != nil {
-		ffmpegConf.FfprobeBinPath = firstExistingFile([]string{"/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"})
-	}
-	logger.Infow("ffmpeg configuration", "conf", ffmpegConf)
+type Result struct {
+	Input, Output string
+	Meta          *ffmpeg.Metadata
+	Progress      <-chan ffmpegt.Progress
 }
 
-func firstExistingFile(paths []string) string {
-	for _, p := range paths {
-		_, err := os.Stat(p)
-		if !os.IsNotExist(err) {
-			return p
-		}
-	}
-	return ""
+type Configuration struct {
+	ffmpegPath, ffprobePath string
+	log                     logging.KVLogger
 }
 
-func NewEncoder(in, out string) (Encoder, error) {
-	if ffmpegConf.FfmpegBinPath == "" || ffmpegConf.FfprobeBinPath == "" {
-		return nil, errors.New("ffmpeg/ffprobe not found")
+// Configure will attempt to lookup paths to ffmpeg and ffprobe.
+// Call FfmpegPath and FfprobePath if you need to set it manually.
+func Configure() *Configuration {
+	ffmpegPath, _ := exec.LookPath("ffmpeg")
+	ffprobePath, _ := exec.LookPath("ffprobe")
+	return &Configuration{
+		ffmpegPath:  ffmpegPath,
+		ffprobePath: ffprobePath,
+		log:         logging.NoopKVLogger{},
 	}
-	e := &encoder{in: in, out: out}
-	meta, err := GetMetadata(e.in)
-	if err != nil {
-		return nil, err
-	}
-	e.meta = meta
-	return e, nil
 }
 
-func (e *encoder) Meta() *ffmpeg.Metadata {
-	return e.meta
+func (c *Configuration) FfmpegPath(p string) *Configuration {
+	c.ffmpegPath = p
+	return c
+}
+
+func (c *Configuration) FfprobePath(p string) *Configuration {
+	c.ffprobePath = p
+	return c
+}
+
+// Log configures encoder logging. Default configuration is a no-op logger.
+func (c *Configuration) Log(l logging.KVLogger) *Configuration {
+	c.log = l
+	return c
+}
+
+func NewEncoder(cfg *Configuration) (Encoder, error) {
+	var cmd *exec.Cmd
+	cmd = exec.Command(cfg.ffmpegPath, "-h")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("unable to execute ffmpeg: %w", err)
+	}
+
+	cmd = exec.Command(cfg.ffprobePath, "-h")
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("unable to execute ffprobe: %w", err)
+	}
+
+	e := encoder{Configuration: cfg}
+
+	e.log.Info("encoder configured", "ffmpeg", cfg.ffmpegPath, "ffprobe", cfg.ffprobePath)
+	return &e, nil
 }
 
 // Encode does transcoding of specified video file into a series of HLS streams.
-func (e *encoder) Encode() (<-chan ffmpegt.Progress, error) {
-	ll := logger.With("in", e.in)
-	conf := ffmpegConf
-	conf.OutputDir = e.out
+func (e encoder) Encode(input, output string) (*Result, error) {
+	meta, err := e.getMetadata(input)
+	if err != nil {
+		return nil, err
+	}
+	res := &Result{Input: input, Output: output, Meta: meta}
 
-	if err := os.MkdirAll(e.out, os.ModePerm); err != nil {
+	if err := os.MkdirAll(output, os.ModePerm); err != nil {
 		return nil, err
 	}
 
-	targetFormats, err := formats.TargetFormats(formats.H264, e.meta)
+	targetFormats, err := formats.TargetFormats(formats.H264, meta)
 	if err != nil {
 		return nil, err
 	}
 
-	fps, err := formats.DetectFPS(e.meta)
+	fps, err := formats.DetectFPS(meta)
 	if err != nil {
 		return nil, err
 	}
 
-	args, err := NewArguments(e.out, targetFormats, fps)
+	args, err := NewArguments(output, targetFormats, fps)
 	if err != nil {
 		return nil, err
 	}
 
-	vs := formats.GetVideoStream(e.meta)
-	ll.Infow(
+	vs := formats.GetVideoStream(meta)
+	e.log.Info(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
-		"media_duration", e.meta.GetFormat().GetDuration(),
-		"media_bitrate", e.meta.GetFormat().GetBitRate(),
+		"media_duration", meta.GetFormat().GetDuration(),
+		"media_bitrate", meta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
+		"input", input, "output", output,
 	)
 
-	dur, _ := strconv.ParseFloat(e.meta.GetFormat().GetDuration(), 64)
-	btr, _ := strconv.ParseFloat(e.meta.GetFormat().GetBitRate(), 64)
+	dur, _ := strconv.ParseFloat(meta.GetFormat().GetDuration(), 64)
+	btr, _ := strconv.ParseFloat(meta.GetFormat().GetBitRate(), 64)
 	metrics.EncodedDurationSeconds.Add(dur)
 	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
 
-	progress, err := ffmpeg.New(&conf).
-		Input(e.in).
+	progress, err := ffmpeg.New(
+		&ffmpeg.Config{
+			FfmpegBinPath:   e.ffmpegPath,
+			FfprobeBinPath:  e.ffprobePath,
+			ProgressEnabled: true,
+			Verbose:         false,
+			OutputDir:       output,
+		}).
+		Input(input).
 		Output("stream_%v.m3u8").
 		Start(args)
 	if err != nil {
 		return nil, err
 	}
 
-	return progress, nil
+	res.Progress = progress
+	return res, nil
 }
 
-// GetMetadata uses ffprobe to parse video file metadata.
-func GetMetadata(file string) (*ffmpeg.Metadata, error) {
-	metadata := &ffmpeg.Metadata{}
+// getMetadata uses ffprobe to parse video file metadata.
+func (e encoder) getMetadata(input string) (*ffmpeg.Metadata, error) {
+	meta := &ffmpeg.Metadata{}
 
 	var outb, errb bytes.Buffer
 
-	args := []string{"-i", file, "-print_format", "json", "-show_format", "-show_streams", "-show_error"}
+	args := []string{"-i", input, "-print_format", "json", "-show_format", "-show_streams", "-show_error"}
 
-	cmd := exec.Command(ffmpegConf.FfprobeBinPath, args...)
+	cmd := exec.Command(e.ffprobePath, args...)
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 
@@ -141,12 +160,12 @@ func GetMetadata(file string) (*ffmpeg.Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf(
 			"error executing (%s) with args (%s) | error: %s | message: %s %s",
-			ffmpegConf.FfprobeBinPath, args, err, outb.String(), errb.String())
+			e.ffprobePath, args, err, outb.String(), errb.String())
 	}
 
-	if err = json.Unmarshal([]byte(outb.String()), &metadata); err != nil {
+	if err = json.Unmarshal(outb.Bytes(), &meta); err != nil {
 		return nil, err
 	}
 
-	return metadata, nil
+	return meta, nil
 }
