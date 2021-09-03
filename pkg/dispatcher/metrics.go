@@ -32,10 +32,10 @@ var (
 	})
 	DispatcherTasksDone = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_done",
-	}, []string{"worker_id"})
+	}, []string{"agent_id"})
 	DispatcherTasksFailed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "dispatcher_tasks_failed",
-	}, []string{"worker_id"})
+	}, []string{"agent_id"})
 )
 
 func RegisterMetrics() {

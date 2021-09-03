@@ -25,7 +25,7 @@ type encoderWorker struct {
 	encoder encoder.Encoder
 }
 
-func (w encoderWorker) Do(t dispatcher.Task) error {
+func (w encoderWorker) Work(t dispatcher.Task) error {
 	lib := w.mgr.Library()
 
 	r := t.Payload.(*manager.TranscodingRequest)
