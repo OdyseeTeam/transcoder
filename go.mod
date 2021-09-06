@@ -30,6 +30,9 @@ require (
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/tools v0.1.3-0.20210608163600-9ed039809d4c // indirect
 	honnef.co/go/tools v0.2.0 // indirect
+	logur.dev/adapter/zap v0.5.0 // indirect
+	logur.dev/integration/zap v0.4.0 // indirect
+	logur.dev/logur v0.17.0 // indirect
 )
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1

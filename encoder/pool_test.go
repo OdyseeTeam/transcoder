@@ -13,41 +13,41 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type encoderSuite struct {
+type poolSuite struct {
 	suite.Suite
 	file *os.File
 	out  string
 }
 
-func TestEncoderSuite(t *testing.T) {
-	suite.Run(t, new(encoderSuite))
+func TestPoolSuite(t *testing.T) {
+	suite.Run(t, new(poolSuite))
 }
 
-func (s *encoderSuite) SetupSuite() {
-	s.out = path.Join(os.TempDir(), "encoderSuite_out")
+func (s *poolSuite) SetupSuite() {
+	s.out = path.Join(os.TempDir(), "poolSuitee_out")
 
 	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download(path.Join(os.TempDir(), "encoderSuite_in"))
+	s.file, _, err = c.Download(path.Join(os.TempDir(), "poolSuitee_in"))
 	s.file.Close()
 	s.Require().NoError(err)
 }
 
-func (s *encoderSuite) TearDownSuite() {
+func (s *poolSuite) TearDownSuite() {
 	os.Remove(s.file.Name())
 	os.RemoveAll(s.out)
 }
 
-func (s *encoderSuite) TestEncode() {
+func (s *poolSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure())
+	enc, err := NewEncoder(Configure())
 	s.Require().NoError(err)
+	p := NewPool(enc, 10)
 
-	res, err := e.Encode(absPath, s.out)
-	s.Require().NoError(err)
+	res := p.Encode(absPath, s.out).Value().(*Result)
 
 	vs := formats.GetVideoStream(res.Meta)
 	s.Equal(1920, vs.GetWidth())
@@ -83,9 +83,6 @@ stream_2.m3u8
 	for f, str := range outFiles {
 		cont, err := ioutil.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
-		// m, err := regexp.MatchString(strings.TrimSpace(str), string(cont))
-		// s.NoError(err)
-		// s.True(m, fmt.Sprintf("%v doesn't match %v", string(cont), str))
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
 }

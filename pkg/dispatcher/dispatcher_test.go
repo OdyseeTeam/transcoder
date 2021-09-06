@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/pkg/logging"
 
 	"github.com/stretchr/testify/suite"
@@ -16,31 +15,31 @@ import (
 
 type DispatcherSuite struct {
 	suite.Suite
-	db *db.DB
 }
 
-type testWorkload struct {
+type testWorker struct {
 	sync.Mutex
-	doCalled  int
+	called    int
 	seenTasks []string
 }
 
-func (wl *testWorkload) Do(t Task) error {
-	wl.Lock()
-	wl.doCalled++
+func (worker *testWorker) Work(t Task) error {
+	worker.Lock()
+	worker.called++
 	pl := t.Payload.(struct{ URL, SDHash string })
-	wl.seenTasks = append(wl.seenTasks, pl.URL+pl.SDHash)
-	wl.Unlock()
+	worker.seenTasks = append(worker.seenTasks, pl.URL+pl.SDHash)
+	worker.Unlock()
+	t.SetResult(pl.URL + pl.SDHash)
 	return nil
 }
 
-type slowWorkload struct {
+type slowWorker struct {
 	sync.Mutex
-	doCalled  int
+	called    int
 	seenTasks []string
 }
 
-func (wl *slowWorkload) Do(t Task) error {
+func (worker *slowWorker) Work(t Task) error {
 	time.Sleep(1 * time.Second)
 	return nil
 }
@@ -59,8 +58,8 @@ func (s *DispatcherSuite) SetupTest() {
 func (s *DispatcherSuite) TestDispatcher() {
 	defer goleak.VerifyNone(s.T())
 
-	wl := testWorkload{seenTasks: []string{}}
-	d := Start(20, &wl, 1000)
+	worker := testWorker{seenTasks: []string{}}
+	d := Start(20, &worker, 1000)
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
 	results := []*Result{}
@@ -72,10 +71,11 @@ func (s *DispatcherSuite) TestDispatcher() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	s.Equal(500, len(wl.seenTasks))
-	s.Equal(500, wl.doCalled)
+	s.Equal(500, len(worker.seenTasks))
+	s.Equal(500, worker.called)
 	for _, r := range results {
 		s.Require().True(r.Done())
+		s.Require().Equal(25+96, len(r.Value().(string)))
 	}
 
 	d.Stop()
@@ -84,8 +84,8 @@ func (s *DispatcherSuite) TestDispatcher() {
 func (s *DispatcherSuite) TestBlockingDispatch() {
 	defer goleak.VerifyNone(s.T())
 
-	wl := testWorkload{seenTasks: []string{}}
-	d := Start(5, &wl, 0)
+	worker := testWorker{seenTasks: []string{}}
+	d := Start(5, &worker, 0)
 
 	results := []*Result{}
 
@@ -96,8 +96,8 @@ func (s *DispatcherSuite) TestBlockingDispatch() {
 
 	time.Sleep(100 * time.Millisecond)
 
-	s.Equal(20, len(wl.seenTasks))
-	s.Equal(20, wl.doCalled)
+	s.Equal(20, len(worker.seenTasks))
+	s.Equal(20, worker.called)
 	for _, r := range results {
 		s.Require().True(r.Done())
 	}
@@ -106,8 +106,8 @@ func (s *DispatcherSuite) TestBlockingDispatch() {
 }
 
 func (s *DispatcherSuite) TestDispatcherLeaks() {
-	wl := testWorkload{seenTasks: []string{}}
-	d := Start(20, &wl, 1000)
+	worker := testWorker{seenTasks: []string{}}
+	d := Start(20, &worker, 1000)
 
 	grc := runtime.NumGoroutine()
 

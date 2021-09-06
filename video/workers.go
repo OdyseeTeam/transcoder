@@ -15,7 +15,7 @@ type s3uploader struct {
 	processing cmap.ConcurrentMap
 }
 
-func (u s3uploader) Do(t dispatcher.Task) error {
+func (u s3uploader) Work(t dispatcher.Task) error {
 	v := t.Payload.(*Video)
 	u.processing.Set(v.SDHash, v)
 	defer u.processing.Remove(v.Path)
