@@ -8,6 +8,7 @@ import (
 	"path"
 
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -77,6 +78,7 @@ func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
 	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
 
 	metrics.RegisterMetrics()
+	dispatcher.RegisterMetrics()
 	RegisterMetrics()
 	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 
