@@ -16,19 +16,19 @@ func TestTargetFormats(t *testing.T) {
 	}{
 		{
 			generateMeta(720, 480, 5000, FPS30),
-			[]Format{H264.CustomFormat(SD360), H264.CustomFormat(Resolution{720, 480})},
+			[]Format{H264.CustomFormat(SD360), H264.CustomFormat(SD144), H264.CustomFormat(Resolution{720, 480})},
 		},
 		{
 			generateMeta(1920, 1080, 8000, FPS30),
-			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD360)},
+			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD360), H264.CustomFormat(SD144)},
 		},
 		{
 			generateMeta(800, 600, 3000, FPS30),
-			[]Format{H264.CustomFormat(SD360), H264.CustomFormat(Resolution{800, 600})},
+			[]Format{H264.CustomFormat(SD360), H264.CustomFormat(SD144), H264.CustomFormat(Resolution{800, 600})},
 		},
 		{
 			generateMeta(1920, 1080, 3000, FPS30),
-			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD360)},
+			[]Format{H264.CustomFormat(HD1080), H264.CustomFormat(HD720), H264.CustomFormat(SD360), H264.CustomFormat(SD144)},
 		},
 	}
 
