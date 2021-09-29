@@ -15,7 +15,7 @@ const (
 	preset             = "veryfast"
 	keyint             = "100"
 	videoCodec         = "libx264"
-	constantRateFactor = "21"
+	constantRateFactor = "26"
 	hlsTime            = "10"
 )
 

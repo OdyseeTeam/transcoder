@@ -13,7 +13,7 @@ import (
 	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
-	zapa "github.com/lbryio/transcoder/pkg/logging/adapter-zap"
+	zapadapter "github.com/lbryio/transcoder/pkg/logging/adapter-zap"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
 
@@ -135,7 +135,7 @@ func SpawnEncoderWorkers(wnum int, mgr *manager.VideoManager) chan<- interface{}
 	RegisterMetrics()
 
 	logger.Infof("starting %v encoders", wnum)
-	enc, err := encoder.NewEncoder(encoder.Configure().Log(zapa.NewKV(logger.Desugar())))
+	enc, err := encoder.NewEncoder(encoder.Configure().Log(zapadapter.NewKV(logger.Desugar())))
 	if err != nil {
 		logger.Fatal(err)
 	}

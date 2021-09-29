@@ -44,10 +44,11 @@ var (
 	SD480  = Resolution{Height: 480}
 	SD360  = Resolution{Height: 360}
 	SD240  = Resolution{Height: 240}
+	SD144  = Resolution{Height: 144}
 )
 
 var Resolutions = []Resolution{
-	UHD4K, QHD2K, HD1080, HD720, SD480, SD360, SD240,
+	UHD4K, QHD2K, HD1080, HD720, SD480, SD360, SD240, SD144,
 }
 
 // H264 codec with its suggested bitrates
@@ -57,8 +58,8 @@ var H264 = Codec{
 	Format{HD1080, Bitrate{FPS30: 2000, FPS60: 3200}},
 	Format{HD720, Bitrate{FPS30: 1200, FPS60: 2000}},
 	// Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
-	Format{SD360, Bitrate{FPS30: 400, FPS60: 640}},
-	// Format{SD240, Bitrate{FPS30: 250, FPS60: 380}},
+	Format{SD360, Bitrate{FPS30: 350, FPS60: 560}},
+	Format{SD144, Bitrate{FPS30: 100, FPS60: 160}},
 }
 
 // brResolutionFactor is a quality factor for non-standard resolution videos. The higher it is

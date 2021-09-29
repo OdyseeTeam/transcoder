@@ -70,15 +70,19 @@ stream_0.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=2340800,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
 stream_1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=844800,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=756800,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
 stream_2.m3u8
-`,
+
+#EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=256x144,CODECS="avc1.64000c,mp4a.40.2"
+stream_3.m3u8`,
 		"stream_0.m3u8":   "seg_0_000000.ts",
 		"stream_1.m3u8":   "seg_1_000000.ts",
 		"stream_2.m3u8":   "seg_2_000000.ts",
+		"stream_3.m3u8":   "seg_3_000000.ts",
 		"seg_0_000000.ts": "",
 		"seg_1_000000.ts": "",
 		"seg_2_000000.ts": "",
+		"seg_3_000000.ts": "",
 	}
 	for f, str := range outFiles {
 		cont, err := ioutil.ReadFile(path.Join(s.out, f))
