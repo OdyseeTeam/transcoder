@@ -57,78 +57,6 @@ type agent struct {
 	gwait   *sync.WaitGroup
 	wait    *sync.WaitGroup
 }
-
-func (t Task) SetResult(v interface{}) {
-	t.result.value <- v
-}
-
-func (r Result) Failed() bool {
-	return r.Status == TaskFailed
-}
-
-func (r Result) Done() bool {
-	return r.Status == TaskDone
-}
-
-func (r Result) Value() interface{} {
-	return <-r.value
-}
-
-func newAgent(id int, agentPool chan chan Task, worker Worker, gwait *sync.WaitGroup) agent {
-	return agent{
-		id:      fmt.Sprintf("%T#%v", worker, id),
-		tasks:   make(chan Task),
-		pool:    agentPool,
-		sigChan: make(chan int),
-		worker:  worker,
-		gwait:   gwait,
-		wait:    &sync.WaitGroup{},
-	}
-}
-
-// Start starts reading from tasks channel
-func (a *agent) Start() {
-	logger.Infof("spawned dispatch agent %v", a.id)
-	a.gwait.Add(1)
-	go func() {
-		for {
-			a.pool <- a.tasks
-
-			select {
-			case t := <-a.tasks:
-				t.result.Status = TaskActive
-				ll := logger.With("wid", a.id, "task", fmt.Sprintf("%+v", t))
-				ll.Debugw("agent got a task")
-				DispatcherTasksActive.Inc()
-				err := a.worker.Work(t)
-				DispatcherTasksActive.Dec()
-				if err != nil {
-					t.result.Status = TaskFailed
-					t.result.Error = err
-					DispatcherTasksFailed.WithLabelValues(a.id).Inc()
-					ll.Errorw("workload failed", "err", err)
-				} else {
-					DispatcherTasksDone.WithLabelValues(a.id).Inc()
-					ll.Debugw("agent done a task")
-				}
-				t.result.Status = TaskDone
-			case sig := <-a.sigChan:
-				if sig == sigStop {
-					close(a.tasks)
-					a.gwait.Done()
-					logger.Infof("stopped dispatch agent %v", a.id)
-					return
-				}
-			}
-		}
-	}()
-}
-
-// Stop stops the worker invocation cycle (it will finish the current worker).
-func (a *agent) Stop() {
-	a.sigChan <- sigStop
-}
-
 type Dispatcher struct {
 	agentPool     chan chan Task
 	agents        []*agent
@@ -176,9 +104,84 @@ func Start(parallel int, worker Worker, tasksBuffer int) Dispatcher {
 	return d
 }
 
+func newAgent(id int, agentPool chan chan Task, worker Worker, gwait *sync.WaitGroup) agent {
+	return agent{
+		id:      fmt.Sprintf("%T#%v", worker, id),
+		tasks:   make(chan Task),
+		pool:    agentPool,
+		sigChan: make(chan int),
+		worker:  worker,
+		gwait:   gwait,
+		wait:    &sync.WaitGroup{},
+	}
+}
+
+func newResult() *Result {
+	return &Result{Status: TaskPending, value: make(chan interface{})}
+}
+
+func (t Task) SetResult(v interface{}) {
+	go func() { t.result.value <- v }()
+}
+
+func (r Result) Failed() bool {
+	return r.Status == TaskFailed
+}
+
+func (r Result) Done() bool {
+	return r.Status == TaskDone
+}
+
+func (r Result) Value() <-chan interface{} {
+	return r.value
+}
+
+// Start starts reading from tasks channel
+func (a *agent) Start() {
+	logger.Infof("spawned dispatch agent %v", a.id)
+	a.gwait.Add(1)
+	go func() {
+		for {
+			a.pool <- a.tasks
+
+			select {
+			case t := <-a.tasks:
+				t.result.Status = TaskActive
+				ll := logger.With("wid", a.id, "task", fmt.Sprintf("%+v", t))
+				ll.Debugw("agent got a task")
+				DispatcherTasksActive.Inc()
+				err := a.worker.Work(t)
+				DispatcherTasksActive.Dec()
+				if err != nil {
+					t.result.Status = TaskFailed
+					t.result.Error = err
+					DispatcherTasksFailed.WithLabelValues(a.id).Inc()
+					ll.Errorw("workload failed", "err", err)
+				} else {
+					DispatcherTasksDone.WithLabelValues(a.id).Inc()
+					ll.Debugw("agent done a task")
+				}
+				t.result.Status = TaskDone
+			case sig := <-a.sigChan:
+				if sig == sigStop {
+					close(a.tasks)
+					a.gwait.Done()
+					logger.Infof("stopped dispatch agent %v", a.id)
+					return
+				}
+			}
+		}
+	}()
+}
+
+// Stop stops the worker invocation cycle (it will finish the current worker).
+func (a *agent) Stop() {
+	a.sigChan <- sigStop
+}
+
 // Dispatch takes `payload`, wraps it into a `Task` and dispatches to the first available `Worker`.
 func (d *Dispatcher) Dispatch(payload interface{}) *Result {
-	r := &Result{Status: TaskPending, value: make(chan interface{}, 1)}
+	r := newResult()
 	d.incomingTasks <- Task{Payload: payload, Dispatcher: d, result: r}
 	DispatcherQueueLength.Inc()
 	DispatcherTasksQueued.Inc()

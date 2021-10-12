@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/pkg/logging"
 
 	"github.com/stretchr/testify/suite"
@@ -19,16 +20,14 @@ type DispatcherSuite struct {
 
 type testWorker struct {
 	sync.Mutex
-	called    int
 	seenTasks []string
 }
 
 func (worker *testWorker) Work(t Task) error {
 	worker.Lock()
-	worker.called++
+	defer worker.Unlock()
 	pl := t.Payload.(struct{ URL, SDHash string })
 	worker.seenTasks = append(worker.seenTasks, pl.URL+pl.SDHash)
-	worker.Unlock()
 	t.SetResult(pl.URL + pl.SDHash)
 	return nil
 }
@@ -65,18 +64,18 @@ func (s *DispatcherSuite) TestDispatcher() {
 	results := []*Result{}
 
 	for range [500]bool{} {
-		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.SillyName(), SDHash: randomdata.Alphanumeric(64)})
 		results = append(results, r)
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	// time.Sleep(100 * time.Millisecond)
 
-	s.Equal(500, len(worker.seenTasks))
-	s.Equal(500, worker.called)
 	for _, r := range results {
+		v := <-r.Value()
+		s.Require().Equal(25+96, len(v.(string)))
 		s.Require().True(r.Done())
-		s.Require().Equal(25+96, len(r.Value().(string)))
 	}
+	s.Equal(500, len(worker.seenTasks))
 
 	d.Stop()
 }
@@ -90,43 +89,41 @@ func (s *DispatcherSuite) TestBlockingDispatch() {
 	results := []*Result{}
 
 	for range [20]bool{} {
-		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.SillyName(), SDHash: randomdata.Alphanumeric(64)})
 		results = append(results, r)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	s.Equal(20, len(worker.seenTasks))
-	s.Equal(20, worker.called)
 	for _, r := range results {
+		v := <-r.Value()
+		s.Require().Equal(25+96, len(v.(string)))
 		s.Require().True(r.Done())
 	}
+	s.Equal(20, len(worker.seenTasks))
 
 	d.Stop()
 }
 
 func (s *DispatcherSuite) TestDispatcherLeaks() {
 	worker := testWorker{seenTasks: []string{}}
+	results := [10000]*Result{}
 	d := Start(20, &worker, 1000)
-
-	grc := runtime.NumGoroutine()
+	grCount := runtime.NumGoroutine()
 
 	SetLogger(logging.Create("dispatcher", logging.Prod))
-	for range [10000]bool{} {
-		d.Dispatch(struct{ URL, SDHash string }{URL: randomString(25), SDHash: randomString(96)})
+
+	for i := 0; i < 10000; i++ {
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.SillyName(), SDHash: randomdata.Alphanumeric(64)})
+		results[i] = r
 	}
 
-	time.Sleep(5 * time.Second)
-	s.Equal(grc, runtime.NumGoroutine())
+	time.Sleep(500 * time.Millisecond)
+	s.Equal(grCount+10000, runtime.NumGoroutine())
+
+	for _, r := range results {
+		<-r.Value()
+	}
+	time.Sleep(500 * time.Millisecond)
+	s.Equal(grCount, runtime.NumGoroutine())
+
 	d.Stop()
-}
-
-func randomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
-	}
-	return string(b)
 }
