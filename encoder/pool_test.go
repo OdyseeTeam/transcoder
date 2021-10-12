@@ -24,14 +24,14 @@ func TestPoolSuite(t *testing.T) {
 }
 
 func (s *poolSuite) SetupSuite() {
-	s.out = path.Join(os.TempDir(), "poolSuitee_out")
+	s.out = path.Join(os.TempDir(), "poolSuite_out")
 
 	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download(path.Join(os.TempDir(), "poolSuitee_in"))
+	s.file, _, err = c.Download(path.Join(os.TempDir(), "poolSuite_in"))
 	s.file.Close()
 	s.Require().NoError(err)
 }
@@ -47,7 +47,7 @@ func (s *poolSuite) TestEncode() {
 	s.Require().NoError(err)
 	p := NewPool(enc, 10)
 
-	res := p.Encode(absPath, s.out).Value().(*Result)
+	res := (<-p.Encode(absPath, s.out).Value()).(*Result)
 
 	vs := formats.GetVideoStream(res.Meta)
 	s.Equal(1920, vs.GetWidth())
