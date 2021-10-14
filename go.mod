@@ -3,6 +3,8 @@ module github.com/lbryio/transcoder
 go 1.16
 
 require (
+	github.com/BurntSushi/toml v0.4.1 // indirect
+	github.com/Pallinder/go-randomdata v1.2.0 // indirect
 	github.com/alecthomas/kong v0.2.17
 	github.com/aws/aws-sdk-go v1.36.29
 	github.com/brk0v/directio v0.0.0-20190225130936-69406e757cf7
@@ -31,7 +33,8 @@ require (
 	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.16.0
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
-	golang.org/x/tools v0.1.3-0.20210608163600-9ed039809d4c // indirect
+	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.6-0.20210908190839-cf92b39a962c // indirect
 	honnef.co/go/tools v0.2.0 // indirect
 	logur.dev/logur v0.17.0
 )
