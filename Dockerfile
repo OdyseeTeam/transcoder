@@ -1,4 +1,4 @@
-FROM python:alpine3.14 AS compile
+FROM python:3.9.7-alpine3.14 AS compile
 
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -20,7 +20,7 @@ RUN pip install -r requirements.txt
 RUN chmod a+x generator ffmpeg ffprobe
 RUN cp generator /opt/venv/bin/
 
-FROM python:3.9-alpine3.13 AS build
+FROM python:3.9.7-alpine3.14 AS build
 EXPOSE 8080
 EXPOSE 2112
 

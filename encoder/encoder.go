@@ -23,6 +23,7 @@ type Encoder interface {
 
 type encoder struct {
 	*Configuration
+	tg *ThumbnailGenerator
 }
 
 type Result struct {
@@ -32,36 +33,8 @@ type Result struct {
 }
 
 type Configuration struct {
-	ffmpegPath, ffprobePath string
-	log                     logging.KVLogger
-}
-
-// Configure will attempt to lookup paths to ffmpeg and ffprobe.
-// Call FfmpegPath and FfprobePath if you need to set it manually.
-func Configure() *Configuration {
-	ffmpegPath, _ := exec.LookPath("ffmpeg")
-	ffprobePath, _ := exec.LookPath("ffprobe")
-	return &Configuration{
-		ffmpegPath:  ffmpegPath,
-		ffprobePath: ffprobePath,
-		log:         logging.NoopKVLogger{},
-	}
-}
-
-func (c *Configuration) FfmpegPath(p string) *Configuration {
-	c.ffmpegPath = p
-	return c
-}
-
-func (c *Configuration) FfprobePath(p string) *Configuration {
-	c.ffprobePath = p
-	return c
-}
-
-// Log configures encoder logging. Default configuration is a no-op logger.
-func (c *Configuration) Log(l logging.KVLogger) *Configuration {
-	c.log = l
-	return c
+	ffmpegPath, ffprobePath, thumbnailGeneratorPath string
+	log                                             logging.KVLogger
 }
 
 func NewEncoder(cfg *Configuration) (Encoder, error) {
@@ -78,8 +51,51 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 
 	e := encoder{Configuration: cfg}
 
+	tg, err := NewThumbnailGenerator(e.thumbnailGeneratorPath)
+	if err != nil {
+		e.log.Warn("thumbnail generator was not configured", "err", err)
+	} else {
+		e.tg = tg
+	}
+
 	e.log.Info("encoder configured", "ffmpeg", cfg.ffmpegPath, "ffprobe", cfg.ffprobePath)
 	return &e, nil
+}
+
+// Configure will attempt to lookup paths to ffmpeg and ffprobe.
+// Call FfmpegPath and FfprobePath if you need to set it manually.
+func Configure() *Configuration {
+	ffmpegPath, _ := exec.LookPath("ffmpeg")
+	ffprobePath, _ := exec.LookPath("ffprobe")
+	tgPath, _ := exec.LookPath("generator")
+
+	return &Configuration{
+		ffmpegPath:             ffmpegPath,
+		ffprobePath:            ffprobePath,
+		thumbnailGeneratorPath: tgPath,
+		log:                    logging.NoopKVLogger{},
+	}
+}
+
+func (c *Configuration) FfmpegPath(p string) *Configuration {
+	c.ffmpegPath = p
+	return c
+}
+
+func (c *Configuration) FfprobePath(p string) *Configuration {
+	c.ffprobePath = p
+	return c
+}
+
+func (c *Configuration) ThumbnailGeneratorPath(p string) *Configuration {
+	c.thumbnailGeneratorPath = p
+	return c
+}
+
+// Log configures encoder logging. Default configuration is a no-op logger.
+func (c *Configuration) Log(l logging.KVLogger) *Configuration {
+	c.log = l
+	return c
 }
 
 // Encode does transcoding of specified video file into a series of HLS streams.
@@ -97,6 +113,14 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	targetFormats, err := formats.TargetFormats(formats.H264, meta)
 	if err != nil {
 		return nil, err
+	}
+
+	// Generate thumbnails before we do anything else
+	if e.tg != nil {
+		err := e.tg.Generate(input, output)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	fps, err := formats.DetectFPS(meta)

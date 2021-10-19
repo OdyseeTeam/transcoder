@@ -15,8 +15,8 @@ import (
 
 type encoderSuite struct {
 	suite.Suite
-	file *os.File
-	out  string
+	file    *os.File
+	in, out string
 }
 
 func TestEncoderSuite(t *testing.T) {
@@ -25,13 +25,14 @@ func TestEncoderSuite(t *testing.T) {
 
 func (s *encoderSuite) SetupSuite() {
 	s.out = path.Join(os.TempDir(), "encoderSuite_out")
+	s.in = path.Join(os.TempDir(), "encoderSuite_in")
 
 	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download(path.Join(os.TempDir(), "encoderSuite_in"))
+	s.file, _, err = c.Download(s.in)
 	s.file.Close()
 	s.Require().NoError(err)
 }
