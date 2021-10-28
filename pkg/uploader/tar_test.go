@@ -28,7 +28,9 @@ func TestPackUnpackStream(t *testing.T) {
 
 	populateHLSPlaylist(t, p, sdHash)
 
-	csum, err := packStream(path.Join(p, sdHash), tarPath)
+	ls, err := storage.OpenLocalStream(path.Join(p, sdHash))
+	require.NoError(t, err)
+	csum, err := packStream(ls, tarPath)
 	require.NoError(t, err)
 	require.NotNil(t, csum)
 

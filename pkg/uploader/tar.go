@@ -2,20 +2,20 @@ package uploader
 
 import (
 	"archive/tar"
-	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/karrick/godirwalk"
+	"github.com/lbryio/transcoder/storage"
 )
 
 // packStream takes a sourceDir and puts it into a TAR archive at tarPath,
 // returning SHA256 checksum of stream files.
-func packStream(sourceDir, tarPath string) ([]byte, error) {
-	l := log.With("source_dir", sourceDir)
+func packStream(stream *storage.LightLocalStream, tarPath string) ([]byte, error) {
+	l := log.With("source_dir", stream.Path)
 
 	tarfile, err := os.Create(tarPath)
 	if err != nil {
@@ -25,52 +25,33 @@ func packStream(sourceDir, tarPath string) ([]byte, error) {
 
 	tw := tar.NewWriter(tarfile)
 
-	info, err := os.Stat(sourceDir)
-	if err != nil {
-		return nil, err
-	} else if !info.IsDir() {
-		return nil, fmt.Errorf("%v is not a directory", sourceDir)
-	}
+	hash := storage.GetHash()
 
-	hash := sha256.New()
+	err = stream.Walk(func(fi fs.FileInfo, fullPath, name string) error {
+		header, err := tar.FileInfoHeader(fi, name)
+		if err != nil {
+			return err
+		}
 
-	err = godirwalk.Walk(sourceDir, &godirwalk.Options{
-		Callback: func(fullPath string, de *godirwalk.Dirent) error {
-			if de.IsDir() {
-				l.Debug("skipping directory entry", "name", de.Name())
-				if fullPath != sourceDir {
-					return fmt.Errorf("%v is a directory while only files are expected here", fullPath)
-				}
-				return nil
-			}
-			l.Debug("proceeding with entry", "full_path", fullPath)
-			fi, err := os.Stat(fullPath)
-			if err != nil {
-				return err
-			}
-			header, err := tar.FileInfoHeader(fi, de.Name())
-			if err != nil {
-				return err
-			}
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
 
-			if err := tw.WriteHeader(header); err != nil {
-				return err
-			}
+		file, err := os.Open(fullPath)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
 
-			file, err := os.Open(fullPath)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
+		w := io.MultiWriter(tw, hash)
+		n, err := io.Copy(w, file)
+		if err != nil {
+			return err
+		}
+		l.Debug("entry packaged", "name", name, "size", n)
+		return nil
+	})
 
-			w := io.MultiWriter(tw, hash)
-			n, err := io.Copy(w, file)
-			if err != nil {
-				return err
-			}
-			l.Debug("entry packaged", "name", de.Name(), "size", n)
-			return nil
-		}})
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +64,14 @@ func packStream(sourceDir, tarPath string) ([]byte, error) {
 
 // unpackStream unpacks TAR file at tarPath into dstPath,
 // calculating SHA256 checksum of files.
-func unpackStream(tarReader io.ReadCloser, dstPath string) ([]byte, error) {
+func unpackStream(tarReader io.ReadCloser, dstPath string) (*storage.LightLocalStream, error) {
+	var size int64
+
 	if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
 		return nil, err
 	}
 
-	hash := sha256.New()
+	hash := storage.GetHash()
 	tr := tar.NewReader(tarReader)
 
 	for {
@@ -110,16 +93,19 @@ func unpackStream(tarReader io.ReadCloser, dstPath string) ([]byte, error) {
 		case tar.TypeDir:
 			return nil, fmt.Errorf("directory encountered in the archive: %s", target)
 		case tar.TypeReg:
-			of, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 			if err != nil {
 				return nil, err
 			}
-			w := io.MultiWriter(of, hash)
-			if _, err := io.Copy(w, tr); err != nil {
+			w := io.MultiWriter(outFile, hash)
+			n, err := io.Copy(w, tr)
+			outFile.Close()
+			if err != nil {
 				return nil, err
 			}
-			of.Close()
+			size += n
 		}
 	}
-	return hash.Sum(nil), nil
+
+	return &storage.LightLocalStream{Path: dstPath, Checksum: hash.Sum(nil), Size: size}, nil
 }

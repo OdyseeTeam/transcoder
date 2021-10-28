@@ -1,11 +1,6 @@
 package uploader
 
 import (
-	"fmt"
-	"net/http"
-	"os"
-	"path"
-
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 )
 
@@ -41,25 +36,7 @@ func (p uploadPool) Upload(path, url string) *dispatcher.Result {
 
 func (w uploadWorker) Work(t dispatcher.Task) error {
 	ut := t.Payload.(uploadTask)
-	tarPath := path.Base(ut.path) + ".tar"
-	csum, err := packStream(ut.path, tarPath)
-	if err != nil {
-		return err
-	}
-	req, err := buildUploadRequest(tarPath, ut.url, csum)
-	if err != nil {
-		return err
-	}
-
-	client := http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("non-successful http response code: %v", res.StatusCode)
-	}
-	os.Remove(tarPath)
+	err := Upload(ut.path, ut.url)
 	t.SetResult(struct{}{})
-	return nil
+	return err
 }
