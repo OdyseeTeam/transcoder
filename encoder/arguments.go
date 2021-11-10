@@ -8,6 +8,8 @@ import (
 	"github.com/lbryio/transcoder/formats"
 )
 
+var ErrInvalidTargetType = errors.New("unsupported target type")
+
 type Argument [2]string
 
 const (
@@ -25,6 +27,14 @@ type Arguments struct {
 	out         string
 	fps         int
 }
+
+type TargetType string
+
+const (
+	TargetTypeUnknown            = "unknown"
+	TargetTypeHLS     TargetType = "hls"
+	TargetTypeTS                 = "mpegts"
+)
 
 // HLSArguments creates a default set of arguments for ffmpeg HLS encoding.
 func HLSArguments() Arguments {
@@ -55,16 +65,45 @@ func HLSArguments() Arguments {
 	}
 }
 
-func NewArguments(out string, formats []formats.Format, fps int) (Arguments, error) {
-	a := HLSArguments()
-	if len(formats) == 0 {
-		return a, errors.New("no target formats supplied")
+// TSArguments creates a default set of arguments for ffmpeg TS encoding.
+func TSArguments() Arguments {
+	return Arguments{
+		defaultArgs: []Argument{
+			{"threads", "2"},
+			{"keyint_min", keyint},
+			{"g", keyint},
+			{"sc_threshold", "0.2"},
+			{"c:v", "h264"},
+			// Stream map items go here (in `GetStrArguments`)
+			{"c:a", "aac"},
+			{"ac", "2"},
+			{"f", "mpegts"},
+		},
 	}
-	a.formats = formats
-	a.out = out
-	a.fps = fps
+}
 
-	return a, nil
+func NewArguments(out string, target Target, fps int) (Arguments, error) {
+	var args Arguments
+	if len(target.Formats) == 0 {
+		return args, errors.New("no target formats supplied")
+	}
+
+	switch target.Type {
+	case TargetTypeHLS:
+		args = HLSArguments()
+	case TargetTypeTS:
+		args = TSArguments()
+	default:
+		// for backward compatibility, by default treat empty target
+		// type as HLS Stream.
+		args = HLSArguments()
+	}
+
+	args.formats = target.Formats
+	args.out = out
+	args.fps = fps
+
+	return args, nil
 }
 
 // GetStrArguments serializes ffmpeg arguments in a format sutable for cmd.Start.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 
@@ -31,9 +32,16 @@ type Result struct {
 	Progress      <-chan ffmpegt.Progress
 }
 
+type Target struct {
+	Formats []formats.Format
+	Type    TargetType
+}
+
 type Configuration struct {
 	ffmpegPath, ffprobePath string
-	log                     logging.KVLogger
+
+	log    logging.KVLogger
+	target Target
 }
 
 // Configure will attempt to lookup paths to ffmpeg and ffprobe.
@@ -45,6 +53,7 @@ func Configure() *Configuration {
 		ffmpegPath:  ffmpegPath,
 		ffprobePath: ffprobePath,
 		log:         logging.NoopKVLogger{},
+		target:      Target{},
 	}
 }
 
@@ -61,6 +70,12 @@ func (c *Configuration) FfprobePath(p string) *Configuration {
 // Log configures encoder logging. Default configuration is a no-op logger.
 func (c *Configuration) Log(l logging.KVLogger) *Configuration {
 	c.log = l
+	return c
+}
+
+// Target set the default transcoding target formats and output type.
+func (c *Configuration) Target(t Target) *Configuration {
+	c.target = t
 	return c
 }
 
@@ -82,7 +97,7 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 	return &e, nil
 }
 
-// Encode does transcoding of specified video file into a series of HLS streams.
+// Encode does transcoding of specified video file into a specified target type.
 func (e encoder) Encode(input, output string) (*Result, error) {
 	meta, err := e.getMetadata(input)
 	if err != nil {
@@ -94,9 +109,12 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	targetFormats, err := formats.TargetFormats(formats.H264, meta)
-	if err != nil {
-		return nil, err
+	if len(e.target.Formats) == 0 {
+		detectedFormats, err := formats.TargetFormats(formats.H264, meta)
+		if err != nil {
+			return nil, err
+		}
+		e.target.Formats = detectedFormats
 	}
 
 	fps, err := formats.DetectFPS(meta)
@@ -104,7 +122,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	args, err := NewArguments(output, targetFormats, fps)
+	args, err := NewArguments(output, e.target, fps)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +130,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	vs := formats.GetVideoStream(meta)
 	e.log.Info(
 		"starting transcoding",
+		"target_type", e.target.Type,
 		"args", strings.Join(args.GetStrArguments(), " "),
 		"media_duration", meta.GetFormat().GetDuration(),
 		"media_bitrate", meta.GetFormat().GetBitRate(),
@@ -125,6 +144,17 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	metrics.EncodedDurationSeconds.Add(dur)
 	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
 
+	outFile := ""
+	switch e.target.Type {
+	case TargetTypeHLS:
+		outFile = "stream_%v.m3u8"
+	case TargetTypeTS:
+		outFile = path.Base(meta.Format.Filename)
+	default:
+		e.log.Warn("unsupported target type %q, defaulted to HLS output file", string(e.target.Type))
+		outFile = "stream_%v.m3u8"
+	}
+
 	progress, err := ffmpeg.New(
 		&ffmpeg.Config{
 			FfmpegBinPath:   e.ffmpegPath,
@@ -134,7 +164,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 			OutputDir:       output,
 		}).
 		Input(input).
-		Output("stream_%v.m3u8").
+		Output(outFile).
 		Start(args)
 	if err != nil {
 		return nil, err
