@@ -37,13 +37,16 @@ func main() {
 	switch ctx.Command() {
 	case "start":
 		c, err := tower.NewWorker(tower.DefaultWorkerConfig().
-			Logger(zapadapter.NewKV(logger.Named("tower.worker"))).PoolSize(CLI.Start.Workers).WorkDir(CLI.Start.WorkDir).RMQAddr(CLI.Start.Tower),
+			Logger(zapadapter.NewKV(logger.Named("tower.worker"))).
+			PoolSize(CLI.Start.Workers).
+			WorkDir(CLI.Start.WorkDir).
+			RMQAddr(CLI.Start.RMQAddr),
 		)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		log.Infow("starting tower worker", "tower_server", CLI.Start.Tower)
+		log.Infow("starting tower worker", "tower_server", CLI.Start.RMQAddr)
 		go c.StartSendingStatus()
 		err = c.StartWorkers()
 		if err != nil {

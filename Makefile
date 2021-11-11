@@ -13,7 +13,7 @@ linux:
 
 .PHONY: tower
 tower:
-	$(GO_BUILD) -o $(BUILD_DIR)/tower ./tower/server/cmd/
+	$(GO_BUILD) -o $(BUILD_DIR)/tower ./tower/cmd/server/
 
 worker:
-	$(GO_BUILD) -o $(BUILD_DIR)/worker ./tower/worker/cmd/
+	$(GO_BUILD) -o $(BUILD_DIR)/worker ./tower/cmd/worker/
