@@ -44,6 +44,14 @@ func (l *vlib) New(_ string) *storage.LocalStream {
 	return &storage.LocalStream{}
 }
 
+func (l *vlib) Path() string {
+	return ""
+}
+
+func (l *vlib) AddLightLocalStream(_, _ string, _ storage.LightLocalStream) (*video.Video, error) {
+	return nil, nil
+}
+
 func (s *managerSuite) SetupSuite() {
 	logger = logging.Create("manager", logging.Dev)
 }

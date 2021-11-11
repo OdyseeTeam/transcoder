@@ -1,4 +1,4 @@
-package zap
+package zapadapter
 
 import (
 	"context"

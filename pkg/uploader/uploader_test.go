@@ -31,24 +31,20 @@ type uploaderSuite struct {
 	uploaded map[string]string
 }
 
+const secretToken = "abcabc"
+
 func TestManagerSuite(t *testing.T) {
 	suite.Run(t, new(uploaderSuite))
 }
 
 func (s *uploaderSuite) SetupTest() {
-	p, err := os.MkdirTemp("", "")
-	s.Require().NoError(err)
+	p := s.T().TempDir()
 
-	// r := router.New()
-	// h := fileHandler{
-	// 	uploadPath:   path.Join(p, "incoming"),
-	// 	authCallback: func(_ *fasthttp.RequestCtx) bool { return true },
-	// }
-	// r.POST(`/{sd_hash:[a-z0-9]{96}}`, h.Handle)
-
-	server := NewServer(
+	server := NewUploadServer(
 		path.Join(p, "incoming"),
-		func(_ *fasthttp.RequestCtx) bool { return true },
+		func(ctx *fasthttp.RequestCtx) bool {
+			return ctx.UserValue("token").(string) == secretToken
+		},
 		func(ls storage.LightLocalStream) {
 			s.uploaded[ls.SDHash] = ls.Path
 		},
@@ -74,14 +70,10 @@ func (s *uploaderSuite) SetupTest() {
 	s.uploaded = map[string]string{}
 }
 
-func (s *uploaderSuite) TearDownTest() {
-	// os.RemoveAll(s.path)
-}
-
-func (s *uploaderSuite) TestFileHandling() {
+func (s *uploaderSuite) TestUpload_Success() {
 	expectedStreamPath := path.Join(s.inPath, s.sdHash)
 
-	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, s.localStream.Checksum)
+	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
 	s.Require().NoError(err)
 	r, err := serve(s.server, req)
 	s.Require().NoError(err)
@@ -95,14 +87,34 @@ func (s *uploaderSuite) TestFileHandling() {
 	s.Equal(expectedStreamPath, s.uploaded[s.sdHash])
 }
 
-func (s *uploaderSuite) TestFileHandling_EmptyFile() {
+func (s *uploaderSuite) TestUpload_InvalidToken() {
+	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, "wrongtoken", s.localStream.Checksum)
+	s.Require().NoError(err)
+	r, err := serve(s.server, req)
+	s.Require().NoError(err)
+
+	b, _ := ioutil.ReadAll(r.Body)
+	s.Require().Equal(http.StatusForbidden, r.StatusCode, string(b))
+}
+
+func (s *uploaderSuite) TestUpload_InvalidChecksum() {
+	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, secretToken, []byte("abc"))
+	s.Require().NoError(err)
+	r, err := serve(s.server, req)
+	s.Require().NoError(err)
+
+	b, _ := ioutil.ReadAll(r.Body)
+	s.Require().Equal(http.StatusBadRequest, r.StatusCode, string(b))
+}
+
+func (s *uploaderSuite) TestUpload_EmptyFile() {
 	expectedStreamPath := path.Join(s.inPath, s.sdHash)
 
 	f, err := ioutil.TempFile("", "")
 	s.Require().NoError(err)
 	f.Close()
 
-	req, err := buildUploadRequest(f.Name(), "http://inmemory/"+s.sdHash, s.localStream.Checksum)
+	req, err := buildUploadRequest(f.Name(), "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
 	s.Require().NoError(err)
 	r, err := serve(s.server, req)
 	s.Require().NoError(err)

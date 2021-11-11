@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lbryio/transcoder/pkg/logging"
-	zapadapter "github.com/lbryio/transcoder/pkg/logging/adapter-zap"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/storage"
 
 	"github.com/Pallinder/go-randomdata"

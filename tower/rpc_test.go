@@ -1,14 +1,20 @@
 package tower
 
 import (
-	"context"
-	"fmt"
+	"math/rand"
+	"path"
 	"testing"
 	"time"
 
+	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/storage"
+	"github.com/lbryio/transcoder/video"
+
 	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"
-	"github.com/wagslane/go-rabbitmq"
 )
 
 type towerSuite struct {
@@ -19,71 +25,185 @@ func TestTowerSuite(t *testing.T) {
 	suite.Run(t, new(towerSuite))
 }
 
-func (s *towerSuite) SetupTest() {
-	srv, err := NewServer("amqp://guest:guest@localhost/")
+// func (s *towerSuite) SetupTest() {
+// 	srv, err := NewUploadServer()
+// 	s.Require().NoError(err)
+
+// 	err = srv.startConsumingInbox(func(_ rabbitmq.Delivery) bool { fmt.Println("discarding"); return true })
+// 	s.Require().NoError(err)
+// 	srv.Stop()
+// }
+
+func (s *towerSuite) TestHeartbeats() {
+	// messagesToSend := 50
+	workersNum := 10
+
+	poolSizes := make([]int, workersNum)
+	poolTotal := 0
+	workers := make([]*Worker, workersNum)
+
+	srv, err := NewServer(DefaultServerConfig().
+		Logger(zapadapter.NewKV(logging.Create("rpc-test.server", logging.Dev).Desugar())).
+		Timings(Timings{
+			TWorkerStatus: 50 * time.Millisecond,
+			TWorkerWait:   100 * time.Millisecond,
+			TRequestPick:  100 * time.Millisecond,
+		}),
+	)
 	s.Require().NoError(err)
 
-	err = srv.consumeInbox(func(_ rabbitmq.Delivery) bool { fmt.Println("discarding"); return true })
-	s.Require().NoError(err)
-	srv.Stop()
-}
-
-func (s *towerSuite) TestRPC() {
-	messagesToSend := 1000
-	clientsNum := 300
-
-	srv, err := NewServer("amqp://guest:guest@localhost/")
+	srv.deleteQueues()
 	s.Require().NoError(err)
 
-	err = srv.Start()
+	go srv.startWatchingWorkerStatus()
+	err = srv.startConsumingWorkerStatus()
 	s.Require().NoError(err)
 
-	clientsSeen := map[string]bool{}
-	tasksSent := map[string]bool{}
-	clients := []*Client{}
-	for i := 0; i < clientsNum; i++ {
-		c, err := NewClient("amqp://guest:guest@localhost/", 10)
+	for i := 0; i < workersNum; i++ {
+		poolSizes[i] = rand.Intn(99) + 1
+		poolTotal += poolSizes[i]
+		c, err := NewWorker(DefaultWorkerConfig().
+			PoolSize(poolSizes[i]).
+			Timings(Timings{TWorkerStatus: 200 * time.Millisecond}),
+		)
 		s.Require().NoError(err)
-
-		err = c.Start()
-		s.Require().NoError(err)
-		s.Require().Greater(len(c.id), 5)
-		clients = append(clients, c)
+		c.log = zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())
+		go c.StartSendingStatus()
+		workers[i] = c
 	}
 
-	for i := 0; i < messagesToSend; i++ {
-		r := request{Method: "", Payload: Payload{URL: "lbry://" + randomdata.SillyName(), CallbackURL: randomdata.Alphanumeric(64)}}
-		tasksSent[r.Payload.URL] = true
-		err := srv.SendRequest(r)
-		s.Require().NoError(err)
-	}
+	time.Sleep(5 * time.Second)
+	s.Equal(poolTotal, srv.registry.capacity)
+	s.Equal(poolTotal, srv.registry.available)
 
-	accepted := map[string]bool{}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	for len(accepted) < messagesToSend {
-		select {
-		case <-ctx.Done():
-			s.FailNowf(
-				"wait time exceeded",
-				"only got %v acknowledgments from clients, expected",
-				len(accepted), messagesToSend)
-		default:
-			accepted = map[string]bool{}
-			for ref, r := range srv.requests.data {
-				if r.Status == Accepted {
-					accepted[ref] = true
-					clientsSeen[r.assignedClientId] = true
-				}
-			}
-		}
-	}
-
-	// Assure the work is distributed evenly
-	s.GreaterOrEqual(len(clientsSeen), clientsNum)
-
-	for _, c := range clients {
+	for _, c := range workers {
 		c.Stop()
 	}
+
+	time.Sleep(5 * time.Second)
+	s.Equal(0, srv.registry.capacity)
+	s.Equal(0, srv.registry.available)
+}
+
+func (s *towerSuite) TestQueueEagerness() {
+	requestsToSend := 200
+	workersNum := 3
+	poolSize := 5
+
+	srv, err := NewServer(
+		DefaultServerConfig().
+			Logger(zapadapter.NewKV(logging.Create("rpc-test.server", logging.Dev).Desugar())).
+			Timings(Timings{
+				// A combination of very fast workers state update and slightly longer (but not too long)
+				// request pick interval is needed here, much shorter than in actual production use.
+				TWorkerStatus: 50 * time.Millisecond,
+				TRequestPick:  250 * time.Millisecond,
+			}),
+	)
+	s.Require().NoError(err)
+
+	srv.deleteQueues()
+	s.Require().NoError(err)
+
+	go srv.startWatchingWorkerStatus()
+	err = srv.startConsumingWorkerStatus()
+	s.Require().NoError(err)
+
+	requestsChan := make(chan *manager.TranscodingRequest, 1000)
+	for i := 0; i < requestsToSend; i++ {
+		requestsChan <- &manager.TranscodingRequest{URI: "lbry://" + randomdata.SillyName(), SDHash: randomdata.Alphanumeric(96)}
+	}
+
+	for i := 0; i < workersNum; i++ {
+		c, err := NewWorker(DefaultWorkerConfig().
+			PoolSize(poolSize).
+			Timings(Timings{TWorkerStatus: 100 * time.Millisecond}).
+			Logger(zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())),
+		)
+		s.Require().NoError(err)
+		go c.StartSendingStatus()
+		c.requestHandler = func(msg MsgRequest) {
+			c.log.Info("started working", "msg", msg)
+			time.Sleep(20 * time.Minute)
+		}
+		err = c.StartWorkers()
+		s.Require().NoError(err)
+	}
+
+	go srv.startRequestsPicking(requestsChan)
+
+	time.Sleep(5 * time.Second)
+
+	s.Equal(15, srv.registry.capacity)
+	s.Equal(0, srv.registry.available)
+	s.GreaterOrEqual(len(requestsChan), requestsToSend-workersNum*poolSize-10)
+}
+
+func (s *towerSuite) TestPipelineSuccess() {
+	libPath := s.T().TempDir()
+	srvWorkDir := s.T().TempDir()
+	cltWorkDir := s.T().TempDir()
+	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+	trReq, err := manager.ResolveRequest(url)
+	s.Require().NoError(err)
+
+	vdb := db.OpenTestDB()
+	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
+
+	libCfg := video.Configure().
+		LocalStorage(storage.Local(libPath)).
+		DB(vdb)
+
+	mgr := manager.NewManager(video.NewLibrary(libCfg), 0)
+	srv, err := NewServer(
+		DefaultServerConfig().
+			Logger(zapadapter.NewKV(logging.Create("rpc-test.server", logging.Dev).Desugar())).
+			HttpServer(":18080", "http://localhost:18080/").
+			Timings(Timings{
+				TWorkerStatus: 50 * time.Millisecond,
+				TRequestPick:  250 * time.Millisecond,
+			}).
+			VideoManager(mgr).
+			WorkDir(srvWorkDir),
+	)
+	s.Require().NoError(err)
+
+	go srv.startRequestSweep()
+	go srv.startWatchingWorkerStatus()
+	err = srv.startConsumingWorkerStatus()
+	s.Require().NoError(err)
+	err = srv.startConsumingResponses()
+	s.Require().NoError(err)
+	err = srv.startHttpServer()
+	s.Require().NoError(err)
+
+	requestsChan := make(chan *manager.TranscodingRequest, 10)
+	go srv.startRequestsPicking(requestsChan)
+	requestsChan <- trReq
+
+	c, err := NewWorker(DefaultWorkerConfig().
+		PoolSize(3).
+		Timings(Timings{TWorkerStatus: 100 * time.Millisecond}).
+		WorkDir(cltWorkDir).
+		Logger(zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())),
+	)
+	s.Require().NoError(err)
+
+	go c.StartSendingStatus()
+	err = c.StartWorkers()
+	s.Require().NoError(err)
+
+	var v *video.Video
+	for v == nil {
+		v, _ = srv.videoManager.Library().Get(trReq.SDHash)
+		time.Sleep(500 * time.Millisecond)
+	}
+	s.Equal(trReq.SDHash, v.SDHash)
+	s.DirExists(path.Join(libPath, v.Path))
+}
+
+func (s *towerSuite) TestPipelineFailure() {
+}
+
+func (s *towerSuite) TestPipelineTimeout() {
 }

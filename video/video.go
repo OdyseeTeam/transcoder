@@ -2,9 +2,11 @@ package video
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/storage"
 )
 
@@ -49,12 +51,6 @@ func (c *Config) MaxRemoteSize(s string) *Config {
 	return c
 }
 
-type VideoLibrary interface {
-	Get(sdHash string) (*Video, error)
-	New(sdHash string) *storage.LocalStream
-	Add(params AddParams) (*Video, error)
-}
-
 // Library contains methods for accessing videos database.
 type Library struct {
 	*Config
@@ -78,8 +74,32 @@ func (q Library) Add(params AddParams) (*Video, error) {
 	return q.queries.Add(context.Background(), params)
 }
 
+// AddLightLocalStream moves the stream folder resiging elsewhere into videos folder
+// and saves it into database.
+func (q Library) AddLightLocalStream(url, channel string, ls storage.LightLocalStream) (*Video, error) {
+	ns := q.local.New(ls.SDHash)
+	if err := os.Rename(ls.Path, ns.FullPath()); err != nil {
+		return nil, err
+	}
+
+	p := AddParams{
+		URL:      url,
+		SDHash:   ls.SDHash,
+		Type:     formats.TypeHLS,
+		Channel:  channel,
+		Path:     ns.LastPath(),
+		Size:     ls.Size,
+		Checksum: ls.ChecksumString(),
+	}
+	return q.queries.Add(context.Background(), p)
+}
+
 func (q Library) Get(sdHash string) (*Video, error) {
 	return q.queries.Get(context.Background(), sdHash)
+}
+
+func (q Library) Path() string {
+	return q.local.Path()
 }
 
 func (q Library) Furlough(v *Video) error {

@@ -18,4 +18,5 @@ type LocalDriver interface {
 	New(sdHash string) *LocalStream
 	Open(sdHash string) (*LocalStream, error)
 	Delete(sdHash string) error
+	Path() string
 }

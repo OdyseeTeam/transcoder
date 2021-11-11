@@ -12,9 +12,9 @@ type downloadTask struct {
 }
 
 type DownloadResult struct {
-	File   *os.File
-	Size   int64
-	SDHash string
+	File     *os.File
+	Size     int64
+	Resolved *manager.TranscodingRequest
 }
 
 type pool struct {
@@ -22,6 +22,19 @@ type pool struct {
 }
 
 type worker struct{}
+
+func Retrieve(url, out string) (*DownloadResult, error) {
+	r, err := manager.ResolveRequest(url)
+	if err != nil {
+		return nil, err
+	}
+	f, n, err := r.Download(out)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DownloadResult{f, n, r}, nil
+}
 
 // NewPool will create a pool of retrievers that you can throw work at.
 func NewPool(parallel int) pool {
@@ -38,15 +51,10 @@ func (p pool) Retrieve(url, out string) *dispatcher.Result {
 
 func (w worker) Work(t dispatcher.Task) error {
 	dt := t.Payload.(downloadTask)
-	r, err := manager.ResolveRequest(dt.url)
+	res, err := Retrieve(dt.url, dt.output)
 	if err != nil {
 		return err
 	}
-	f, n, err := r.Download(dt.output)
-	if err != nil {
-		return err
-	}
-
-	t.SetResult(DownloadResult{f, n, r.SDHash})
+	t.SetResult(res)
 	return nil
 }

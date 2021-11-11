@@ -3,13 +3,18 @@ package storage
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
+	"hash"
 	"io"
+	"io/fs"
 	"io/ioutil"
+	"os"
 	"path"
 
 	"crypto/sha512"
 
 	"github.com/grafov/m3u8"
+	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
 )
 
@@ -34,12 +39,31 @@ type LocalStream struct {
 	checksum string
 }
 
+type LightLocalStream struct {
+	Path     string
+	SDHash   string
+	Size     int64
+	Checksum []byte
+}
+
 type StreamFileLoader func(rootPath ...string) ([]byte, error)
 type StreamFileProcessor func(data []byte, name string) error
 
-// func (s LocalStream) Path() string {
-// 	return s.path
-// }
+type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
+
+func GetHash() hash.Hash {
+	return sha512.New512_224()
+}
+
+func OpenLocalStream(path string) (*LightLocalStream, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	} else if !info.IsDir() {
+		return nil, fmt.Errorf("%v is not a directory", path)
+	}
+	return &LightLocalStream{Path: path}, nil
+}
 
 func (s LocalStream) FullPath() string {
 	return path.Join(s.rootPath, s.sdHash)
@@ -66,8 +90,7 @@ func (s *LocalStream) ReadMeta() error {
 func (s LocalStream) calculateChecksum() (string, int64, error) {
 	var size int64
 
-	hash := sha512.New512_224()
-
+	hash := GetHash()
 	err := s.Dive(
 		readFile,
 		func(data []byte, name string) error {
@@ -152,4 +175,30 @@ func readFile(rootPath ...string) ([]byte, error) {
 
 func (s RemoteStream) URL() string {
 	return s.url
+}
+
+func (s LightLocalStream) ChecksumString() string {
+	return hex.EncodeToString(s.Checksum)
+}
+
+func (s LightLocalStream) ChecksumValid(checksum []byte) bool {
+	return bytes.Equal(checksum, s.Checksum)
+}
+
+func (s LightLocalStream) Walk(walker StreamWalker) error {
+	return godirwalk.Walk(s.Path, &godirwalk.Options{
+		Callback: func(fullPath string, de *godirwalk.Dirent) error {
+			if de.IsDir() {
+				if fullPath != s.Path {
+					return fmt.Errorf("%v is a directory while only files are expected here", fullPath)
+				}
+				return nil
+			}
+			fi, err := os.Stat(fullPath)
+			if err != nil {
+				return err
+			}
+			return walker(fi, fullPath, de.Name())
+		},
+	})
 }

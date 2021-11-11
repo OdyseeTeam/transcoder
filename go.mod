@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/BurntSushi/toml v0.4.1 // indirect
-	github.com/Pallinder/go-randomdata v1.2.0 // indirect
+	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/alecthomas/kong v0.2.17
 	github.com/aws/aws-sdk-go v1.36.29
 	github.com/brk0v/directio v0.0.0-20190225130936-69406e757cf7
@@ -16,6 +16,7 @@ require (
 	github.com/grafov/m3u8 v0.11.1
 	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
+	github.com/lbryio/lbry.go v1.1.2 // indirect
 	github.com/lbryio/lbry.go/v2 v2.7.2-0.20210416195322-6516df1418e3
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/nikooo777/lbry-blobs-downloader v1.0.7
@@ -23,6 +24,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.10.0
+	github.com/rabbitmq/amqp091-go v0.0.0-20210823000215-c428a6150891
 	github.com/simukti/sqldb-logger v0.0.0-20201125162808-c35f87e285f2
 	github.com/simukti/sqldb-logger/logadapter/zapadapter v0.0.0-20201125162808-c35f87e285f2
 	github.com/spf13/viper v1.7.1
@@ -41,4 +43,7 @@ require (
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-//  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/ExternalForks/transcoder
+// replace github.com/wagslane/go-rabbitmq => github.com/andybeletsky/go-rabbitmq v0.6.2
+replace github.com/wagslane/go-rabbitmq => /Users/silence/Documents/LBRY/External/go-rabbitmq
+
+//  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/External/transcoder

@@ -16,7 +16,7 @@ import (
 
 var log logging.KVLogger = logging.NoopKVLogger{}
 
-func Upload(dir, url string) error {
+func Upload(dir, url, token string) error {
 	tarPath := path.Base(dir) + ".tar"
 	defer os.Remove(tarPath)
 
@@ -28,7 +28,7 @@ func Upload(dir, url string) error {
 	if err != nil {
 		return err
 	}
-	req, err := buildUploadRequest(tarPath, url, csum)
+	req, err := buildUploadRequest(tarPath, url, token, csum)
 	if err != nil {
 		return err
 	}
@@ -39,13 +39,13 @@ func Upload(dir, url string) error {
 		return err
 	}
 	if res.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("non-successful http response code: %v", res.StatusCode)
+		return fmt.Errorf("failed to POST to %v: response code %v", req.URL.String(), res.StatusCode)
 	}
 
 	return nil
 }
 
-func buildUploadRequest(tarPath, targetURL string, checksum []byte) (*http.Request, error) {
+func buildUploadRequest(tarPath, targetURL, token string, checksum []byte) (*http.Request, error) {
 	r, err := os.Open(tarPath)
 	if err != nil {
 		return nil, err
@@ -81,5 +81,6 @@ func buildUploadRequest(tarPath, targetURL string, checksum []byte) (*http.Reque
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Auth-Token", token)
 	return req, nil
 }

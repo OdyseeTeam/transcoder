@@ -1,5 +1,6 @@
-FROM python:3.9.7-alpine3.14 AS compile
+# syntax=docker/dockerfile:1
 
+FROM python:3.9.7-alpine3.14 AS compile
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /build
@@ -21,8 +22,6 @@ RUN chmod a+x generator ffmpeg ffprobe
 RUN cp generator /opt/venv/bin/
 
 FROM python:3.9.7-alpine3.14 AS build
-EXPOSE 8080
-EXPOSE 2112
 
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -34,7 +33,7 @@ COPY --from=compile /build/ffmpeg /build/ffprobe /usr/local/bin/
 
 WORKDIR /app
 
-COPY ./dist/linux_amd64/transcoder .
-COPY ./transcoder.ex.yml ./transcoder.yml
+COPY ./dist/linux_amd64/worker .
+# COPY ./transcoder.ex.yml ./transcoder.yml
 
-CMD ["./transcoder", "serve"]
+CMD ["./worker", "start", "--work-dir", "/data"]

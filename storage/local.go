@@ -26,3 +26,7 @@ func (s LocalStorage) Open(sdHash string) (*LocalStream, error) {
 func (s LocalStorage) Delete(sdHash string) error {
 	return os.RemoveAll(path.Join(s.path, sdHash))
 }
+
+func (s LocalStorage) Path() string {
+	return s.path
+}

@@ -19,23 +19,30 @@ type fileHandler struct {
 	doneCallback func(storage.LightLocalStream)
 }
 
+type AuthCallback func(*fasthttp.RequestCtx) bool
+type DoneCallback func(storage.LightLocalStream)
+
 const (
 	fileField     = "packaged_stream_file"
 	checksumField = "packaged_stream_checksum"
 )
 
-// NewServer will create a fasthttp server for receiving tarred streams.
-func NewServer(uploadPath string, authCallback func(*fasthttp.RequestCtx) bool, doneCallback func(storage.LightLocalStream)) *fasthttp.Server {
+// NewUploadServer will create a fasthttp server for receiving tarred streams.
+func NewUploadServer(uploadPath string, acb AuthCallback, dcb DoneCallback) *fasthttp.Server {
 	r := router.New()
-	h := fileHandler{
-		uploadPath:   uploadPath,
-		authCallback: authCallback,
-		doneCallback: doneCallback,
-	}
-	r.POST(`/{sd_hash:[a-z0-9]{96}}`, h.Handle)
+	AttachFileHandler(r, "", uploadPath, acb, dcb)
 	return &fasthttp.Server{
 		Handler: r.Handler,
 	}
+}
+
+func AttachFileHandler(r *router.Router, prefix, uploadPath string, acb AuthCallback, dcb DoneCallback) {
+	h := fileHandler{
+		uploadPath:   uploadPath,
+		authCallback: acb,
+		doneCallback: dcb,
+	}
+	r.Group(prefix).POST(`/{sd_hash:[a-z0-9]{96}}`, h.Handle)
 }
 
 // Handle will receive and unpack a tarred stream file, validating its checksum.
@@ -51,7 +58,7 @@ func (h *fileHandler) Handle(ctx *fasthttp.RequestCtx) {
 
 	token := string(ctx.Request.Header.Peek("X-Auth-Token"))
 
-	ctx.SetUserValue("key", token)
+	ctx.SetUserValue("token", token)
 	ctx.SetUserValue("ref", sdHash)
 
 	if !h.authCallback(ctx) {

@@ -19,7 +19,7 @@ type ThumbnailGeneratorProgress struct {
 }
 
 func NewThumbnailGenerator(cmdPath string) (*ThumbnailGenerator, error) {
-	cmd := exec.Command(cmdPath)
+	cmd := exec.Command(cmdPath, "-h")
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("unable to execute generator: %w", err)
 	}

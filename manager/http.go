@@ -9,13 +9,15 @@ import (
 
 	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
+	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/timer"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 
 	"github.com/fasthttp/router"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
+	"go.uber.org/zap"
 )
 
 var httpVideoPath = "/streams"
@@ -25,6 +27,11 @@ type HttpAPI struct {
 	*HttpAPIConfiguration
 	logger     *zap.SugaredLogger
 	httpServer *fasthttp.Server
+}
+
+type httpVideoHandler struct {
+	manager *VideoManager
+	log     logging.KVLogger
 }
 
 type HttpAPIConfiguration struct {
@@ -39,6 +46,42 @@ func ConfigureHttpAPI() *HttpAPIConfiguration {
 		addr:      ":8080",
 		videoPath: path.Join(os.TempDir(), "transcoder"),
 	}
+}
+
+func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
+	r := router.New()
+
+	AttachVideoHandler(r, "", cfg.videoPath, cfg.mgr, zapadapter.NewKV(logger.Named("http").Desugar()))
+
+	s := &HttpAPI{
+		HttpAPIConfiguration: cfg,
+		httpServer: &fasthttp.Server{
+			Handler: MetricsMiddleware(CORSMiddleware(r.Handler)),
+		},
+		logger: logger.Named("http"),
+	}
+
+	return s
+}
+
+// NewRouter creates a set of HTTP entrypoints that will route requests into video library
+// and video transcoding queue.
+func AttachVideoHandler(r *router.Router, prefix, videoPath string, manager *VideoManager, log logging.KVLogger) {
+	h := httpVideoHandler{
+		log:     log,
+		manager: manager,
+	}
+	g := r.Group(prefix)
+
+	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:[a-z0-9]{96}}", h.handleVideo)
+	g.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
+	g.GET("/api/v2/video/{url}", h.handleVideo)
+	g.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), videoPath)
+
+	metrics.RegisterMetrics()
+	dispatcher.RegisterMetrics()
+	RegisterMetrics()
+	g.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 }
 
 func (c *HttpAPIConfiguration) Debug(debug bool) *HttpAPIConfiguration {
@@ -61,34 +104,25 @@ func (c *HttpAPIConfiguration) VideoManager(mgr *VideoManager) *HttpAPIConfigura
 	return c
 }
 
-func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
-	r := router.New()
-
-	s := &HttpAPI{
-		HttpAPIConfiguration: cfg,
-		httpServer: &fasthttp.Server{
-			Handler: metricsMiddleware(corsMiddleware(r.Handler)),
-		},
-		logger: logger.Named("http"),
-	}
-
-	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:^[a-z0-9]{96}$}", h.handleVideo)
-	r.GET("/api/v1/video/{kind:hls}/{url}", s.handleVideo)
-	r.GET("/api/v2/video/{url}", s.handleVideo)
-	r.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), s.videoPath)
-
-	metrics.RegisterMetrics()
-	dispatcher.RegisterMetrics()
-	RegisterMetrics()
-	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
-
-	if !s.debug {
-		r.PanicHandler = handlePanic
-	}
-	return s
+func (s HttpAPI) Addr() string {
+	return s.addr
 }
 
-func (h *HttpAPI) handleVideo(ctx *fasthttp.RequestCtx) {
+func (s HttpAPI) URL() string {
+	return "http://" + s.addr
+}
+
+func (s HttpAPI) Start() error {
+	s.logger.Infow("listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
+	return s.httpServer.ListenAndServe(s.addr)
+}
+
+func (s HttpAPI) Shutdown() error {
+	s.logger.Info("shutting down...")
+	return s.httpServer.Shutdown()
+}
+
+func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 	urlQ := ctx.UserValue("url").(string)
 	path := string(ctx.Path())
 
@@ -100,12 +134,12 @@ func (h *HttpAPI) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	ll := logger.Named("http").With(
+	ll := logger.With(
 		"url", url,
 		"path", path,
 	)
 
-	v, err := h.mgr.Video(url)
+	v, err := h.manager.Video(url)
 
 	if err != nil {
 		var (
@@ -184,35 +218,17 @@ func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {
 	logger.Errorw("panicked", "url", ctx.Request.URI(), "panic", p)
 }
 
-func corsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+func CORSMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.Header.Set("Access-Control-Allow-Origin", "*")
 		h(ctx)
 	}
 }
 
-func metricsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
+func MetricsMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		t := timer.Start()
 		h(ctx)
 		metrics.HTTPAPIRequests.WithLabelValues(fmt.Sprintf("%v", ctx.Response.StatusCode())).Observe(t.Duration())
 	}
-}
-
-func (s HttpAPI) Addr() string {
-	return s.addr
-}
-
-func (s HttpAPI) URL() string {
-	return "http://" + s.addr
-}
-
-func (s HttpAPI) Start() error {
-	s.logger.Infow("listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
-	return s.httpServer.ListenAndServe(s.addr)
-}
-
-func (s HttpAPI) Shutdown() error {
-	s.logger.Info("shutting down...")
-	return s.httpServer.Shutdown()
 }

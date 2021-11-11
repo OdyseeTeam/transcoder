@@ -53,12 +53,12 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 
 	tg, err := NewThumbnailGenerator(e.thumbnailGeneratorPath)
 	if err != nil {
-		e.log.Warn("thumbnail generator was not configured", "err", err)
+		e.log.Info("thumbnail generator was not configured", "err", err)
 	} else {
 		e.tg = tg
 	}
 
-	e.log.Info("encoder configured", "ffmpeg", cfg.ffmpegPath, "ffprobe", cfg.ffprobePath)
+	e.log.Info("encoder configured", "ffmpeg", e.ffmpegPath, "ffprobe", e.ffprobePath, "generator", e.thumbnailGeneratorPath)
 	return &e, nil
 }
 

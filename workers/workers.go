@@ -13,7 +13,7 @@ import (
 	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
-	zapadapter "github.com/lbryio/transcoder/pkg/logging/adapter-zap"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/timer"
 	"github.com/lbryio/transcoder/video"
 

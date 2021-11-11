@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/mfr"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/karlseguin/ccache/v2"
@@ -26,6 +27,14 @@ var (
 	cacheSize        = int64(math.Pow(1024, 4))
 )
 
+type VideoLibrary interface {
+	Get(sdHash string) (*video.Video, error)
+	New(sdHash string) *storage.LocalStream
+	Add(params video.AddParams) (*video.Video, error)
+	AddLightLocalStream(url, channel string, ls storage.LightLocalStream) (*video.Video, error)
+	Path() string
+}
+
 func LoadConfiguredChannels(priority, enabled, disabled []string) {
 	tweakURL := func(e string) string {
 		return channelURIPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
@@ -42,13 +51,13 @@ func LoadConfiguredChannels(priority, enabled, disabled []string) {
 }
 
 type VideoManager struct {
-	library video.VideoLibrary
+	library VideoLibrary
 	pool    *Pool
 	cache   *ccache.Cache
 }
 
 // NewManager creates a video library manager with a pool for future transcoding requests.
-func NewManager(l video.VideoLibrary, minHits int) *VideoManager {
+func NewManager(l VideoLibrary, minHits int) *VideoManager {
 	m := &VideoManager{
 		library: l,
 		pool:    NewPool(),
@@ -121,7 +130,7 @@ func (m *VideoManager) RequestStatus(sdHash string) int {
 	return mfr.StatusNone
 }
 
-func (m *VideoManager) Library() video.VideoLibrary {
+func (m *VideoManager) Library() VideoLibrary {
 	return m.library
 }
 

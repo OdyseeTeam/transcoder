@@ -1,0 +1,67 @@
+version: '3.7'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  worker:
+    image: odyseeteam/transcoder-worker:dev
+    container_name: worker
+    command: ["./worker", "start", "--rmq-addr=amqp://guest:guest@rabbitmq/", "--workdir=/data", "--debug"]
+    volumes:
+      - worker-data:/data
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+  tower:
+    image: odyseeteam/transcoder-tower:dev
+    container_name: tower
+    command: ["./tower", "serve", "--rmq-addr=amqp://guest:guest@rabbitmq/", "--http-url=http://tower:8080", "--debug"]
+    volumes:
+      - tower-data:/storage
+    ports:
+      - "8080:8080"
+    build:
+      context: .
+      dockerfile: Dockerfile-tower
+  transcoder:
+    image: lbryio/transcoder:latest
+    container_name: transcoder
+    restart: always
+    ports:
+      - "18081:18081"
+    volumes:
+      - /home/lbry/videos:/app/videos
+    labels:
+      - traefik.http.routers.ghost.rule=Host(`na-wo.net`)
+      - traefik.http.routers.ghost.tls=true
+      - traefik.http.routers.ghost.tls.certresolver=myresolver
+  traefik:
+    image: traefik:v2.4
+    container_name: traefik
+    command: |
+      --api.insecure=true
+      --providers.docker
+      --entrypoints.web.address=:80
+      --entrypoints.web.http.redirections.entryPoint.to=websecure
+      --entrypoints.web.http.redirections.entryPoint.scheme=https
+      --entrypoints.web.http.redirections.entrypoint.permanent=true
+      --entrypoints.websecure.address=:443
+      --certificatesresolvers.myresolver.acme.tlschallenge=true
+      --certificatesresolvers.myresolver.acme.email=a@tideland.net
+      --certificatesresolvers.myresolver.acme.storage=acme.json
+    ports:
+      - "443:443"
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  worker-data: {}
+  tower-data: {}
