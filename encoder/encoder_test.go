@@ -61,20 +61,25 @@ func (s *encoderSuite) TestEncode() {
 
 	s.Require().GreaterOrEqual(progress, 99.5)
 
+	s.Equal(formats.HD1080, res.Formats[0].Resolution)
+	s.Equal(formats.HD720, res.Formats[1].Resolution)
+	s.Equal(formats.SD360, res.Formats[2].Resolution)
+	s.Equal(formats.SD144, res.Formats[3].Resolution)
+
 	outFiles := map[string]string{
 		"master.m3u8": `
 #EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=3660800,RESOLUTION=1920x1080,CODECS="avc1.640028,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=3660800,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
 stream_0.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=2340800,RESOLUTION=1280x720,CODECS="avc1.64001f,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=2340800,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
 stream_1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=756800,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=756800,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
 stream_2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=256x144,CODECS="avc1.64000c,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
 stream_3.m3u8`,
 		"stream_0.m3u8":   "seg_0_000000.ts",
 		"stream_1.m3u8":   "seg_1_000000.ts",

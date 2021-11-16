@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,7 @@ type encoder struct {
 type Result struct {
 	Input, Output string
 	Meta          *ffmpeg.Metadata
+	Formats       []formats.Format
 	Progress      <-chan ffmpegt.Progress
 }
 
@@ -104,7 +106,6 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Input: input, Output: output, Meta: meta}
 
 	if err := os.MkdirAll(output, os.ModePerm); err != nil {
 		return nil, err
@@ -114,10 +115,10 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	res := &Result{Input: input, Output: output, Meta: meta, Formats: targetFormats}
 
-	// Generate thumbnails before we do anything else
 	if e.tg != nil {
-		err := e.tg.Generate(input, output)
+		err := e.tg.Generate(input, path.Join(output, "thumbnails10k.png"))
 		if err != nil {
 			return nil, err
 		}

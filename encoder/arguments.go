@@ -31,8 +31,7 @@ func HLSArguments() Arguments {
 	return Arguments{
 		defaultArgs: []Argument{
 			{"threads", "2"},
-			{"preset", "superfast"},
-			{"keyint_min", keyint},
+			{"preset", "ultrafast"},
 			{"g", keyint},
 			{"sc_threshold", "0"},
 			{"c:v", videoCodec},
@@ -80,9 +79,6 @@ func (a Arguments) GetStrArguments() []string {
 
 		formatOpts = append(formatOpts, Argument{"map", "v:0"})
 		formatOpts = append(formatOpts, Argument{fmt.Sprintf("filter:%v", i), fmt.Sprintf(`scale=-2:%v`, f.Resolution.Height)})
-		// Instead of using a encoding quality factor "-crf" I have to use a set bitrate with "-b:v:X" for every stream
-		// and omit the "-crf" statement. To fine-tune the we can change the -bufsize:v:X between 150% of the set bitrate
-		// to 200% of the set bitrate. I took 175%. The bufsize is the area in witch the bitrate is calculated and adjusted by the encoder.
 		formatOpts = append(formatOpts, Argument{fmt.Sprintf("maxrate:%v", i), fmt.Sprintf("%vk", f.GetBitrateForFPS(a.fps))})
 		formatOpts = append(formatOpts, Argument{fmt.Sprintf("bufsize:%v", i), fmt.Sprintf("%vk", f.GetBitrateForFPS(a.fps)*2)})
 	}

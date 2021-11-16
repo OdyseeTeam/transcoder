@@ -5,7 +5,7 @@ import (
 	"os/exec"
 )
 
-const interval = "5" // seconds
+const interval = "2" // seconds
 const width = "300"
 const height = "200"
 const columns = "10"

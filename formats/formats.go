@@ -37,18 +37,17 @@ type Bitrate struct {
 
 // Commonly defined resolutions
 var (
-	UHD4K  = Resolution{Height: 2160}
-	QHD2K  = Resolution{Height: 1440}
-	HD1080 = Resolution{Height: 1080}
-	HD720  = Resolution{Height: 720}
-	SD480  = Resolution{Height: 480}
-	SD360  = Resolution{Height: 360}
-	SD240  = Resolution{Height: 240}
-	SD144  = Resolution{Height: 144}
+	UHD4K  = Resolution{Height: 2160, Width: 3840}
+	QHD2K  = Resolution{Height: 1440, Width: 2560}
+	HD1080 = Resolution{Height: 1080, Width: 1920}
+	HD720  = Resolution{Height: 720, Width: 1280}
+	SD360  = Resolution{Height: 360, Width: 640}
+	SD240  = Resolution{Height: 240, Width: 320}
+	SD144  = Resolution{Height: 144, Width: 256}
 )
 
 var Resolutions = []Resolution{
-	UHD4K, QHD2K, HD1080, HD720, SD480, SD360, SD240, SD144,
+	UHD4K, QHD2K, HD1080, HD720, SD360, SD240, SD144,
 }
 
 // H264 codec with its suggested bitrates
