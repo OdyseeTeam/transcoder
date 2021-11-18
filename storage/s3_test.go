@@ -30,15 +30,16 @@ func (s *s3suite) SetupSuite() {
 	var err error
 
 	rand.Seed(time.Now().UTC().UnixNano())
-	s.local = Local("storage_s3_test")
-	s.sdHash = randomString(96)
 
 	s.addr, s.cleanup, err = miniotest.StartEmbedded()
 	s.Require().NoError(err)
 }
 
 func (s *s3suite) SetupTest() {
+	s.local = Local(s.T().TempDir())
+	s.sdHash = randomString(96)
 	s.populateHLSPlaylist()
+	PopulateHLSPlaylist(s.T(), s.local.path, s.sdHash)
 }
 
 func (s *s3suite) TestPutDelete() {
@@ -91,11 +92,7 @@ func (s *s3suite) populateHLSPlaylist() {
 
 	incomingStorage := Local(".")
 
-	// plPath, _ := filepath.Abs("./testdata")
-	// ls := InitLocalStream(plPath, s.sdHash)
-	// ls.path = plPath
-
-	ls, err := incomingStorage.Open("testdata")
+	ls, err := incomingStorage.Open(path.Join("testdata", "dummy-stream"))
 	s.Require().NoError(err)
 	err = ls.Dive(
 		func(rootPath ...string) ([]byte, error) {

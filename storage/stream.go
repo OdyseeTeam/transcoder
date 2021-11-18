@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -10,21 +11,25 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-
-	"crypto/sha512"
+	"regexp"
 
 	"github.com/grafov/m3u8"
 	"github.com/karrick/godirwalk"
+	"github.com/lbryio/transcoder/formats"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	MasterPlaylistName  = "master.m3u8"
 	PlaylistExt         = ".m3u8"
 	FragmentExt         = ".ts"
+	ManifestName        = ".manifest"
 	PlaylistContentType = "application/x-mpegurl"
 	FragmentContentType = "video/mp2t"
 )
+
+var SDHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/`)
 
 type RemoteStream struct {
 	url      string
@@ -44,6 +49,21 @@ type LightLocalStream struct {
 	SDHash   string
 	Size     int64
 	Checksum []byte
+	Manifest *Manifest
+}
+
+type TowerStreamCredentials struct {
+	CallbackURL, Token string
+}
+
+type Manifest struct {
+	URL      string
+	SDHash   string
+	Size     int64  `yaml:",omitempty"`
+	Checksum string `yaml:",omitempty"`
+
+	Formats []formats.Format        `yaml:",omitempty,flow"`
+	Tower   *TowerStreamCredentials `yaml:",omitempty,flow"`
 }
 
 type StreamFileLoader func(rootPath ...string) ([]byte, error)
@@ -53,6 +73,19 @@ type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
 
 func GetHash() hash.Hash {
 	return sha512.New512_224()
+}
+
+func InitLocalStream(path string, m *Manifest) (*LightLocalStream, error) {
+	s, err := OpenLocalStream(path)
+	if err != nil {
+		return nil, err
+	}
+	err = s.WriteManifest(m)
+	if err != nil {
+		return nil, err
+	}
+	s.Manifest = m
+	return s, nil
 }
 
 func OpenLocalStream(path string) (*LightLocalStream, error) {
@@ -177,15 +210,15 @@ func (s RemoteStream) URL() string {
 	return s.url
 }
 
-func (s LightLocalStream) ChecksumString() string {
+func (s *LightLocalStream) ChecksumString() string {
 	return hex.EncodeToString(s.Checksum)
 }
 
-func (s LightLocalStream) ChecksumValid(checksum []byte) bool {
+func (s *LightLocalStream) ChecksumValid(checksum []byte) bool {
 	return bytes.Equal(checksum, s.Checksum)
 }
 
-func (s LightLocalStream) Walk(walker StreamWalker) error {
+func (s *LightLocalStream) Walk(walker StreamWalker) error {
 	return godirwalk.Walk(s.Path, &godirwalk.Options{
 		Callback: func(fullPath string, de *godirwalk.Dirent) error {
 			if de.IsDir() {
@@ -201,4 +234,26 @@ func (s LightLocalStream) Walk(walker StreamWalker) error {
 			return walker(fi, fullPath, de.Name())
 		},
 	})
+}
+
+func (s *LightLocalStream) WriteManifest(m *Manifest) error {
+	d, err := yaml.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path.Join(s.Path, ManifestName), d, os.ModePerm)
+}
+
+func (s *LightLocalStream) ReadManifest() error {
+	m := &Manifest{}
+	d, err := os.ReadFile(path.Join(s.Path, ManifestName))
+	if err != nil {
+		return errors.Wrap(err, "cannot read manifest file")
+	}
+	err = yaml.Unmarshal(d, m)
+	if err != nil {
+		return errors.Wrap(err, "cannot unmarshal manifest")
+	}
+	s.Manifest = m
+	return nil
 }
