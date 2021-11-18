@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"testing"
 
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -26,7 +25,7 @@ func TestPackUnpackStream(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(p)
 
-	populateHLSPlaylist(t, p, sdHash)
+	storage.PopulateHLSPlaylist(t, p, sdHash)
 
 	ls, err := storage.OpenLocalStream(path.Join(p, sdHash))
 	require.NoError(t, err)
@@ -44,27 +43,4 @@ func TestPackUnpackStream(t *testing.T) {
 	size, err := verifyPathChecksum(unDir, csum)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3131915, size, "%s is zero size", unDir)
-}
-
-// populateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.
-func populateHLSPlaylist(t *testing.T, dstPath, sdHash string) {
-	err := os.MkdirAll(path.Join(dstPath, sdHash), os.ModePerm)
-	require.NoError(t, err)
-
-	srcPath, _ := filepath.Abs("./testdata")
-	storage := storage.Local(srcPath)
-	ls, err := storage.Open("dummy-stream")
-	require.NoError(t, err)
-	err = ls.Dive(
-		func(rootPath ...string) ([]byte, error) {
-			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
-				return ioutil.ReadFile(path.Join(rootPath...))
-			}
-			return make([]byte, 10000), nil
-		},
-		func(data []byte, name string) error {
-			return ioutil.WriteFile(path.Join(dstPath, sdHash, name), data, os.ModePerm)
-		},
-	)
-	require.NoError(t, err)
 }

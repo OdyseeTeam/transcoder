@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/fasthttp/router"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/valyala/fasthttp"
 )
@@ -32,7 +33,9 @@ func NewUploadServer(uploadPath string, acb AuthCallback, dcb DoneCallback) *fas
 	r := router.New()
 	AttachFileHandler(r, "", uploadPath, acb, dcb)
 	return &fasthttp.Server{
-		Handler: r.Handler,
+		Handler:            manager.MetricsMiddleware(manager.CORSMiddleware(r.Handler)),
+		Name:               "tower",
+		MaxRequestBodySize: 10 * 1024 * 1024 * 1024,
 	}
 }
 
@@ -68,9 +71,11 @@ func (h *fileHandler) Handle(ctx *fasthttp.RequestCtx) {
 	}
 
 	if _, err := os.Stat(dstPath); !os.IsNotExist(err) {
-		ctx.SetStatusCode(http.StatusForbidden)
-		ctx.SetBodyString("stream already exists")
-		return
+		// ctx.SetStatusCode(http.StatusForbidden)
+		// ctx.SetBodyString("stream already exists")
+		// return
+		// TODO: This is not the best practice and potentially unsafe
+		os.RemoveAll(dstPath)
 	}
 
 	form, err := ctx.MultipartForm()

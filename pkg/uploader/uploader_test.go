@@ -15,6 +15,8 @@ import (
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/karrick/godirwalk"
+	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fasthttp"
@@ -27,13 +29,16 @@ type uploaderSuite struct {
 	path, sdHash, inPath, tarPath string
 	localStream                   storage.LightLocalStream
 
-	server   *fasthttp.Server
+	client httpDoer
+
 	uploaded map[string]string
+	server   *fasthttp.Server
+	ln       *fasthttputil.InmemoryListener
 }
 
 const secretToken = "abcabc"
 
-func TestManagerSuite(t *testing.T) {
+func TestUploader(t *testing.T) {
 	suite.Run(t, new(uploaderSuite))
 }
 
@@ -53,7 +58,7 @@ func (s *uploaderSuite) SetupTest() {
 	sdHash := strings.ToLower(randomdata.Alphanumeric(96))
 	tarPath := path.Join(p, fmt.Sprintf("%v.tar", sdHash))
 
-	populateHLSPlaylist(s.T(), p, sdHash)
+	storage.PopulateHLSPlaylist(s.T(), p, sdHash)
 	ls, err := storage.OpenLocalStream(path.Join(p, sdHash))
 	s.Require().NoError(err)
 
@@ -61,21 +66,42 @@ func (s *uploaderSuite) SetupTest() {
 	ls.Checksum = csum
 	s.Require().NoError(err)
 
+	ln := fasthttputil.NewInmemoryListener()
+
 	s.server = server
+	s.ln = ln
 	s.path = p
 	s.sdHash = sdHash
 	s.inPath = path.Join(p, "incoming")
 	s.tarPath = tarPath
 	s.localStream = *ls
 	s.uploaded = map[string]string{}
+	s.client = &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return s.ln.Dial()
+			},
+		},
+	}
+
+	go func() {
+		err := s.server.Serve(ln)
+		if err != nil {
+			s.FailNow("failed to serve: %v", err)
+		}
+	}()
 }
 
-func (s *uploaderSuite) TestUpload_Success() {
+func (s *uploaderSuite) TearDownTest() {
+	s.ln.Close()
+}
+
+func (s *uploaderSuite) TestServer_Success() {
 	expectedStreamPath := path.Join(s.inPath, s.sdHash)
 
-	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
 	s.Require().NoError(err)
-	r, err := serve(s.server, req)
+	r, err := s.client.Do(req)
 	s.Require().NoError(err)
 
 	b, _ := ioutil.ReadAll(r.Body)
@@ -87,36 +113,36 @@ func (s *uploaderSuite) TestUpload_Success() {
 	s.Equal(expectedStreamPath, s.uploaded[s.sdHash])
 }
 
-func (s *uploaderSuite) TestUpload_InvalidToken() {
-	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, "wrongtoken", s.localStream.Checksum)
+func (s *uploaderSuite) TestServer_InvalidToken() {
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, "wrongtoken", s.localStream.Checksum)
 	s.Require().NoError(err)
-	r, err := serve(s.server, req)
+	r, err := s.client.Do(req)
 	s.Require().NoError(err)
 
 	b, _ := ioutil.ReadAll(r.Body)
 	s.Require().Equal(http.StatusForbidden, r.StatusCode, string(b))
 }
 
-func (s *uploaderSuite) TestUpload_InvalidChecksum() {
-	req, err := buildUploadRequest(s.tarPath, "http://inmemory/"+s.sdHash, secretToken, []byte("abc"))
+func (s *uploaderSuite) TestServer_InvalidChecksum() {
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, []byte("abc"))
 	s.Require().NoError(err)
-	r, err := serve(s.server, req)
+	r, err := s.client.Do(req)
 	s.Require().NoError(err)
 
 	b, _ := ioutil.ReadAll(r.Body)
 	s.Require().Equal(http.StatusBadRequest, r.StatusCode, string(b))
 }
 
-func (s *uploaderSuite) TestUpload_EmptyFile() {
+func (s *uploaderSuite) TestServer_EmptyFile() {
 	expectedStreamPath := path.Join(s.inPath, s.sdHash)
 
 	f, err := ioutil.TempFile("", "")
 	s.Require().NoError(err)
 	f.Close()
 
-	req, err := buildUploadRequest(f.Name(), "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
+	req, err := buildUploadRequest(context.Background(), f.Name(), "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
 	s.Require().NoError(err)
-	r, err := serve(s.server, req)
+	r, err := s.client.Do(req)
 	s.Require().NoError(err)
 
 	s.Equal(http.StatusBadRequest, r.StatusCode)
@@ -129,18 +155,30 @@ func (s *uploaderSuite) TestUpload_EmptyFile() {
 	s.Empty(s.uploaded[s.sdHash])
 }
 
-func serve(server *fasthttp.Server, req *http.Request) (*http.Response, error) {
+func (s *uploaderSuite) TestUploader_Success() {
+	expectedStreamPath := path.Join(s.inPath, s.sdHash)
+
+	u := NewUploader(DefaultUploaderConfig().
+		Client(s.client).
+		Logger(zapadapter.NewKV(logging.Create("uploader-test", logging.Dev).Desugar())))
+	err := u.Upload(context.Background(), path.Join(s.path, s.sdHash), "http://inmemory/"+s.sdHash, secretToken)
+	s.Require().NoError(err)
+
+	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum)
+	s.Require().NoError(err)
+
+	s.Equal(expectedStreamPath, s.uploaded[s.sdHash])
+}
+
+func (s *uploaderSuite) TestUploader_Retry() {
+	inPath := s.T().TempDir()
+	expectedStreamPath := path.Join(inPath, s.sdHash)
+	counter := 0
+
 	ln := fasthttputil.NewInmemoryListener()
 	defer ln.Close()
 
-	go func() {
-		err := server.Serve(ln)
-		if err != nil {
-			panic(fmt.Errorf("failed to serve: %v", err))
-		}
-	}()
-
-	client := http.Client{
+	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return ln.Dial()
@@ -148,7 +186,33 @@ func serve(server *fasthttp.Server, req *http.Request) (*http.Response, error) {
 		},
 	}
 
-	return client.Do(req)
+	server := NewUploadServer(
+		inPath,
+		func(ctx *fasthttp.RequestCtx) bool {
+			counter++
+			if counter < 3 {
+				return false
+			}
+			return ctx.UserValue("token").(string) == secretToken
+		},
+		func(ls storage.LightLocalStream) {},
+	)
+
+	go func() {
+		err := server.Serve(ln)
+		if err != nil {
+			s.FailNow("failed to serve: %v", err)
+		}
+	}()
+
+	u := NewUploader(DefaultUploaderConfig().
+		Client(client).
+		Logger(zapadapter.NewKV(logging.Create("uploader-test", logging.Dev).Desugar())))
+	err := u.Upload(context.Background(), path.Join(s.path, s.sdHash), "http://inmemory/"+s.sdHash, secretToken)
+	s.Require().NoError(err)
+
+	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum)
+	s.Require().NoError(err)
 }
 
 func verifyPathChecksum(path string, csum []byte) (int64, error) {
