@@ -1,13 +1,17 @@
 package encoder
 
 import (
+	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/floostack/transcoder/ffmpeg"
 	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/stretchr/testify/suite"
@@ -36,7 +40,7 @@ func (s *encoderSuite) SetupSuite() {
 	s.Require().NoError(err)
 }
 
-func (s *encoderSuite) TestEncode() {
+func (s *encoderSuite) TestEncodeHLS() {
 	absPath, _ := filepath.Abs(s.file.Name())
 	e, err := NewEncoder(Configure())
 	s.Require().NoError(err)
@@ -87,4 +91,51 @@ stream_3.m3u8`,
 		// s.True(m, fmt.Sprintf("%v doesn't match %v", string(cont), str))
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
+}
+
+func (s *encoderSuite) TestEncodeTS() {
+	absPath, _ := filepath.Abs(s.file.Name())
+
+	cfg := Configure()
+
+	var targetFormats []formats.Format
+
+	targetFormats = append(targetFormats, formats.Format{
+		Resolution: formats.SD144,
+		Bitrate:    formats.Bitrate{FPS30: 100, FPS60: 160},
+	})
+
+	target := Target{
+		Formats: targetFormats,
+		Type:    TargetTypeTS,
+	}
+	e, err := NewEncoder(cfg.Target(target))
+	s.Require().NoError(err)
+
+	res, err := e.Encode(absPath, s.out)
+	s.Require().NoError(err)
+	s.Require().NotNil(res)
+
+	for range res.Progress {
+		// drain the channel
+	}
+
+	meta := &ffmpeg.Metadata{}
+
+	var outb bytes.Buffer
+	args := []string{
+		"-i", filepath.Join(s.out, filepath.Base(absPath)),
+		"-print_format", "json",
+		"-show_format",
+	}
+
+	cmd := exec.Command(cfg.ffprobePath, args...)
+	cmd.Stdout = &outb
+
+	err = cmd.Run()
+	s.Require().NoError(err)
+
+	err = json.Unmarshal(outb.Bytes(), &meta)
+	s.Require().NoError(err)
+	s.Require().Equal("mpegts", meta.Format.FormatName)
 }
