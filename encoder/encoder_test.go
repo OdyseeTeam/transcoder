@@ -24,21 +24,16 @@ func TestEncoderSuite(t *testing.T) {
 }
 
 func (s *encoderSuite) SetupSuite() {
-	s.out = path.Join(os.TempDir(), "encoderSuite_out")
+	s.out = path.Join(s.T().TempDir(), "encoderSuite_out")
 
 	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	c, err := manager.ResolveRequest(url)
 	if err != nil {
 		panic(err)
 	}
-	s.file, _, err = c.Download(path.Join(os.TempDir(), "encoderSuite_in"))
+	s.file, _, err = c.Download(path.Join(s.T().TempDir(), "encoderSuite_in"))
 	s.file.Close()
 	s.Require().NoError(err)
-}
-
-func (s *encoderSuite) TearDownSuite() {
-	os.Remove(s.file.Name())
-	os.RemoveAll(s.out)
 }
 
 func (s *encoderSuite) TestEncode() {
