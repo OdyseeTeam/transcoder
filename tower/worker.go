@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Pallinder/go-randomdata"
@@ -11,10 +12,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
-)
-
-const (
-	TPipelineHeartbeat = "processor_heartbeat"
 )
 
 type WorkerConfig struct {
@@ -27,17 +24,20 @@ type WorkerConfig struct {
 
 type Worker struct {
 	*WorkerConfig
-	publisher      rabbitmq.Publisher
-	consumer       *rabbitmq.Consumer
-	id             string
-	processor      Processor
-	stopChan       chan interface{}
-	workers        chan struct{}
-	requestHandler requestHandler
+	publisher           rabbitmq.Publisher
+	consumer            *rabbitmq.Consumer
+	id                  string
+	processor           Processor
+	stopChan            chan struct{}
+	workers             chan struct{}
+	activePipelines     map[string]struct{}
+	activePipelinesLock sync.Mutex
+	requestHandler      requestHandler
+	bgTasks             *sync.WaitGroup
 }
 
 type Processor interface {
-	Process(stop chan interface{}, t *task) (<-chan interface{}, <-chan pipelineProgress)
+	Process(stop chan struct{}, t *task) taskControl
 }
 
 type requestHandler func(MsgRequest)
@@ -46,10 +46,7 @@ func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
 		rmqAddr: "amqp://guest:guest@localhost/",
 		log:     logging.NoopKVLogger{},
-		timings: Timings{
-			TPipelineHeartbeat: 30 * time.Second,
-			TWorkerStatus:      500 * time.Millisecond,
-		},
+		timings: defaultTimings(),
 	}
 }
 
@@ -59,15 +56,19 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := newPipeline(config.workDir, enc, config.timings[TPipelineHeartbeat])
+
+	worker := Worker{
+		WorkerConfig:        config,
+		stopChan:            make(chan struct{}),
+		activePipelines:     map[string]struct{}{},
+		activePipelinesLock: sync.Mutex{},
+		bgTasks:             &sync.WaitGroup{},
+	}
+	p, err := newPipeline(config.workDir, enc, config.timings[TRequestHeartbeat], worker.log)
 	if err != nil {
 		return nil, err
 	}
-	worker := Worker{
-		WorkerConfig: config,
-		processor:    p,
-		stopChan:     make(chan interface{}),
-	}
+	worker.processor = p
 	worker.requestHandler = worker.handleRequest
 
 	if worker.id == "" {
@@ -83,7 +84,7 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 	returns := publisher.NotifyReturn()
 	go func() {
 		for r := range returns {
-			fmt.Printf("worker got return from server: %+v\n", r)
+			worker.log.Warn(fmt.Sprintf("message returned from server: %+v\n", r))
 		}
 	}()
 
@@ -139,53 +140,68 @@ func (c *Worker) generateID() {
 
 func (c *Worker) handleRequest(req MsgRequest) {
 	ll := c.log.With("url", req.URL)
-	task := &task{url: req.URL, callbackURL: req.CallbackURL, token: req.Key}
+	task := &task{url: req.URL, sdHash: req.SDHash, callbackURL: req.CallbackURL, token: req.Key}
+	pulse := time.NewTicker(c.timings[TRequestHeartbeat])
 
-	ll.Info("task received, starting")
-	heartbeat, progress := c.processor.Process(c.stopChan, task)
+	ll.Info("task received, starting", "msg", req)
 
+	tc := c.processor.Process(c.stopChan, task)
 	for {
 		select {
 		case <-c.stopChan:
+			task.cleanup()
 			return
-		case _, ok := <-heartbeat:
-			if ok {
-				ll.Debug("heartbeat received")
-				c.Respond(req, tHeartbeat, nil)
-			} else {
-				c.Respond(req, tPipelineGone, nil)
+		// case err := <-tc.Errc:
+		// 	ll.Error("processor failed", "err", err)
+		// 	task.cleanup()
+		// 	return
+		case <-tc.TaskDone:
+			err := <-tc.Errc
+			if err != nil {
+				ll.Error("processor failed", "err", err)
+				c.Respond(req, tPipelineError, mPipelineError{Error: err.Error()})
 			}
-		case p, ok := <-progress:
-			if !ok {
-				c.Respond(req, tPipelineGone, mPipelineError{Error: "progress channel closed"})
-			} else {
-				llp := ll.With("progress", p)
-				c.Respond(req, tPipelineUpdate, p)
-				if p.Error != nil {
-					llp.Error("processor errored", "err", p.Error.Error())
-					task.cleanup()
-					return
-				} else if p.Stage == StageDone {
-					llp.Debug("processor done")
-					task.cleanup()
-					return
-				}
-				llp.Debug("processor progressed")
-			}
-		case <-time.After(c.timings[TPipelineHeartbeat] * 2):
-			c.Respond(req, tPipelineGone, mPipelineError{Error: "heartbeat timeout"})
+			task.cleanup()
+			return
+		case p := <-tc.Progress:
+			llp := ll.With("progress", p)
+			c.Respond(req, tPipelineUpdate, p)
+			llp.Debug("processor progressed")
+		case <-pulse.C:
+			c.Respond(req, tHeartbeat, struct{}{})
 		}
 	}
 }
 
-func (c *Worker) StartWorkers() error {
-	if err := c.InitConsumer(); err != nil {
-		return err
-	}
-	if err := c.startConsuming(); err != nil {
-		return err
-	}
-	return nil
+func (c *Worker) StartWorkers() {
+	pulse := time.NewTicker(500 * time.Millisecond)
+
+	go func() {
+		running := false
+		for {
+			select {
+			case <-c.stopChan:
+				return
+			case <-pulse.C:
+				if running && len(c.workers) == 0 {
+					c.log.Debug("destroying consumer")
+					c.DestroyConsumer()
+					running = false
+				} else if !running && len(c.workers) > 0 {
+					c.log.Debug("initializing consumer")
+					if err := c.InitConsumer(); err != nil {
+						c.log.Error("consumer init failure", err)
+						return
+					}
+					if err := c.startConsuming(); err != nil {
+						c.log.Error("consumer start failure", err)
+						return
+					}
+					running = true
+				}
+			}
+		}
+	}()
 }
 
 func (c *Worker) Respond(msg MsgRequest, mtype WorkerMessageType, message interface{}) error {
@@ -212,7 +228,7 @@ func (c *Worker) Respond(msg MsgRequest, mtype WorkerMessageType, message interf
 
 func (c *Worker) Stop() {
 	close(c.stopChan)
-	c.StopConsumer()
+	c.DestroyConsumer()
 }
 
 func (c *Worker) InitConsumer() error {
@@ -224,10 +240,11 @@ func (c *Worker) InitConsumer() error {
 	return nil
 }
 
-func (c *Worker) StopConsumer() {
+func (c *Worker) DestroyConsumer() {
 	if c.consumer != nil {
 		c.consumer.StopConsuming(c.id, false)
 		c.consumer.Disconnect()
+		c.consumer = nil
 	}
 }
 
@@ -240,16 +257,26 @@ func (c *Worker) startConsuming() error {
 				c.log.Warn("botched message received", "err", err)
 				return rabbitmq.NackDiscard
 			}
-			c.log.Debug("message received", "msg", msg)
+			c.log.Info("message received", "msg", msg)
+
+			c.activePipelinesLock.Lock()
+			defer c.activePipelinesLock.Unlock()
+			if _, ok := c.activePipelines[msg.Ref]; ok {
+				c.log.Info("duplicate transcoding request received", "msg", msg)
+				return rabbitmq.NackDiscard
+			}
+			c.activePipelines[msg.Ref] = struct{}{}
 
 			select {
 			case <-c.stopChan:
 				return rabbitmq.NackRequeue
 			case <-c.workers:
-				// Run as normal
 				c.log.Debug("checked out worker")
 				go func() {
 					defer func() {
+						c.activePipelinesLock.Lock()
+						defer c.activePipelinesLock.Unlock()
+						delete(c.activePipelines, msg.Ref)
 						c.workers <- struct{}{}
 						c.log.Debug("checked worker back in")
 					}()
@@ -257,8 +284,7 @@ func (c *Worker) startConsuming() error {
 				}()
 				return rabbitmq.Ack
 			default:
-				// No workers available
-				// c.log.Debug("worker pool exhausted")
+				c.log.Debug("worker pool exhausted")
 				return rabbitmq.NackRequeue
 			}
 		},
@@ -270,8 +296,6 @@ func (c *Worker) startConsuming() error {
 		rabbitmq.WithConsumeOptionsBindingExchangeKind("direct"),
 		rabbitmq.WithConsumeOptionsConsumerName(c.id),
 		rabbitmq.WithConsumeOptionsQueueDurable,
-		rabbitmq.WithConsumeOptionsQuorum,
-		// rabbitmq.WithConsumeOptionsQueueArgs(rabbitmq.Table{"x-max-length": 3}),
 	)
 }
 

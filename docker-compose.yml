@@ -10,23 +10,49 @@ services:
   worker:
     image: odyseeteam/transcoder-worker:dev
     container_name: worker
-    command: ["./worker", "start", "--rmq-addr=amqp://guest:guest@rabbitmq/", "--workdir=/data", "--debug"]
-    volumes:
-      - worker-data:/data
-    build:
-      context: .
-      dockerfile: Dockerfile-worker
+    command:
+      - ./worker
+      - start
+      - --rmq-addr=amqp://guest:guest@rabbitmq/
+      - --work-dir=/storage
+      - --debug
+      - --workers=1
+      - --threads=4
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile-worker
+  worker2:
+    image: odyseeteam/transcoder-worker:dev
+    container_name: worker2
+    command:
+      - ./worker
+      - start
+      - --rmq-addr=amqp://guest:guest@rabbitmq/
+      - --work-dir=/storage
+      - --debug
+      - --workers=1
+      - --threads=4
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile-worker
   tower:
     image: odyseeteam/transcoder-tower:dev
     container_name: tower
-    command: ["./tower", "serve", "--rmq-addr=amqp://guest:guest@rabbitmq/", "--http-url=http://tower:8080", "--debug"]
+    command:
+      - ./tower
+      - serve
+      - --rmq-addr=amqp://guest:guest@rabbitmq/
+      - --http-url=http://tower:8080
+      - --debug
+      - --dev-mode
+      - --state-file=/storage/state.json
     volumes:
       - tower-data:/storage
     ports:
       - "8080:8080"
-    build:
-      context: .
-      dockerfile: Dockerfile-tower
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile-tower
   transcoder:
     image: lbryio/transcoder:latest
     container_name: transcoder
@@ -63,5 +89,4 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
-  worker-data: {}
   tower-data: {}

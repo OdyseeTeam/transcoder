@@ -46,13 +46,15 @@ func StartBatchUploader(u *Uploader, concurrency int) BatchUploader {
 					if ls.Manifest.Tower == nil {
 						item.errc <- fmt.Errorf("no tower credentials for stream %v", ls.SDHash)
 					} else {
-						b.log.Info("preparing to upload", "sd_hash", ls.SDHash)
 						item.progress <- 0.0
+						b.log.Info("preparing to upload batch item", "ls", ls)
 						err := u.Upload(ctx, ls.Path, ls.Manifest.Tower.CallbackURL, ls.Manifest.Tower.Token)
 						if err != nil {
+							b.log.Error("error uploading", "err", err)
 							item.errc <- err
 						} else {
 							item.progress <- 100
+							b.log.Info("batch item uploaded", "ls", ls)
 						}
 					}
 					close(item.errc)
@@ -66,7 +68,7 @@ func StartBatchUploader(u *Uploader, concurrency int) BatchUploader {
 }
 
 func (b BatchUploader) Upload(ls *storage.LightLocalStream) (<-chan float32, <-chan struct{}, <-chan error) {
-	item := batchItem{ls: ls, progress: make(chan float32), errc: make(chan error, 1), done: make(chan struct{})}
+	item := batchItem{ls: ls, progress: make(chan float32, 1000), errc: make(chan error, 1), done: make(chan struct{})}
 	b.inlet <- item
 	return item.progress, item.done, item.errc
 }

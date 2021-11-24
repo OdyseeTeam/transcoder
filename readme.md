@@ -2,23 +2,30 @@
 
 ## Building
 
-To build an x86 Linux binary:
+To build an x86-64 Linux binary:
 
 ```
-make linux
+make transcoder
 ```
 
 #### Building on MacOS
 
-To build for a Linux target on macos, you need to have musl toolchain installed. Using homebrew:
+To build for Linux on macos, you need to have musl toolchain installed. Using homebrew:
 
 ```
 brew install filosottile/musl-cross/musl-cross
 ```
 
+On ARM Macs:
+
+```
+brew install richard-vd/musl-cross/musl-cross
+brew install zstd
+```
+
 ## Running
 
-On most systems, if you have `golang >= 1.16` installed, you can just `go run .`.
+On most systems, if you have golang v1.16 installed, you can just `go run .`.
 
 ## Configuring
 

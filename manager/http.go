@@ -76,6 +76,7 @@ func AttachVideoHandler(r *router.Router, prefix, videoPath string, manager *Vid
 	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:[a-z0-9]{96}}", h.handleVideo)
 	g.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
 	g.GET("/api/v2/video/{url}", h.handleVideo)
+	g.GET("/api/v3/video", h.handleVideo) // accepts URL as a query param
 	g.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), videoPath)
 
 	metrics.RegisterMetrics()
@@ -123,23 +124,37 @@ func (s HttpAPI) Shutdown() error {
 }
 
 func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
-	urlQ := ctx.UserValue("url").(string)
-	path := string(ctx.Path())
+	var path, videoURL string
+	var err error
+	urlQ, _ := ctx.UserValue("url").(string)
 
-	url, err := url.PathUnescape(urlQ)
-	if err != nil {
-		logger.Errorw("url parsing error", "url", urlQ, "error", err)
+	if urlQ != "" {
+		path = string(ctx.Path())
+
+		videoURL, err = url.PathUnescape(urlQ)
+		if err != nil {
+			logger.Errorw("url parsing error", "url", urlQ, "error", err)
+			ctx.SetStatusCode(http.StatusBadRequest)
+			fmt.Fprint(ctx, err.Error())
+			return
+		}
+	} else {
+		videoURL = string(ctx.FormValue("url"))
+	}
+
+	if videoURL == "" {
+		logger.Info("no url supplied")
 		ctx.SetStatusCode(http.StatusBadRequest)
-		fmt.Fprint(ctx, err.Error())
+		fmt.Fprint(ctx, "no url supplied")
 		return
 	}
 
 	ll := logger.With(
-		"url", url,
+		"url", videoURL,
 		"path", path,
 	)
 
-	v, err := h.manager.Video(url)
+	v, err := h.manager.Video(videoURL)
 
 	if err != nil {
 		var (

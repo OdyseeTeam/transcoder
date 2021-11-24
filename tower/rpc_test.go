@@ -48,11 +48,11 @@ func (s *towerSuite) TestHeartbeats() {
 			TWorkerStatus: 50 * time.Millisecond,
 			TWorkerWait:   100 * time.Millisecond,
 			TRequestPick:  100 * time.Millisecond,
-		}),
+		}).
+		DevMode(),
 	)
 	s.Require().NoError(err)
 
-	srv.deleteQueues()
 	s.Require().NoError(err)
 
 	go srv.startWatchingWorkerStatus()
@@ -62,22 +62,22 @@ func (s *towerSuite) TestHeartbeats() {
 	for i := 0; i < workersNum; i++ {
 		poolSizes[i] = rand.Intn(99) + 1
 		poolTotal += poolSizes[i]
-		c, err := NewWorker(DefaultWorkerConfig().
+		w, err := NewWorker(DefaultWorkerConfig().
 			PoolSize(poolSizes[i]).
 			Timings(Timings{TWorkerStatus: 200 * time.Millisecond}),
 		)
 		s.Require().NoError(err)
-		c.log = zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())
-		go c.StartSendingStatus()
-		workers[i] = c
+		w.log = zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())
+		go w.StartSendingStatus()
+		workers[i] = w
 	}
 
 	time.Sleep(5 * time.Second)
 	s.Equal(poolTotal, srv.registry.capacity)
 	s.Equal(poolTotal, srv.registry.available)
 
-	for _, c := range workers {
-		c.Stop()
+	for _, w := range workers {
+		w.Stop()
 	}
 
 	time.Sleep(5 * time.Second)
@@ -98,11 +98,9 @@ func (s *towerSuite) TestQueueEagerness() {
 				// request pick interval is needed here, much shorter than in actual production use.
 				TWorkerStatus: 50 * time.Millisecond,
 				TRequestPick:  250 * time.Millisecond,
-			}),
+			}).
+			DevMode(),
 	)
-	s.Require().NoError(err)
-
-	srv.deleteQueues()
 	s.Require().NoError(err)
 
 	go srv.startWatchingWorkerStatus()
@@ -115,19 +113,18 @@ func (s *towerSuite) TestQueueEagerness() {
 	}
 
 	for i := 0; i < workersNum; i++ {
-		c, err := NewWorker(DefaultWorkerConfig().
+		wrk, err := NewWorker(DefaultWorkerConfig().
 			PoolSize(poolSize).
 			Timings(Timings{TWorkerStatus: 100 * time.Millisecond}).
 			Logger(zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())),
 		)
 		s.Require().NoError(err)
-		go c.StartSendingStatus()
-		c.requestHandler = func(msg MsgRequest) {
-			c.log.Info("started working", "msg", msg)
+		go wrk.StartSendingStatus()
+		wrk.requestHandler = func(msg MsgRequest) {
+			wrk.log.Info("started working", "msg", msg)
 			time.Sleep(20 * time.Minute)
 		}
-		err = c.StartWorkers()
-		s.Require().NoError(err)
+		wrk.StartWorkers()
 	}
 
 	go srv.startRequestsPicking(requestsChan)
@@ -140,6 +137,10 @@ func (s *towerSuite) TestQueueEagerness() {
 }
 
 func (s *towerSuite) TestPipelineSuccess() {
+	if testing.Short() {
+		s.T().Skip("skipping TestPipelineSuccess")
+	}
+
 	libPath := s.T().TempDir()
 	srvWorkDir := s.T().TempDir()
 	cltWorkDir := s.T().TempDir()
@@ -164,7 +165,8 @@ func (s *towerSuite) TestPipelineSuccess() {
 				TRequestPick:  250 * time.Millisecond,
 			}).
 			VideoManager(mgr).
-			WorkDir(srvWorkDir),
+			WorkDir(srvWorkDir).
+			DevMode(),
 	)
 	s.Require().NoError(err)
 
@@ -181,7 +183,7 @@ func (s *towerSuite) TestPipelineSuccess() {
 	go srv.startRequestsPicking(requestsChan)
 	requestsChan <- trReq
 
-	c, err := NewWorker(DefaultWorkerConfig().
+	wrk, err := NewWorker(DefaultWorkerConfig().
 		PoolSize(3).
 		Timings(Timings{TWorkerStatus: 100 * time.Millisecond}).
 		WorkDir(cltWorkDir).
@@ -189,9 +191,8 @@ func (s *towerSuite) TestPipelineSuccess() {
 	)
 	s.Require().NoError(err)
 
-	go c.StartSendingStatus()
-	err = c.StartWorkers()
-	s.Require().NoError(err)
+	go wrk.StartSendingStatus()
+	wrk.StartWorkers()
 
 	var v *video.Video
 	for v == nil {
@@ -200,10 +201,126 @@ func (s *towerSuite) TestPipelineSuccess() {
 	}
 	s.Equal(trReq.SDHash, v.SDHash)
 	s.DirExists(path.Join(libPath, v.Path))
+	s.Greater(v.Size, int64(0))
+	s.NotEmpty(v.Channel)
+	s.NotEmpty(v.Checksum)
+
+	s.NoDirExists(path.Join(wrk.workDir, dirStreams, trReq.SDHash))
+	s.NoDirExists(path.Join(wrk.workDir, dirTranscoded, trReq.SDHash))
 }
 
 func (s *towerSuite) TestPipelineFailure() {
 }
 
-func (s *towerSuite) TestPipelineTimeout() {
+func (s *towerSuite) TestPipelineWorkerTimeout() {
+	if testing.Short() {
+		s.T().Skip("skipping TestPipelineWorkerTimeout")
+	}
+
+	libPath := s.T().TempDir()
+	srvWorkDir := s.T().TempDir()
+	cltWorkDir := s.T().TempDir()
+	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+	// url := "lbry://@passionforfood#3/how-to-make-the-perfect-pita-pocket#a"
+	trReq, err := manager.ResolveRequest(url)
+	s.Require().NoError(err)
+
+	vdb := db.OpenTestDB()
+	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
+
+	libCfg := video.Configure().
+		LocalStorage(storage.Local(libPath)).
+		DB(vdb)
+
+	mgr := manager.NewManager(video.NewLibrary(libCfg), 0)
+	srv, err := NewServer(
+		DefaultServerConfig().
+			Logger(zapadapter.NewKV(logging.Create("rpc-test.server", logging.Dev).Desugar())).
+			HttpServer(":18080", "http://localhost:18080/").
+			Timings(Timings{
+				TWorkerStatus:       50 * time.Millisecond,
+				TRequestPick:        250 * time.Millisecond,
+				TRequestHeartbeat:   10 * time.Millisecond,
+				TRequestSweep:       300 * time.Millisecond,
+				TRequestTimeoutBase: 10 * time.Millisecond,
+			}).
+			VideoManager(mgr).
+			WorkDir(srvWorkDir).
+			DevMode(),
+	)
+	s.Require().NoError(err)
+	go func() {
+		err = srv.StartAll()
+		s.Require().NoError(err)
+	}()
+
+	requestsChan := make(chan *manager.TranscodingRequest, 10)
+	go srv.startRequestsPicking(requestsChan)
+	requestsChan <- trReq
+
+	wrk, err := NewWorker(DefaultWorkerConfig().
+		PoolSize(3).
+		Timings(Timings{
+			TRequestHeartbeat: 30 * time.Second,
+		}).
+		WorkDir(cltWorkDir).
+		Logger(zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())),
+	)
+	s.Require().NoError(err)
+
+	go wrk.StartSendingStatus()
+
+	// baseHandler := wrk.requestHandler
+	// firstCall := true
+	// wrk.requestHandler = func(msg MsgRequest) {
+
+	// 	baseHandler(msg)
+	// }
+	wrk.StartWorkers()
+
+	time.Sleep(30 * time.Second)
+	s.Fail("fail")
+}
+
+func (s *towerSuite) TestWorkerRejectsDuplicateRefs() {
+	wrk, err := NewWorker(DefaultWorkerConfig().
+		PoolSize(3).
+		Timings(Timings{
+			TRequestHeartbeat: 30 * time.Second,
+		}).
+		Logger(zapadapter.NewKV(logging.Create("rpc-test.worker", logging.Dev).Desugar())),
+	)
+	s.Require().NoError(err)
+	wrk.requestHandler = func(msg MsgRequest) {
+		wrk.log.Info("started working", "msg", msg)
+		time.Sleep(20 * time.Minute)
+	}
+	go wrk.StartSendingStatus()
+	wrk.StartWorkers()
+
+	srv, err := NewServer(
+		DefaultServerConfig().
+			Logger(zapadapter.NewKV(logging.Create("rpc-test.server", logging.Dev).Desugar())).
+			Timings(Timings{
+				TWorkerStatus: 50 * time.Millisecond,
+				TRequestPick:  250 * time.Millisecond,
+			}).
+			DevMode(),
+	)
+	s.Require().NoError(err)
+
+	go srv.startWatchingWorkerStatus()
+	err = srv.startConsumingWorkerStatus()
+	s.Require().NoError(err)
+
+	requestsChan := make(chan *manager.TranscodingRequest, 1000)
+	go srv.startRequestsPicking(requestsChan)
+	req := &manager.TranscodingRequest{URI: "lbry://" + randomdata.SillyName(), SDHash: randomdata.Alphanumeric(96)}
+	requestsChan <- req
+	delete(srv.state.Requests, req.SDHash)
+	requestsChan <- req
+
+	time.Sleep(4 * time.Second)
+
+	s.Len(wrk.workers, 2)
 }

@@ -84,6 +84,7 @@ func InitLocalStream(path string, m *Manifest) (*LightLocalStream, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.SDHash = m.SDHash
 	s.Manifest = m
 	return s, nil
 }

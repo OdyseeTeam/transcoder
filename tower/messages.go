@@ -12,6 +12,8 @@ type MsgRequest struct {
 	Key         string `json:"key"`
 }
 
+type mPipelineProgress = pipelineProgress
+
 type mPipelineError struct {
 	Error string `json:"error,omitempty"`
 }

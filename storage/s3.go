@@ -111,7 +111,6 @@ func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
 	err = lstream.Dive(
 		readFile,
 		func(data []byte, name string) error {
-
 			ctype := FragmentContentType
 			if path.Ext(name) == PlaylistExt {
 				ctype = PlaylistContentType

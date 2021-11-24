@@ -9,7 +9,7 @@ const (
 	responsesConsumerName = "response-consumer"
 	responsesQueueName    = "responses"
 	requestsQueueName     = "requests"
-	workerStatusQueueName = "heartbeats"
+	workerStatusQueueName = "worker-status"
 
 	headerRequestRef = "request-ref"
 	headerRequestKey = "request-key"
@@ -26,18 +26,19 @@ const (
 	StageDownloading RequestStage = "downloading"
 	StageEncoding    RequestStage = "encoding"
 	StageUploading   RequestStage = "uploading"
-	StageDone        RequestStage = "done"
 
 	StageFailedRequeued   RequestStage = "failed_requeued"
 	StageTimedOutRequeued RequestStage = "timed_out_requeued"
 
-	StageFailed    RequestStage = "failed"    // This is a fatal error stage and stream cannot be re-added after this
-	StageCompleted RequestStage = "completed" // All processing has been successfully completed and stream is in the database
+	StageFailed RequestStage = "failed"
+
+	StageDone          RequestStage = "done"
+	StageFailedFatally RequestStage = "failed_fatally" // This is a fatal error stage and stream cannot be re-added after this
+	StageCompleted     RequestStage = "completed"      // All processing has been successfully completed and stream is in the database
 )
 
 const (
 	tHeartbeat      WorkerMessageType = "heartbeat"
 	tPipelineUpdate WorkerMessageType = "p_update"
-	tPipelineGone   WorkerMessageType = "p_gone"
 	tPipelineError  WorkerMessageType = "p_error"
 )

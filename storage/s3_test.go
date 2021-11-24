@@ -60,9 +60,9 @@ func (s *s3suite) TestPutDelete() {
 	s.Require().NoError(err)
 	s.Equal(s.sdHash, rstream.URL())
 
-	p, err := s3drv.GetFragment(s.sdHash, MasterPlaylistName)
+	sf, err := s3drv.GetFragment(s.sdHash, MasterPlaylistName)
 	s.Require().NoError(err)
-	s.Require().NotNil(p)
+	s.Require().NotNil(sf)
 
 	rstream2, err := s3drv.Put(stream)
 	s.Equal(rstream2.URL(), rstream.URL())

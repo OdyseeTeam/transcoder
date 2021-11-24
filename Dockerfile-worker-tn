@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+
+FROM python:3.9.7-alpine3.15 AS compile
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+
+RUN python -m venv /opt/venv
+
+ADD https://raw.githubusercontent.com/andybeletsky/video-thumbnail-generator/f60c80139c18c88a1a5d19d6f16a1b057b68fab6/generator ./
+ADD https://raw.githubusercontent.com/andybeletsky/video-thumbnail-generator/f60c80139c18c88a1a5d19d6f16a1b057b68fab6/requirements.txt ./
+ADD https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz ./
+
+RUN tar -xf ffmpeg-git-amd64-static.tar.xz && mv ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe ./
+
+RUN apk add make automake gcc g++ python3-dev zlib-dev jpeg-dev
+
+RUN pip install wheel
+RUN pip install -r requirements.txt
+
+RUN chmod a+x generator ffmpeg ffprobe
+RUN cp generator /opt/venv/bin/
+
+FROM python:3.9.7-alpine3.15 AS build
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN apk add jpeg
+
+COPY --from=compile /opt/venv /opt/venv
+COPY --from=compile /build/generator /opt/venv/bin/
+COPY --from=compile /build/ffmpeg /build/ffprobe /usr/local/bin/
+
+WORKDIR /app
+
+COPY ./dist/linux_amd64/worker .
+# COPY ./transcoder.ex.yml ./transcoder.yml
+
+CMD ["./worker", "start", "--work-dir", "/data"]

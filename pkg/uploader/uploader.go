@@ -74,7 +74,7 @@ func (c *UploaderConfig) BackOff(backOff time.Duration) *UploaderConfig {
 	return c
 }
 
-func (u Uploader) Upload(ctx context.Context, dir, url, token string) error {
+func (u *Uploader) Upload(ctx context.Context, dir, url, token string) error {
 	tarPath := path.Base(dir) + "." + TarExtension
 	defer os.Remove(tarPath)
 

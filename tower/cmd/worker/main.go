@@ -27,15 +27,19 @@ func main() {
 	ctx := kong.Parse(&CLI)
 
 	if CLI.Debug {
-		logger, _ = zap.NewProductionConfig().Build()
-	} else {
 		logger, _ = zap.NewDevelopmentConfig().Build()
+	} else {
+		logger, _ = zap.NewProductionConfig().Build()
 	}
 
 	log := logger.Sugar()
 
 	switch ctx.Command() {
 	case "start":
+		err := os.MkdirAll(CLI.Start.WorkDir, os.ModePerm)
+		if err != nil {
+			log.Fatal(err)
+		}
 		c, err := tower.NewWorker(tower.DefaultWorkerConfig().
 			Logger(zapadapter.NewKV(logger.Named("tower.worker"))).
 			PoolSize(CLI.Start.Workers).
@@ -48,10 +52,7 @@ func main() {
 
 		log.Infow("starting tower worker", "tower_server", CLI.Start.RMQAddr)
 		go c.StartSendingStatus()
-		err = c.StartWorkers()
-		if err != nil {
-			log.Fatal(err)
-		}
+		c.StartWorkers()
 
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)

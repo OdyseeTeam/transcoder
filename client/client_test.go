@@ -48,9 +48,7 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *clientSuite) SetupSuite() {
-	p, err := ioutil.TempDir("", "")
-	s.Require().NoError(err)
-	s.assetsPath = p
+	s.assetsPath = s.T().TempDir()
 	vPath := path.Join(s.assetsPath, "videos")
 	s.Require().NoError(os.MkdirAll(vPath, os.ModePerm))
 
@@ -93,7 +91,6 @@ func (s *clientSuite) SetupSuite() {
 
 func (s *clientSuite) TearDownSuite() {
 	go s.httpAPI.Shutdown()
-	s.Require().NoError(os.RemoveAll(s.assetsPath))
 }
 
 func (s *clientSuite) TestPlayFragment() {
@@ -133,6 +130,7 @@ Waiting:
 		{"seg_1_000000.ts", 850324},
 		{"seg_2_000000.ts", 311140},
 		{"seg_3_000000.ts", 187060},
+		{"thumbnails10k.png", 11111},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -161,10 +159,12 @@ Waiting:
 			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
 			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
 
-			if strings.HasSuffix(tc.name, "m3u8") {
+			if strings.HasSuffix(tc.name, ".m3u8") {
 				s.Equal("application/x-mpegurl", rr.Result().Header.Get("content-type"))
-			} else {
+			} else if strings.HasSuffix(tc.name, ".ts") {
 				s.Equal("video/mp2t", rr.Result().Header.Get("content-type"))
+			} else if strings.HasSuffix(tc.name, ".png") {
+				s.Equal("image/png", rr.Result().Header.Get("content-type"))
 			}
 		})
 	}

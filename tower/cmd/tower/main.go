@@ -24,9 +24,11 @@ const configName = "tower"
 
 var CLI struct {
 	Serve struct {
-		RMQAddr  string `optional help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
-		HttpBind string `optional help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
-		HttpURL  string `help:"URL at which callback server will be accessible from the outside"`
+		RMQAddr   string `optional help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
+		HttpBind  string `optional help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
+		HttpURL   string `help:"URL at which callback server will be accessible from the outside"`
+		StateFile string `optional help:"State file to synchronize to and load on start up"`
+		DevMode   bool   `help:"Development mode (purges queues before start)"`
 	} `cmd help:"Start tower server"`
 	Debug bool `optional help:"Enable debug logging" default:false`
 }
@@ -44,11 +46,13 @@ func main() {
 
 func serve() {
 	var logger *zap.Logger
+
 	if CLI.Debug {
-		logger, _ = zap.NewProductionConfig().Build()
-	} else {
 		logger, _ = zap.NewDevelopmentConfig().Build()
+	} else {
+		logger, _ = zap.NewProductionConfig().Build()
 	}
+
 	log := logger.Sugar()
 
 	cfg, err := readConfig()
@@ -57,17 +61,30 @@ func serve() {
 	}
 
 	s3cfg := cfg.GetStringMapString("s3")
-	local := cfg.GetStringMapString("local")
 	towerCfg := cfg.GetStringMapString("tower")
+	libCfg := cfg.GetStringMapString("library")
 
-	vdb := db.OpenDB(path.Join(cfg.GetString("datapath"), "videos.sqlite"))
+	err = os.MkdirAll(libCfg["sqlite"], os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(libCfg["videos"], os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(towerCfg["workdir"], os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	vdb := db.OpenDB(path.Join(libCfg["sqlite"], "videos.sqlite"))
 	err = vdb.MigrateUp(video.InitialMigration)
 	if err != nil {
 		log.Fatal(err)
 	}
-	libCfg := video.Configure().
-		LocalStorage(storage.Local(local["path"])).
-		MaxLocalSize(local["maxsize"]).
+	libConfig := video.Configure().
+		LocalStorage(storage.Local(libCfg["videos"])).
+		MaxLocalSize(libCfg["maxsize"]).
 		MaxRemoteSize(s3cfg["maxsize"]).
 		DB(vdb)
 
@@ -80,10 +97,10 @@ func serve() {
 		if err != nil {
 			log.Fatal("s3 driver initialization failed", err)
 		}
-		libCfg.RemoteStorage(s3d)
+		libConfig.RemoteStorage(s3d)
 		log.Infow("s3 storage configured", "bucket", s3cfg["bucket"])
 	}
-	lib := video.NewLibrary(libCfg)
+	lib := video.NewLibrary(libConfig)
 
 	var s3StopChan chan<- interface{}
 	if s3cfg["bucket"] != "" {
@@ -102,14 +119,36 @@ func serve() {
 	minHits, _ := strconv.Atoi(adQueue["minhits"])
 	mgr := manager.NewManager(lib, minHits)
 
-	server, err := tower.NewServer(tower.DefaultServerConfig().
+	serverConfig := tower.DefaultServerConfig().
 		Logger(zapadapter.NewKV(logger)).
 		HttpServer(CLI.Serve.HttpBind, CLI.Serve.HttpURL).
 		VideoManager(mgr).
 		WorkDir(towerCfg["workdir"]).
-		RestoreState(path.Join(towerCfg["workdir"], "tower-state.json")).
-		RMQAddr(CLI.Serve.RMQAddr),
-	)
+		RMQAddr(CLI.Serve.RMQAddr)
+
+	if CLI.Serve.StateFile != "" {
+		if _, err := os.Stat(CLI.Serve.StateFile); err != nil {
+			log.Info("creating new state file", "path", CLI.Serve.StateFile)
+			state, err := tower.NewState(CLI.Serve.StateFile, false)
+			if err != nil {
+				log.Fatal("cannot create tower state file", err)
+			}
+			serverConfig = serverConfig.State(state)
+		} else {
+			log.Info("loading state file", "path", CLI.Serve.StateFile)
+			state, err := tower.NewState(CLI.Serve.StateFile, true)
+			if err != nil {
+				log.Fatal("cannot load tower state file", err)
+			}
+			serverConfig = serverConfig.State(state)
+		}
+	}
+
+	if CLI.Serve.DevMode {
+		serverConfig = serverConfig.DevMode()
+	}
+
+	server, err := tower.NewServer(serverConfig)
 	if err != nil {
 		log.Fatal("unable to initialize tower server", err)
 	}

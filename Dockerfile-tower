@@ -1,12 +1,9 @@
-# syntax=docker/dockerfile:1
-
-FROM alpine
+FROM alpine:3.14
 EXPOSE 8080
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat sqlite
 
 WORKDIR /app
-COPY ./dist/linux_amd64/tower /app
-COPY tower.yml tower.yml
+COPY ./dist/linux_amd64/tower .
 
 CMD ["./tower", "serve"]

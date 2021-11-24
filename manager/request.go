@@ -21,7 +21,7 @@ import (
 
 var (
 	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
-	blobServer = "blobcache-eu.lbry.com"
+	blobServer = "blobcache-us.lbry.com"
 
 	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
 )
@@ -121,7 +121,12 @@ func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
 		return nil, 0, err
 	}
 
-	if err := downloader.DownloadAndBuild(c.SDHash, false, downloader.HTTP, c.streamFileName(), dstPath); err != nil {
+	tmpPath := "tmp_" + c.SDHash
+	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpPath)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstPath, tmpPath); err != nil {
 		return nil, 0, err
 	}
 	t.Stop()
@@ -143,16 +148,25 @@ func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
 }
 
 func (r *TranscodingRequest) Release() {
+	if r.queue == nil {
+		return
+	}
 	logger.Infow("transcoding request released", "lbry_url", r.URI)
 	r.queue.Release(r.URI)
 }
 
 func (r *TranscodingRequest) Reject() {
+	if r.queue == nil {
+		return
+	}
 	logger.Infow("transcoding request rejected", "lbry_url", r.URI)
 	r.queue.Done(r.URI)
 }
 
 func (r *TranscodingRequest) Complete() {
+	if r.queue == nil {
+		return
+	}
 	logger.Infow("transcoding request completed", "lbry_url", r.URI)
 	r.queue.Done(r.URI)
 }

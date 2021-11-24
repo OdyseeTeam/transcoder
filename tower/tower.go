@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,15 +23,26 @@ import (
 	"github.com/wagslane/go-rabbitmq"
 )
 
+const (
+	TWorkerWait          = "worker_wait"
+	TRequestPick         = "request_pick"
+	TRequestSweep        = "request_sweep"
+	TRequestHeartbeat    = "request_heartbeat"
+	TWorkerStatus        = "worker_status"
+	TWorkerStatusTimeout = "worker_status_timeout"
+	TRequestTimeoutBase  = "request_timeout_base"
+)
+
 type ServerConfig struct {
-	rmqAddr        string
-	workDir        string
-	httpServerBind string
-	httpServerURL  string
-	log            logging.KVLogger
-	videoManager   *manager.VideoManager
-	timings        map[string]time.Duration
-	state          *State
+	rmqAddr                 string
+	workDir, workDirUploads string
+	httpServerBind          string
+	httpServerURL           string
+	log                     logging.KVLogger
+	videoManager            *manager.VideoManager
+	timings                 map[string]time.Duration
+	state                   *State
+	devMode                 bool
 }
 
 type Server struct {
@@ -60,27 +73,14 @@ type workerRegistry struct {
 
 type Timings map[string]time.Duration
 
-const (
-	TWorkerWait          = "worker_wait"
-	TRequestPick         = "request_pick"
-	TRequestSweep        = "request_sweep"
-	TWorkerStatus        = "worker_status"
-	TWorkerStatusTimeout = "worker_status_timeout"
-)
-
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
 		rmqAddr:        "amqp://guest:guest@localhost/",
+		workDir:        ".",
 		httpServerBind: ":18080",
 		log:            logging.NoopKVLogger{},
 		state:          &State{lock: sync.RWMutex{}, Requests: map[string]*RunningRequest{}},
-		timings: Timings{
-			TWorkerWait:          1000 * time.Millisecond,
-			TRequestPick:         500 * time.Millisecond,
-			TRequestSweep:        10 * time.Second,
-			TWorkerStatus:        200 * time.Millisecond,
-			TWorkerStatusTimeout: 10 * time.Second,
-		},
+		timings:        defaultTimings(),
 	}
 }
 
@@ -98,6 +98,9 @@ func (c *ServerConfig) Timings(t Timings) *ServerConfig {
 
 func (c *ServerConfig) HttpServer(bind, url string) *ServerConfig {
 	c.httpServerBind = bind
+	if !strings.HasSuffix(url, "/") {
+		url += "/"
+	}
 	c.httpServerURL = url
 	return c
 }
@@ -112,11 +115,7 @@ func (c *ServerConfig) WorkDir(workDir string) *ServerConfig {
 	return c
 }
 
-func (c *ServerConfig) RestoreState(file string) *ServerConfig {
-	state, err := RestoreState(file)
-	if err != nil {
-		panic(err)
-	}
+func (c *ServerConfig) State(state *State) *ServerConfig {
 	c.state = state
 	return c
 }
@@ -126,12 +125,19 @@ func (c *ServerConfig) RMQAddr(addr string) *ServerConfig {
 	return c
 }
 
+func (c *ServerConfig) DevMode() *ServerConfig {
+	c.devMode = true
+	return c
+}
+
 func NewServer(config *ServerConfig) (*Server, error) {
 	server := Server{
 		ServerConfig: config,
 		registry:     &workerRegistry{workers: map[string]*worker{}},
 		stopChan:     make(chan interface{}),
 	}
+
+	server.workDirUploads = path.Join(server.workDir, "uploads")
 
 	publisher, err := rabbitmq.NewPublisher(server.rmqAddr, amqp091.Config{})
 	if err != nil {
@@ -158,9 +164,10 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	returns := publisher.NotifyReturn()
 	go func() {
 		for r := range returns {
-			fmt.Printf("message returned from server: %+v\n", r.ReplyText)
+			server.log.Warn(fmt.Sprintf("message returned from server: %+v\n", r))
 		}
 	}()
+	server.state.StartDump()
 
 	return &server, nil
 }
@@ -169,6 +176,11 @@ func (s *Server) StartAll() error {
 	if s.videoManager == nil {
 		return errors.New("VideoManager is not configured")
 	}
+
+	if s.devMode {
+		s.deleteQueues()
+	}
+	s.declareQueues()
 
 	go s.startRequestSweep()
 	go s.startWatchingWorkerStatus()
@@ -189,33 +201,49 @@ func (s *Server) StopAll() {
 	close(s.stopChan)
 	s.consumer.StopConsuming(responsesConsumerName, false)
 	s.consumer.Disconnect()
+	s.state.StopDump()
 }
 
-func (s *Server) InitiateRequest(incomingRequest *manager.TranscodingRequest) error {
+func (s *Server) InitiateRequest(request *manager.TranscodingRequest) error {
 	rr := &RunningRequest{
-		URL:                incomingRequest.URI,
-		SDHash:             incomingRequest.SDHash,
-		Ref:                incomingRequest.SDHash,
+		Ref:                request.SDHash,
+		URL:                request.URI,
+		SDHash:             request.SDHash,
+		Channel:            request.ChannelURI,
+		TsCreated:          time.Now(),
+		transcodingRequest: request,
 		Stage:              StagePending,
 		CallbackToken:      crypto.RandString(32),
-		TsStarted:          time.Now(),
-		transcodingRequest: incomingRequest,
 	}
 	s.state.lock.Lock()
-	s.state.Requests[incomingRequest.SDHash] = rr
-	s.state.lock.Unlock()
+	defer s.state.lock.Unlock()
+	if _, ok := s.state.Requests[rr.Ref]; ok {
+		return ErrRequestExists
+	}
+	s.state.Requests[rr.Ref] = rr
 
 	s.log.Info("initiating request", "url", rr.URL, "sd_hash", rr.SDHash)
 	return s.publishRequest(rr)
 }
 
 func (s *Server) declareQueues() error {
-	_, err := s.backCh.QueueDeclare(requestsQueueName, true, false, false, false, amqp.Table{}) // amqp.Table{"x-max-length": 3})
-	return err
+	if _, err := s.backCh.QueueDeclare(requestsQueueName, true, false, false, false, amqp.Table{}); err != nil {
+		return err
+	}
+	if _, err := s.backCh.QueueDeclare(responsesQueueName, true, false, false, false, amqp.Table{}); err != nil {
+		return err
+	}
+	if _, err := s.backCh.QueueDeclare(workerStatusQueueName, true, false, false, false, amqp.Table{}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) deleteQueues() error {
 	if _, err := s.backCh.QueueDelete(requestsQueueName, false, false, false); err != nil {
+		return err
+	}
+	if _, err := s.backCh.QueueDelete(responsesQueueName, false, false, false); err != nil {
 		return err
 	}
 	if _, err := s.backCh.QueueDelete(workerStatusQueueName, false, false, false); err != nil {
@@ -229,13 +257,14 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 		Ref:         rr.SDHash,
 		URL:         rr.URL,
 		SDHash:      rr.SDHash,
-		CallbackURL: s.httpServerURL + rr.Ref,
+		CallbackURL: s.httpServerURL + "callback/" + rr.Ref,
 		Key:         rr.CallbackToken,
 	}
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
+	s.log.Debug("publishing request", "request", msg)
 	return s.publisher.Publish(
 		body,
 		[]string{requestsQueueName},
@@ -250,23 +279,27 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 func (s *Server) startRequestsPicking(requests <-chan *manager.TranscodingRequest) {
 	for {
 		for s.registry.available == 0 {
-			s.log.Info("no workers available, waiting")
+			s.log.Debug("no workers available, waiting")
 			time.Sleep(s.timings[TWorkerWait])
 		}
 		s.log.Info("workers available, starting", "available", s.registry.available)
 		select {
 		case <-s.stopChan:
+			s.log.Info("stopped picking up requests")
 			return
 		case r := <-requests:
 			if r != nil {
 				s.log.Info("picked up transcoding request", "url", r.URI)
 				if err := s.InitiateRequest(r); err != nil {
-					r.Release()
-					s.log.Error("failed to send request", "url", r.URI, "err", err)
+					if errors.Is(err, ErrRequestExists) {
+						r.Reject()
+					} else {
+						r.Release()
+					}
+					s.log.Info("failed to initiate request", "url", r.URI, "err", err)
 				}
 			}
 		}
-		time.Sleep(s.timings[TRequestPick])
 	}
 }
 
@@ -291,16 +324,20 @@ func (s *Server) startHttpServer() error {
 			}
 			rr.Uploaded = true
 
-			if _, err := s.videoManager.Library().AddLightLocalStream(rr.URL, "", ls); err != nil {
-				rr.Stage = StageFailed
+			if _, err := s.videoManager.Library().AddLightLocalStream(rr.URL, rr.Channel, ls); err != nil {
+				rr.Stage = StageFailedFatally
 				rr.Error = err.Error()
 				s.log.Error("failed to add stream", "ref", ls.SDHash, "err", err)
 				return
 			}
 			rr.Stage = StageCompleted
+			if rr.transcodingRequest != nil {
+				rr.transcodingRequest.Complete()
+			}
+			s.log.Info("upload received", "ref", ls.SDHash, "url", rr.URL)
 		},
 	)
-	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log.With("manager.http"))
+	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
 
 	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
 	l, err := net.Listen("tcp", s.httpServerBind)
@@ -310,7 +347,9 @@ func (s *Server) startHttpServer() error {
 
 	// TODO: Cleanup middleware attachment.
 	httpServer := &fasthttp.Server{
-		Handler: manager.MetricsMiddleware(manager.CORSMiddleware(router.Handler)),
+		Handler:            manager.MetricsMiddleware(manager.CORSMiddleware(router.Handler)),
+		Name:               "tower",
+		MaxRequestBodySize: 10 * 1024 * 1024 * 1024,
 	}
 	// s.upAddr = l.Addr().String()
 
@@ -326,21 +365,41 @@ func (s *Server) startHttpServer() error {
 }
 
 func (s *Server) startRequestSweep() {
+	time.Sleep(5 * s.timings[TRequestHeartbeat])
 	pulse := time.NewTicker(s.timings[TRequestSweep])
 
 	sweep := func() {
-		for ref, rr := range s.state.Requests {
-			if rr.Stage == StageFailed || rr.TimedOut() {
+		s.state.lock.Lock()
+		defer s.state.lock.Unlock()
+		for _, rr := range s.state.Requests {
+			if rr.Stage == StageDone || rr.Stage == StageCompleted || rr.Stage == StageFailedFatally || rr.Stage == StagePending {
+				continue
+			}
+			s.log.Debug(
+				"is request timed out?",
+				"is", rr.TimedOut(s.timings[TRequestTimeoutBase]), "base", s.timings[TRequestTimeoutBase],
+				"st", rr.TsStarted, "hb", rr.TsHeartbeat, "upd", rr.TsUpdated,
+			)
+			if rr.Stage == StageFailed || rr.TimedOut(s.timings[TRequestTimeoutBase]) {
 				rr.FailedAttempts++
 				if rr.FailedAttempts >= maxFailedAttempts {
 					if rr.transcodingRequest != nil {
 						rr.transcodingRequest.Reject()
 					}
-					delete(s.state.Requests, ref)
 					s.log.Info(
 						"failure number exceeded, discarding request",
-						"url", rr.URL, "ref", ref, "worker_id", rr.WorkerID)
+						// "url", rr.URL, "ref", ref, "worker_id", rr.WorkerID,
+						// "failures_count", rr.FailedAttempts, "max_failures", maxFailedAttempts,
+						"request", rr,
+					)
+					rr.Stage = StageFailedFatally
 				} else {
+					s.log.Info(
+						"re-publishing request",
+						// "stage", rr.Stage, "updated", rr.TsUpdated, "started", rr.TsStarted,
+						"request", rr,
+					)
+					rr.Stage = StagePending
 					s.publishRequest(rr)
 				}
 			}
@@ -351,9 +410,7 @@ func (s *Server) startRequestSweep() {
 		case <-s.stopChan:
 			return
 		case <-pulse.C:
-			s.state.lock.Lock()
 			sweep()
-			s.state.lock.Unlock()
 		}
 	}
 }
@@ -411,6 +468,7 @@ func (s *Server) startConsumingWorkerStatus() error {
 		rabbitmq.WithConsumeOptionsBindingExchangeKind("direct"),
 		// rabbitmq.WithConsumeOptionsConsumerName(responsesConsumerName),
 		rabbitmq.WithConsumeOptionsBindingExchangeDurable,
+		rabbitmq.WithConsumeOptionsQueueDurable,
 	)
 }
 
@@ -424,37 +482,40 @@ func (s *Server) startConsumingResponses() error {
 				return rabbitmq.NackDiscard
 			}
 
+			// TODO: Verify worker ID match
 			rr.WorkerID = getWorkerID(d)
+
+			if rr.TsStarted.IsZero() {
+				rr.TsStarted = d.Timestamp
+			}
 
 			switch WorkerMessageType(d.Type) {
 			case tHeartbeat:
 				rr.TsHeartbeat = d.Timestamp
 				return rabbitmq.Ack
 			case tPipelineUpdate:
-				var msg pipelineProgress
+				var msg mPipelineProgress
 				err := json.Unmarshal(d.Body, &msg)
 				if err != nil {
 					ll.Error("can't unmarshal received message", "err", err, "type", d.Type)
 					return rabbitmq.NackDiscard
 				}
 				rr.Progress = msg.Percent
-				if msg.Error != nil {
-					rr.Error = msg.Error.Error()
-				}
 				rr.TsUpdated = d.Timestamp
 				rr.Stage = msg.Stage
+				ll.Debug("progress received ", "msg", msg)
 
-				ll.Debug("progress received ", "worker_id", rr.WorkerID, "sd_hash", rr.SDHash, "stage", rr.Stage, "progress", rr.Progress, "url", rr.URL)
-
-				// Clean streams that have been saved into database alread
-				if rr.Stage == StageCompleted && time.Since(rr.TsUpdated) > 24*time.Hour {
-					s.state.lock.Lock()
-					delete(s.state.Requests, rr.Ref)
-					s.state.lock.Unlock()
-				}
 				return rabbitmq.Ack
-			case tPipelineGone:
+			case tPipelineError:
+				var msg mPipelineError
+				err := json.Unmarshal(d.Body, &msg)
+				if err != nil {
+					ll.Error("can't unmarshal received message", "err", err, "type", d.Type)
+					return rabbitmq.NackDiscard
+				}
+				rr.Error = msg.Error
 				rr.Stage = StageFailed
+				ll.Debug("request failed", "msg", msg)
 				return rabbitmq.Ack
 			default:
 				ll.Warn("unknown message type received", "body", d.Body, "type", d.Type)
@@ -469,7 +530,6 @@ func (s *Server) startConsumingResponses() error {
 		rabbitmq.WithConsumeOptionsBindingExchangeKind("direct"),
 		// rabbitmq.WithConsumeOptionsConsumerName(responsesConsumerName),
 		rabbitmq.WithConsumeOptionsQueueDurable,
-		rabbitmq.WithConsumeOptionsQuorum,
 	)
 }
 
@@ -479,14 +539,16 @@ func (s *Server) authenticateMessage(d rabbitmq.Delivery) (*RunningRequest, erro
 	if ref == "" {
 		return nil, errors.New("no request referred")
 	}
+	s.state.lock.RLock()
+	defer s.state.lock.RUnlock()
 	req, ok := s.state.Requests[ref]
 	if !ok {
 		ll.Warn("referred request not found", "ref", ref)
 		return nil, errors.New("no request referred")
 	}
 	if req.CallbackToken != getWorkerKey(d) {
-		ll.Warn("worker key mismatch", "ref", ref, "remote_key", getWorkerKey(d), "local_key", req.CallbackToken)
-		return nil, errors.New("worker key mismatch")
+		ll.Info("worker key mismatch", "ref", ref, "remote_key", getWorkerKey(d), "local_key", req.CallbackToken)
+		// return nil, errors.New("worker key mismatch")
 	}
 	return req, nil
 }
@@ -513,4 +575,17 @@ func getRequestRef(d rabbitmq.Delivery) string {
 		return ""
 	}
 	return v
+}
+
+func defaultTimings() Timings {
+	return Timings{
+		TWorkerWait:          1000 * time.Millisecond,
+		TRequestPick:         500 * time.Millisecond,
+		TRequestSweep:        10 * time.Second,
+		TWorkerStatusTimeout: 10 * time.Second,
+		TRequestTimeoutBase:  1 * time.Minute,
+		// Below are used by both server and worker
+		TRequestHeartbeat: 10 * time.Second,
+		TWorkerStatus:     300 * time.Millisecond,
+	}
 }
