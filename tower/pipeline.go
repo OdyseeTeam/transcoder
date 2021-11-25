@@ -86,6 +86,8 @@ func newPipeline(workDir string, encoder encoder.Encoder, hearbeatInterval time.
 
 func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 	var ls *storage.LightLocalStream
+	log := logging.AddLogRef(c.log, t.sdHash)
+
 	status := make(chan pipelineProgress)
 	done := make(chan struct{})
 	errc := make(chan error, 1)
@@ -103,7 +105,7 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 			tc.sendStatus(pipelineProgress{Stage: StageDownloading})
 			res, err := retriever.Retrieve(t.url, c.workDirs[dirStreams])
 			if err != nil {
-				c.log.Error("download failed", "err", err)
+				log.Error("download failed", "err", err)
 				errc <- err
 				return
 			}
@@ -117,7 +119,7 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 			tc.sendStatus(pipelineProgress{Stage: StageEncoding})
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
-				c.log.Error("encoder failed", err)
+				log.Error("encoder failed", err)
 				errc <- err
 				return
 			}
@@ -137,11 +139,11 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 			}
 			ls, err = storage.InitLocalStream(encodedPath, m)
 			if err != nil {
-				c.log.Error("could not initialize stream object", "err", err)
+				log.Error("could not initialize stream object", "err", err)
 				errc <- err
 				return
 			} else {
-				c.log.Info("transcoding done", "stream", ls)
+				log.Info("transcoding done", "stream", ls)
 			}
 		}
 

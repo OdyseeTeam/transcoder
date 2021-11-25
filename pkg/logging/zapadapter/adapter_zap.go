@@ -22,6 +22,7 @@ func NewKV(logger *zap.Logger) *kvLogger {
 	if logger == nil {
 		logger = zap.L()
 	}
+	logger = logger.WithOptions(zap.AddCallerSkip(1))
 
 	return &kvLogger{
 		logger: logger.Sugar(),

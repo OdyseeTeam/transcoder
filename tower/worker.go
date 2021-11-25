@@ -139,11 +139,12 @@ func (c *Worker) generateID() {
 }
 
 func (c *Worker) handleRequest(req MsgRequest) {
-	ll := c.log.With("url", req.URL)
+	log := logging.AddLogRef(c.log, req.SDHash).With("url", req.URL)
+
 	task := &task{url: req.URL, sdHash: req.SDHash, callbackURL: req.CallbackURL, token: req.Key}
 	pulse := time.NewTicker(c.timings[TRequestHeartbeat])
 
-	ll.Info("task received, starting", "msg", req)
+	log.Info("task received, starting", "msg", req)
 
 	tc := c.processor.Process(c.stopChan, task)
 	for {
@@ -158,15 +159,14 @@ func (c *Worker) handleRequest(req MsgRequest) {
 		case <-tc.TaskDone:
 			err := <-tc.Errc
 			if err != nil {
-				ll.Error("processor failed", "err", err)
+				log.Error("processor failed", "err", err)
 				c.Respond(req, tPipelineError, mPipelineError{Error: err.Error()})
 			}
 			task.cleanup()
 			return
 		case p := <-tc.Progress:
-			llp := ll.With("progress", p)
 			c.Respond(req, tPipelineUpdate, p)
-			llp.Debug("processor progressed")
+			log.Debug("processor progress received", "progress", p)
 		case <-pulse.C:
 			c.Respond(req, tHeartbeat, struct{}{})
 		}
@@ -257,12 +257,13 @@ func (c *Worker) startConsuming() error {
 				c.log.Warn("botched message received", "err", err)
 				return rabbitmq.NackDiscard
 			}
-			c.log.Info("message received", "msg", msg)
+			log := logging.AddLogRef(c.log, msg.SDHash)
+			log.Info("message received", "msg", msg)
 
 			c.activePipelinesLock.Lock()
 			defer c.activePipelinesLock.Unlock()
-			if _, ok := c.activePipelines[msg.Ref]; ok {
-				c.log.Info("duplicate transcoding request received", "msg", msg)
+			if _, ok := c.activePipelines[msg.SDHash]; ok {
+				log.Info("duplicate transcoding request received")
 				return rabbitmq.NackDiscard
 			}
 			c.activePipelines[msg.Ref] = struct{}{}
@@ -271,20 +272,20 @@ func (c *Worker) startConsuming() error {
 			case <-c.stopChan:
 				return rabbitmq.NackRequeue
 			case <-c.workers:
-				c.log.Debug("checked out worker")
+				log.Debug("checked out worker")
 				go func() {
 					defer func() {
 						c.activePipelinesLock.Lock()
 						defer c.activePipelinesLock.Unlock()
 						delete(c.activePipelines, msg.Ref)
 						c.workers <- struct{}{}
-						c.log.Debug("checked worker back in")
+						log.Debug("checked worker back in")
 					}()
 					c.requestHandler(msg)
 				}()
 				return rabbitmq.Ack
 			default:
-				c.log.Debug("worker pool exhausted")
+				log.Debug("worker pool exhausted")
 				return rabbitmq.NackRequeue
 			}
 		},

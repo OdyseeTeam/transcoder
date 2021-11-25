@@ -222,7 +222,7 @@ func (s *Server) InitiateRequest(request *manager.TranscodingRequest) error {
 	}
 	s.state.Requests[rr.Ref] = rr
 
-	s.log.Info("initiating request", "url", rr.URL, "sd_hash", rr.SDHash)
+	logging.AddLogRef(s.log, rr.SDHash).Info("initiating request", "url", rr.URL)
 	return s.publishRequest(rr)
 }
 
@@ -264,7 +264,7 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 	if err != nil {
 		return err
 	}
-	s.log.Debug("publishing request", "request", msg)
+	logging.AddLogRef(s.log, rr.SDHash).Debug("publishing request", "request", msg)
 	return s.publisher.Publish(
 		body,
 		[]string{requestsQueueName},
@@ -289,14 +289,15 @@ func (s *Server) startRequestsPicking(requests <-chan *manager.TranscodingReques
 			return
 		case r := <-requests:
 			if r != nil {
-				s.log.Info("picked up transcoding request", "url", r.URI)
+				log := logging.AddLogRef(s.log, r.SDHash).With("url", r.URI)
+				log.Info("picked up transcoding request")
 				if err := s.InitiateRequest(r); err != nil {
 					if errors.Is(err, ErrRequestExists) {
 						r.Reject()
 					} else {
 						r.Release()
 					}
-					s.log.Info("failed to initiate request", "url", r.URI, "err", err)
+					log.Info("failed to initiate request", "err", err)
 				}
 			}
 		}
@@ -315,11 +316,12 @@ func (s *Server) startHttpServer() error {
 			return false
 		},
 		func(ls storage.LightLocalStream) {
+			log := logging.AddLogRef(s.log, ls.SDHash)
 			s.state.lock.RLock()
 			rr, ok := s.state.Requests[ls.SDHash]
 			s.state.lock.RUnlock()
 			if !ok {
-				s.log.Error("uploader callback received but no corresponding request found", "ref", ls.SDHash)
+				log.Error("uploader callback received but no corresponding request found")
 				return
 			}
 			rr.Uploaded = true
@@ -327,14 +329,14 @@ func (s *Server) startHttpServer() error {
 			if _, err := s.videoManager.Library().AddLightLocalStream(rr.URL, rr.Channel, ls); err != nil {
 				rr.Stage = StageFailedFatally
 				rr.Error = err.Error()
-				s.log.Error("failed to add stream", "ref", ls.SDHash, "err", err)
+				log.Error("failed to add stream", "url", rr.URL, "err", err)
 				return
 			}
 			rr.Stage = StageCompleted
 			if rr.transcodingRequest != nil {
 				rr.transcodingRequest.Complete()
 			}
-			s.log.Info("upload received", "ref", ls.SDHash, "url", rr.URL)
+			log.Info("upload received", "url", rr.URL)
 		},
 	)
 	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
@@ -372,10 +374,11 @@ func (s *Server) startRequestSweep() {
 		s.state.lock.Lock()
 		defer s.state.lock.Unlock()
 		for _, rr := range s.state.Requests {
+			log := logging.AddLogRef(s.log, rr.SDHash)
 			if rr.Stage == StageDone || rr.Stage == StageCompleted || rr.Stage == StageFailedFatally || rr.Stage == StagePending {
 				continue
 			}
-			s.log.Debug(
+			log.Debug(
 				"is request timed out?",
 				"is", rr.TimedOut(s.timings[TRequestTimeoutBase]), "base", s.timings[TRequestTimeoutBase],
 				"st", rr.TsStarted, "hb", rr.TsHeartbeat, "upd", rr.TsUpdated,
@@ -386,7 +389,7 @@ func (s *Server) startRequestSweep() {
 					if rr.transcodingRequest != nil {
 						rr.transcodingRequest.Reject()
 					}
-					s.log.Info(
+					log.Info(
 						"failure number exceeded, discarding request",
 						// "url", rr.URL, "ref", ref, "worker_id", rr.WorkerID,
 						// "failures_count", rr.FailedAttempts, "max_failures", maxFailedAttempts,
@@ -394,7 +397,7 @@ func (s *Server) startRequestSweep() {
 					)
 					rr.Stage = StageFailedFatally
 				} else {
-					s.log.Info(
+					log.Info(
 						"re-publishing request",
 						// "stage", rr.Stage, "updated", rr.TsUpdated, "started", rr.TsStarted,
 						"request", rr,
@@ -475,12 +478,13 @@ func (s *Server) startConsumingWorkerStatus() error {
 func (s *Server) startConsumingResponses() error {
 	return s.consumer.StartConsuming(
 		func(d rabbitmq.Delivery) rabbitmq.Action {
-			ll := s.log.With("type", d.Type)
+			log := s.log.With("type", d.Type)
 			rr, err := s.authenticateMessage(d)
 			if err != nil {
-				ll.Info("failed to authenticate message", "err", err)
+				log.Info("failed to authenticate message", "err", err)
 				return rabbitmq.NackDiscard
 			}
+			log = logging.AddLogRef(log, rr.SDHash)
 
 			// TODO: Verify worker ID match
 			rr.WorkerID = getWorkerID(d)
@@ -497,28 +501,28 @@ func (s *Server) startConsumingResponses() error {
 				var msg mPipelineProgress
 				err := json.Unmarshal(d.Body, &msg)
 				if err != nil {
-					ll.Error("can't unmarshal received message", "err", err, "type", d.Type)
+					log.Error("can't unmarshal received message", "err", err, "type", d.Type)
 					return rabbitmq.NackDiscard
 				}
 				rr.Progress = msg.Percent
 				rr.TsUpdated = d.Timestamp
 				rr.Stage = msg.Stage
-				ll.Debug("progress received ", "msg", msg)
+				log.Debug("progress received ", "msg", msg)
 
 				return rabbitmq.Ack
 			case tPipelineError:
 				var msg mPipelineError
 				err := json.Unmarshal(d.Body, &msg)
 				if err != nil {
-					ll.Error("can't unmarshal received message", "err", err, "type", d.Type)
+					log.Error("can't unmarshal received message", "err", err)
 					return rabbitmq.NackDiscard
 				}
 				rr.Error = msg.Error
 				rr.Stage = StageFailed
-				ll.Debug("request failed", "msg", msg)
+				log.Debug("request failed", "msg", msg)
 				return rabbitmq.Ack
 			default:
-				ll.Warn("unknown message type received", "body", d.Body, "type", d.Type)
+				log.Warn("unknown message type received", "body", d.Body)
 				return rabbitmq.NackDiscard
 			}
 		},
@@ -534,20 +538,20 @@ func (s *Server) startConsumingResponses() error {
 }
 
 func (s *Server) authenticateMessage(d rabbitmq.Delivery) (*RunningRequest, error) {
-	ll := s.log.With("type", d.Type)
 	ref := getRequestRef(d)
 	if ref == "" {
 		return nil, errors.New("no request referred")
 	}
+	log := logging.AddLogRef(s.log, ref).With("type", d.Type)
 	s.state.lock.RLock()
 	defer s.state.lock.RUnlock()
 	req, ok := s.state.Requests[ref]
 	if !ok {
-		ll.Warn("referred request not found", "ref", ref)
+		log.Warn("referred request not found", "ref", ref)
 		return nil, errors.New("no request referred")
 	}
 	if req.CallbackToken != getWorkerKey(d) {
-		ll.Info("worker key mismatch", "ref", ref, "remote_key", getWorkerKey(d), "local_key", req.CallbackToken)
+		log.Info("worker key mismatch", "remote_key", getWorkerKey(d), "local_key", req.CallbackToken)
 		// return nil, errors.New("worker key mismatch")
 	}
 	return req, nil

@@ -41,3 +41,10 @@ type NoopKVLogger struct {
 func (l NoopKVLogger) With(keyvals ...interface{}) KVLogger {
 	return l
 }
+
+func AddLogRef(l KVLogger, sdHash string) KVLogger {
+	if len(sdHash) >= 8 {
+		return l.With("ref", sdHash[:8])
+	}
+	return l.With("ref?", sdHash)
+}
