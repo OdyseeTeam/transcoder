@@ -1,6 +1,7 @@
 package video
 
 import (
+	"path"
 	"time"
 
 	"github.com/lbryio/transcoder/internal/metrics"
@@ -22,12 +23,12 @@ func (u s3uploader) Work(t dispatcher.Task) error {
 
 	logger.Infow("uploading stream to S3", "sd_hash", v.SDHash, "size", v.GetSize())
 
-	lv, err := u.lib.local.Open(v.Path)
+	ls, err := storage.OpenLocalStream(path.Join(u.lib.local.Path(), v.Path))
 	if err != nil {
 		return err
 	}
 
-	rs, err := u.lib.remote.Put(lv)
+	rs, err := u.lib.remote.Put(ls)
 	if err != nil {
 		if err != storage.ErrStreamExists {
 			return err

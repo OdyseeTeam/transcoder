@@ -40,8 +40,8 @@ func (s *DummyStorage) GetFragment(sdHash, name string) (StreamFragment, error) 
 	return nil, nil
 }
 
-func (s *DummyStorage) Put(lstream *LocalStream) (*RemoteStream, error) {
-	s.Ops = append(s.Ops, StorageOp{OpGetFragment, lstream.sdHash})
+func (s *DummyStorage) Put(ls *LocalStream) (*RemoteStream, error) {
+	s.Ops = append(s.Ops, StorageOp{OpGetFragment, ls.SDHash()})
 	return &RemoteStream{url: "http://dummy/url"}, nil
 }
 
@@ -50,11 +50,11 @@ func PopulateHLSPlaylist(t *testing.T, dstPath, sdHash string) {
 	err := os.MkdirAll(path.Join(dstPath, sdHash), os.ModePerm)
 	require.NoError(t, err)
 
-	srcPath, _ := filepath.Abs("./testdata")
-	storage := Local(srcPath)
-	ls, err := storage.Open("dummy-stream")
+	srcPath, err := filepath.Abs("./testdata")
 	require.NoError(t, err)
-	err = ls.Dive(
+	dummyls, err := OpenLocalStream(path.Join(srcPath, "dummy-stream"), Manifest{Checksum: SkipChecksum})
+	require.NoError(t, err)
+	err = dummyls.WalkPlaylists(
 		func(rootPath ...string) ([]byte, error) {
 			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
 				return ioutil.ReadFile(path.Join(rootPath...))

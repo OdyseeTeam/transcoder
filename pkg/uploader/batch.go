@@ -10,7 +10,7 @@ import (
 )
 
 type BatchError struct {
-	Stream storage.LightLocalStream
+	Stream storage.LocalStream
 	Err    error
 }
 
@@ -21,7 +21,7 @@ type BatchUploader struct {
 }
 
 type batchItem struct {
-	ls       *storage.LightLocalStream
+	ls       *storage.LocalStream
 	progress chan float32
 	errc     chan error
 	done     chan struct{}
@@ -44,7 +44,7 @@ func StartBatchUploader(u *Uploader, concurrency int) BatchUploader {
 					ctx := context.Background()
 					ls := item.ls
 					if ls.Manifest.Tower == nil {
-						item.errc <- fmt.Errorf("no tower credentials for stream %v", ls.SDHash)
+						item.errc <- fmt.Errorf("no tower credentials for stream %v", ls.SDHash())
 					} else {
 						item.progress <- 0.0
 						b.log.Info("preparing to upload batch item", "ls", ls)
@@ -67,14 +67,14 @@ func StartBatchUploader(u *Uploader, concurrency int) BatchUploader {
 	return b
 }
 
-func (b BatchUploader) Upload(ls *storage.LightLocalStream) (<-chan float32, <-chan struct{}, <-chan error) {
+func (b BatchUploader) Upload(ls *storage.LocalStream) (<-chan float32, <-chan struct{}, <-chan error) {
 	item := batchItem{ls: ls, progress: make(chan float32, 1000), errc: make(chan error, 1), done: make(chan struct{})}
 	b.inlet <- item
 	return item.progress, item.done, item.errc
 }
 
 func (b BatchUploader) UploadDir(path string) error {
-	streams := []*storage.LightLocalStream{}
+	streams := []*storage.LocalStream{}
 	err := godirwalk.Walk(path, &godirwalk.Options{
 		Callback: func(fullPath string, de *godirwalk.Dirent) error {
 			if !de.IsDir() || fullPath == path || !storage.SDHashRe.Match([]byte(de.Name())) {
@@ -89,7 +89,7 @@ func (b BatchUploader) UploadDir(path string) error {
 				return err
 			}
 			if ls.Manifest.Tower == nil {
-				return fmt.Errorf("no tower credentials for stream %v", ls.SDHash)
+				return fmt.Errorf("no tower credentials for stream %v", ls.SDHash())
 			}
 			streams = append(streams, ls)
 			return nil

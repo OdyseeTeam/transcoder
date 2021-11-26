@@ -264,7 +264,7 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 	if err != nil {
 		return err
 	}
-	logging.AddLogRef(s.log, rr.SDHash).Debug("publishing request", "request", msg)
+	logging.AddLogRef(s.log, rr.SDHash).Debug("publishing request")
 	return s.publisher.Publish(
 		body,
 		[]string{requestsQueueName},
@@ -277,6 +277,7 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 }
 
 func (s *Server) startRequestsPicking(requests <-chan *manager.TranscodingRequest) {
+	pickInterval := time.NewTicker(s.timings[TRequestPick])
 	for {
 		for s.registry.available == 0 {
 			s.log.Debug("no workers available, waiting")
@@ -287,7 +288,8 @@ func (s *Server) startRequestsPicking(requests <-chan *manager.TranscodingReques
 		case <-s.stopChan:
 			s.log.Info("stopped picking up requests")
 			return
-		case r := <-requests:
+		case <-pickInterval.C:
+			r := <-requests
 			if r != nil {
 				log := logging.AddLogRef(s.log, r.SDHash).With("url", r.URI)
 				log.Info("picked up transcoding request")
@@ -315,10 +317,10 @@ func (s *Server) startHttpServer() error {
 			}
 			return false
 		},
-		func(ls storage.LightLocalStream) {
-			log := logging.AddLogRef(s.log, ls.SDHash)
+		func(ls storage.LocalStream) {
+			log := logging.AddLogRef(s.log, ls.SDHash())
 			s.state.lock.RLock()
-			rr, ok := s.state.Requests[ls.SDHash]
+			rr, ok := s.state.Requests[ls.SDHash()]
 			s.state.lock.RUnlock()
 			if !ok {
 				log.Error("uploader callback received but no corresponding request found")
@@ -326,7 +328,9 @@ func (s *Server) startHttpServer() error {
 			}
 			rr.Uploaded = true
 
-			if _, err := s.videoManager.Library().AddLightLocalStream(rr.URL, rr.Channel, ls); err != nil {
+			ls.Manifest.Tower = nil
+			ls.WriteManifest()
+			if _, err := s.videoManager.Library().AddLocalStream(rr.URL, rr.Channel, ls); err != nil {
 				rr.Stage = StageFailedFatally
 				rr.Error = err.Error()
 				log.Error("failed to add stream", "url", rr.URL, "err", err)
@@ -437,7 +441,7 @@ func (s *Server) startWatchingWorkerStatus() {
 				s.registry.available += c.available
 			}
 			s.registry.Unlock()
-			// s.log.Debug("registry updated", "capacity", s.registry.capacity, "available", s.registry.available, "workers", len(s.registry.workers))
+			s.log.Debug("registry updated", "capacity", s.registry.capacity, "available", s.registry.available, "workers", len(s.registry.workers))
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}

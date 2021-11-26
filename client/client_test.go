@@ -126,11 +126,10 @@ Waiting:
 		{"stream_1.m3u8", 0},
 		{"stream_2.m3u8", 0},
 		{"stream_3.m3u8", 0},
-		{"seg_0_000000.ts", 2492128},
-		{"seg_1_000000.ts", 850324},
-		{"seg_2_000000.ts", 311140},
-		{"seg_3_000000.ts", 187060},
-		{"thumbnails10k.png", 11111},
+		{"seg_0_000000.ts", 2800000},
+		{"seg_1_000000.ts", 1800000},
+		{"seg_2_000000.ts", 600000},
+		{"seg_3_000000.ts", 240000},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -142,7 +141,7 @@ Waiting:
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.01)
+				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.1)
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
@@ -285,10 +284,9 @@ func (s *clientSuite) populateHLSPlaylist(dstPath, sdHash string) {
 	s.Require().NoError(err)
 
 	srcPath, _ := filepath.Abs("./testdata")
-	storage := storage.Local(srcPath)
-	ls, err := storage.Open("dummystream")
+	ls, err := storage.OpenLocalStream(path.Join(srcPath, "dummystream"))
 	s.Require().NoError(err)
-	err = ls.Dive(
+	err = ls.WalkPlaylists(
 		func(rootPath ...string) ([]byte, error) {
 			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
 				return ioutil.ReadFile(path.Join(rootPath...))

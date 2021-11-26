@@ -2,7 +2,6 @@ package video
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
@@ -10,10 +9,21 @@ import (
 	"github.com/lbryio/transcoder/storage"
 )
 
+type RemoteDriver interface {
+	Put(stream *storage.LocalStream) (*storage.RemoteStream, error)
+	Delete(sdHash string) error
+	GetFragment(sdHash, name string) (storage.StreamFragment, error)
+}
+
+type LocalDriver interface {
+	Delete(sdHash string) error
+	Path() string
+}
+
 type Config struct {
 	db     *db.DB
-	local  storage.LocalDriver
-	remote storage.RemoteDriver
+	local  LocalDriver
+	remote RemoteDriver
 
 	maxLocalSize  uint64
 	maxRemoteSize uint64
@@ -30,13 +40,13 @@ func (c *Config) DB(db *db.DB) *Config {
 }
 
 // LocalStorage is a local storage driver for accessing videos on disk.
-func (c *Config) LocalStorage(s storage.LocalDriver) *Config {
+func (c *Config) LocalStorage(s LocalDriver) *Config {
 	c.local = s
 	return c
 }
 
 // LocalStorage is a remote (S3) storage driver for accessing remote videos.
-func (c *Config) RemoteStorage(s storage.RemoteDriver) *Config {
+func (c *Config) RemoteStorage(s RemoteDriver) *Config {
 	c.remote = s
 	return c
 }
@@ -65,31 +75,26 @@ func NewLibrary(cfg *Config) *Library {
 	return l
 }
 
-func (q Library) New(sdHash string) *storage.LocalStream {
-	return q.local.New(sdHash)
-}
-
 // Add records data about video into database.
 func (q Library) Add(params AddParams) (*Video, error) {
 	return q.queries.Add(context.Background(), params)
 }
 
-// AddLightLocalStream moves the stream folder resiging elsewhere into videos folder
+// AddLocalStream moves the stream folder resiging elsewhere into videos folder
 // and saves it into database.
-func (q Library) AddLightLocalStream(url, channel string, ls storage.LightLocalStream) (*Video, error) {
-	ns := q.local.New(ls.SDHash)
-	if err := os.Rename(ls.Path, ns.FullPath()); err != nil {
+func (q Library) AddLocalStream(url, channel string, ls storage.LocalStream) (*Video, error) {
+	if err := ls.Move(q.local.Path()); err != nil {
 		return nil, err
 	}
 
 	p := AddParams{
 		URL:      url,
-		SDHash:   ls.SDHash,
+		SDHash:   ls.SDHash(),
 		Type:     formats.TypeHLS,
 		Channel:  channel,
-		Path:     ns.LastPath(),
-		Size:     ls.Size,
-		Checksum: ls.ChecksumString(),
+		Path:     ls.BasePath(),
+		Size:     ls.Size(),
+		Checksum: ls.Checksum(),
 	}
 	return q.queries.Add(context.Background(), p)
 }

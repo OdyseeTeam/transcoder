@@ -64,7 +64,7 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 		activePipelinesLock: sync.Mutex{},
 		bgTasks:             &sync.WaitGroup{},
 	}
-	p, err := newPipeline(config.workDir, enc, config.timings[TRequestHeartbeat], worker.log)
+	p, err := newPipeline(config.workDir, enc, worker.log)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +152,6 @@ func (c *Worker) handleRequest(req MsgRequest) {
 		case <-c.stopChan:
 			task.cleanup()
 			return
-		// case err := <-tc.Errc:
-		// 	ll.Error("processor failed", "err", err)
-		// 	task.cleanup()
-		// 	return
 		case <-tc.TaskDone:
 			err := <-tc.Errc
 			if err != nil {
@@ -174,7 +170,8 @@ func (c *Worker) handleRequest(req MsgRequest) {
 }
 
 func (c *Worker) StartWorkers() {
-	pulse := time.NewTicker(500 * time.Millisecond)
+	// Interval for unsubscribing from the queue when no workers available
+	pulse := time.NewTicker(c.timings[TWorkerStatus] / 2)
 
 	go func() {
 		running := false

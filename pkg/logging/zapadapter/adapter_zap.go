@@ -90,7 +90,11 @@ func (l *kvLogger) ErrorContext(_ context.Context, msg string, keyvals ...interf
 
 // ...
 func (l *kvLogger) With(keyvals ...interface{}) logging.KVLogger {
-	return NewKV(l.logger.With(keyvals...).Desugar())
+	newLogger := l.logger.With(keyvals...)
+	return &kvLogger{
+		logger: newLogger,
+		core:   newLogger.Desugar().Core(),
+	}
 }
 
 // LevelEnabled implements the Logur LevelEnabler interface.

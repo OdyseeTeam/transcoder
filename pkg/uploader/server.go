@@ -1,7 +1,6 @@
 package uploader
 
 import (
-	"encoding/hex"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -17,11 +16,11 @@ import (
 type fileHandler struct {
 	uploadPath   string
 	authCallback func(*fasthttp.RequestCtx) bool
-	doneCallback func(storage.LightLocalStream)
+	doneCallback func(storage.LocalStream)
 }
 
 type AuthCallback func(*fasthttp.RequestCtx) bool
-type DoneCallback func(storage.LightLocalStream)
+type DoneCallback func(storage.LocalStream)
 
 const (
 	fileField     = "packaged_stream_file"
@@ -51,9 +50,8 @@ func AttachFileHandler(r *router.Router, prefix, uploadPath string, acb AuthCall
 // Handle will receive and unpack a tarred stream file, validating its checksum.
 func (h *fileHandler) Handle(ctx *fasthttp.RequestCtx) {
 	var (
-		checksum        []byte
-		checksumEncoded string
-		incomingFile    multipart.File
+		checksum     string
+		incomingFile multipart.File
 	)
 
 	sdHash := ctx.UserValue("sd_hash").(string)
@@ -91,9 +89,8 @@ func (h *fileHandler) Handle(ctx *fasthttp.RequestCtx) {
 		ctx.SetBodyString(fmt.Sprintf("no checksum supplied in %v", checksumField))
 		return
 	} else {
-		checksumEncoded = checksums[0]
+		checksum = checksums[0]
 	}
-	checksum, err = hex.DecodeString(checksumEncoded)
 	if err != nil {
 		ctx.SetStatusCode(http.StatusBadRequest)
 		ctx.SetBodyString(fmt.Sprintf("erroneous checksum in %v", checksumField))
@@ -124,11 +121,11 @@ func (h *fileHandler) Handle(ctx *fasthttp.RequestCtx) {
 		os.RemoveAll(dstPath)
 		ctx.SetStatusCode(http.StatusBadRequest)
 		ctx.SetBodyString(fmt.Sprintf(
-			"provided checksum %s doesn't match calculated checksum %s", hex.EncodeToString(checksum), ls.ChecksumString()))
+			"provided checksum %s doesn't match calculated checksum %s", checksum, ls.Checksum()))
 		return
 	}
 
-	ls.SDHash = sdHash
+	ls.Manifest.SDHash = sdHash
 	h.doneCallback(*ls)
 	ctx.SetStatusCode(http.StatusAccepted)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/timer"
+	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/pkg/errors"
@@ -60,15 +61,15 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 
 	tmr := timer.Start()
 
-	localStream := lib.New(r.SDHash)
+	streamPath := path.Join(lib.Path(), r.SDHash)
 	cleanupLocalStream := func() {
-		err := os.RemoveAll(localStream.FullPath())
+		err := os.RemoveAll(streamPath)
 		if err != nil {
 			ll.Warn("cleaning up incomplete local stream failed", "err", err)
 		}
 	}
 
-	res, err := w.encoder.Encode(streamFH.Name(), localStream.FullPath())
+	res, err := w.encoder.Encode(streamFH.Name(), streamPath)
 	if err != nil {
 		r.Reject()
 		TranscodingErrors.WithLabelValues("encode").Inc()
@@ -89,7 +90,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	TranscodedSeconds.Add(md)
 	ll.Infow(
 		"encoding complete",
-		"out", localStream.FullPath(),
+		"out", streamPath,
 		"seconds_spent", tmr.String(),
 		"duration", res.Meta.Format.Duration,
 		"bitrate", res.Meta.Format.GetBitRate(),
@@ -97,11 +98,11 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	)
 
 	time.Sleep(2 * time.Second)
-	err = localStream.ReadMeta()
+	ls, err := storage.OpenLocalStream(streamPath)
 	if err != nil {
 		TranscodingErrors.WithLabelValues("encode").Inc()
 		cleanupLocalStream()
-		return errors.Wrap(err, "error filling stream metadata")
+		return errors.Wrap(err, "error opening stream")
 	}
 
 	_, err = lib.Add(video.AddParams{
@@ -109,9 +110,9 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 		SDHash:   r.SDHash,
 		Type:     formats.TypeHLS,
 		Channel:  r.ChannelURI,
-		Path:     localStream.LastPath(),
-		Size:     localStream.Size(),
-		Checksum: localStream.Checksum(),
+		Path:     ls.BasePath(),
+		Size:     ls.Size(),
+		Checksum: ls.Checksum(),
 	})
 
 	if err != nil {
@@ -122,7 +123,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 
 	r.Complete()
 	TranscodedCount.Inc()
-	TranscodedSizeMB.Add(float64(localStream.Size()) / 1024 / 1024)
+	TranscodedSizeMB.Add(float64(ls.Size()) / 1024 / 1024)
 
 	err = os.Remove(streamFH.Name())
 	if err != nil {

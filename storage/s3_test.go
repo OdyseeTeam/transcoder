@@ -1,25 +1,23 @@
 package storage
 
 import (
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/draganm/miniotest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/suite"
 )
 
 type s3suite struct {
 	suite.Suite
-	cleanup func() error
-	addr    string
-	local   LocalStorage
-	sdHash  string
+	cleanup     func() error
+	addr        string
+	sdHash      string
+	streamsPath string
 }
 
 func TestS3suite(t *testing.T) {
@@ -36,10 +34,9 @@ func (s *s3suite) SetupSuite() {
 }
 
 func (s *s3suite) SetupTest() {
-	s.local = Local(s.T().TempDir())
-	s.sdHash = randomString(96)
-	s.populateHLSPlaylist()
-	PopulateHLSPlaylist(s.T(), s.local.path, s.sdHash)
+	s.streamsPath = s.T().TempDir()
+	s.sdHash = randomdata.Alphanumeric(96)
+	PopulateHLSPlaylist(s.T(), s.streamsPath, s.sdHash)
 }
 
 func (s *s3suite) TestPutDelete() {
@@ -53,22 +50,28 @@ func (s *s3suite) TestPutDelete() {
 	)
 	s.Require().NoError(err)
 
-	stream, err := s.local.Open(s.sdHash)
+	ls, err := OpenLocalStream(path.Join(s.streamsPath, s.sdHash), Manifest{SDHash: s.sdHash})
+	s.Require().NoError(err)
+	err = ls.FillManifest()
 	s.Require().NoError(err)
 
-	rstream, err := s3drv.Put(stream)
+	rs, err := s3drv.Put(ls)
 	s.Require().NoError(err)
-	s.Equal(s.sdHash, rstream.URL())
+	s.Equal(ls.SDHash(), rs.URL())
 
-	sf, err := s3drv.GetFragment(s.sdHash, MasterPlaylistName)
+	sf, err := s3drv.GetFragment(ls.SDHash(), MasterPlaylistName)
 	s.Require().NoError(err)
 	s.Require().NotNil(sf)
 
-	rstream2, err := s3drv.Put(stream)
-	s.Equal(rstream2.URL(), rstream.URL())
+	mf, err := s3drv.GetFragment(ls.SDHash(), ManifestName)
+	s.Require().NoError(err)
+	s.Require().NotNil(mf)
+
+	rs2, err := s3drv.Put(ls)
+	s.Equal(rs2.URL(), rs.URL())
 	s.Equal(err, ErrStreamExists)
 
-	err = s3drv.Delete(s.sdHash)
+	err = s3drv.Delete(ls.SDHash())
 	s.Require().NoError(err)
 
 	deletedPieces := []string{"", MasterPlaylistName, "stream_0.m3u8", "stream_1.m3u8", "stream_2.m3u8", "stream_3.m3u8"}
@@ -82,48 +85,4 @@ func (s *s3suite) TestPutDelete() {
 
 func (s *s3suite) TearDownSuite() {
 	s.NoError(s.cleanup())
-	s.NoError(os.RemoveAll(s.local.path))
-}
-
-func (s *s3suite) populateHLSPlaylist() {
-	stream := s.local.New(s.sdHash)
-	err := os.MkdirAll(stream.FullPath(), os.ModePerm)
-	s.Require().NoError(err)
-
-	incomingStorage := Local(".")
-
-	ls, err := incomingStorage.Open(path.Join("testdata", "dummy-stream"))
-	s.Require().NoError(err)
-	err = ls.Dive(
-		func(rootPath ...string) ([]byte, error) {
-			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
-				d, err := ioutil.ReadFile(path.Join(rootPath...))
-				if err != nil {
-					return nil, errors.Wrap(err, "error reading path")
-				}
-				return d, nil
-			}
-			return make([]byte, 10000), nil
-		},
-		func(data []byte, name string) error {
-
-			err := ioutil.WriteFile(path.Join(s.local.path, s.sdHash, name), data, os.ModePerm)
-			if err != nil {
-				return errors.Wrap(err, "error writing path")
-			}
-			return nil
-
-		},
-	)
-	s.Require().NoError(err)
-}
-
-func randomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
-	}
-	return string(b)
 }

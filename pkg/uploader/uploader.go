@@ -3,7 +3,6 @@ package uploader
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -119,7 +118,7 @@ func (u *Uploader) Upload(ctx context.Context, dir, url, token string) error {
 	return nil
 }
 
-func buildUploadRequest(ctx context.Context, tarPath, targetURL, token string, checksum []byte) (*http.Request, error) {
+func buildUploadRequest(ctx context.Context, tarPath, targetURL, token string, checksum string) (*http.Request, error) {
 	r, err := os.Open(tarPath)
 	if err != nil {
 		return nil, err
@@ -143,7 +142,7 @@ func buildUploadRequest(ctx context.Context, tarPath, targetURL, token string, c
 		return nil, err
 	}
 
-	cfw.Write([]byte(hex.EncodeToString(checksum)))
+	cfw.Write([]byte(checksum))
 
 	err = writer.Close()
 	if err != nil {

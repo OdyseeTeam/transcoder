@@ -34,7 +34,7 @@ func TestTowerSuite(t *testing.T) {
 // 	srv.Stop()
 // }
 
-func (s *towerSuite) TestHeartbeats() {
+func (s *towerSuite) TestWorkerStatus() {
 	// messagesToSend := 50
 	workersNum := 10
 
@@ -80,13 +80,13 @@ func (s *towerSuite) TestHeartbeats() {
 		w.Stop()
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	s.Equal(0, srv.registry.capacity)
 	s.Equal(0, srv.registry.available)
 }
 
 func (s *towerSuite) TestQueueEagerness() {
-	requestsToSend := 200
+	requestsToSend := 100
 	workersNum := 3
 	poolSize := 5
 
@@ -97,7 +97,7 @@ func (s *towerSuite) TestQueueEagerness() {
 				// A combination of very fast workers state update and slightly longer (but not too long)
 				// request pick interval is needed here, much shorter than in actual production use.
 				TWorkerStatus: 50 * time.Millisecond,
-				TRequestPick:  250 * time.Millisecond,
+				TRequestPick:  100 * time.Millisecond,
 			}).
 			DevMode(),
 	)
@@ -131,7 +131,7 @@ func (s *towerSuite) TestQueueEagerness() {
 
 	time.Sleep(5 * time.Second)
 
-	s.Equal(15, srv.registry.capacity)
+	s.Equal(workersNum*poolSize, srv.registry.capacity)
 	s.Equal(0, srv.registry.available)
 	s.GreaterOrEqual(len(requestsChan), requestsToSend-workersNum*poolSize-10)
 }

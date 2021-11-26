@@ -64,7 +64,7 @@ func (s *DispatcherSuite) TestDispatcher() {
 	results := []*Result{}
 
 	for range [500]bool{} {
-		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.SillyName(), SDHash: randomdata.Alphanumeric(64)})
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.Alphanumeric(25), SDHash: randomdata.Alphanumeric(96)})
 		results = append(results, r)
 	}
 
@@ -89,7 +89,7 @@ func (s *DispatcherSuite) TestBlockingDispatch() {
 	results := []*Result{}
 
 	for range [20]bool{} {
-		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.SillyName(), SDHash: randomdata.Alphanumeric(64)})
+		r := d.Dispatch(struct{ URL, SDHash string }{URL: randomdata.Alphanumeric(25), SDHash: randomdata.Alphanumeric(96)})
 		results = append(results, r)
 	}
 

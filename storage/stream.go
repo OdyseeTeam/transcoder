@@ -27,28 +27,18 @@ const (
 	ManifestName        = ".manifest"
 	PlaylistContentType = "application/x-mpegurl"
 	FragmentContentType = "video/mp2t"
+
+	SkipChecksum = "SkipChecksumForThisStream"
 )
 
 var SDHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/`)
 
 type RemoteStream struct {
-	url      string
-	checksum string
-	size     int64
+	url string
 }
 
 type LocalStream struct {
-	rootPath string
-	sdHash   string
-	size     int64
-	checksum string
-}
-
-type LightLocalStream struct {
 	Path     string
-	SDHash   string
-	Size     int64
-	Checksum []byte
 	Manifest *Manifest
 }
 
@@ -57,10 +47,11 @@ type TowerStreamCredentials struct {
 }
 
 type Manifest struct {
-	URL      string
-	SDHash   string
-	Size     int64  `yaml:",omitempty"`
-	Checksum string `yaml:",omitempty"`
+	URL        string
+	ChannelURL string `yaml:",omitempty"`
+	SDHash     string
+	Size       int64  `yaml:",omitempty"`
+	Checksum   string `yaml:",omitempty"`
 
 	Formats []formats.Format        `yaml:",omitempty,flow"`
 	Tower   *TowerStreamCredentials `yaml:",omitempty,flow"`
@@ -75,151 +66,92 @@ func GetHash() hash.Hash {
 	return sha512.New512_224()
 }
 
-func InitLocalStream(path string, m *Manifest) (*LightLocalStream, error) {
-	s, err := OpenLocalStream(path)
-	if err != nil {
-		return nil, err
+func OpenLocalStream(dir string, manifest ...Manifest) (*LocalStream, error) {
+	s := LocalStream{Path: dir}
+	if len(manifest) > 0 {
+		s.Manifest = &manifest[0]
+	} else if _, err := os.Stat(path.Join(dir, ManifestName)); !os.IsNotExist(err) {
+		s.ReadManifest()
 	}
-	err = s.WriteManifest(m)
-	if err != nil {
-		return nil, err
-	}
-	s.SDHash = m.SDHash
-	s.Manifest = m
-	return s, nil
+
+	return &s, nil
 }
 
-func OpenLocalStream(path string) (*LightLocalStream, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	} else if !info.IsDir() {
-		return nil, fmt.Errorf("%v is not a directory", path)
-	}
-	return &LightLocalStream{Path: path}, nil
-}
-
-func (s LocalStream) FullPath() string {
-	return path.Join(s.rootPath, s.sdHash)
-}
-
-func (s LocalStream) LastPath() string {
-	return s.sdHash
-}
-
-func (s LocalStream) Checksum() string {
-	return s.checksum
-}
-
-func (s LocalStream) Size() int64 {
-	return s.size
-}
-
-func (s *LocalStream) ReadMeta() error {
+// FillManifest needs to be created for newly created (transcoded) streams.
+func (s *LocalStream) FillManifest() error {
 	var err error
-	s.checksum, s.size, err = s.calculateChecksum()
-	return err
-}
-
-func (s LocalStream) calculateChecksum() (string, int64, error) {
-	var size int64
-
-	hash := GetHash()
-	err := s.Dive(
-		readFile,
-		func(data []byte, name string) error {
-			r := bytes.NewReader(data)
-			n, err := io.Copy(hash, r)
-			if err != nil {
-				return err
-			}
-			size += n
-			return nil
-		},
-	)
-	if err != nil {
-		return "", size, err
+	if s.Manifest == nil {
+		s.Manifest = &Manifest{}
 	}
-	return hex.EncodeToString(hash.Sum(nil)), size, nil
-}
-
-// func (s LocalStream) Validate() error {
-// 	if cs != s.checksum {
-// 		return fmt.Errorf("checksum mismatch: %v != %v", s.checksum, cs)
-// 	}
-// 	return nil
-// }
-
-// Dive processes Local HLS stream, calling `loader` to load and `processor`
-// for each master/child playlists and all the files they reference.
-// `processor` with filename as second argument.
-func (s LocalStream) Dive(loader StreamFileLoader, processor StreamFileProcessor) error {
-	doFile := func(path ...string) (io.Reader, error) {
-		data, err := loader(path...)
+	m := s.Manifest
+	if m.Checksum == "" {
+		m.Checksum, err = s.getChecksum()
 		if err != nil {
-			return nil, err
+			return errors.Wrap(err, "cannot calculate checksum")
 		}
-
-		err = processor(data, path[len(path)-1])
-		if err != nil {
-			return nil, errors.Wrapf(err, `error processing stream item "%v"`, path[len(path)-1])
-		}
-		return bytes.NewReader(data), err
 	}
-
-	data, err := doFile(s.FullPath(), MasterPlaylistName)
+	if m.Size == 0 {
+		m.Size, err = s.getSize()
+		if err != nil {
+			return errors.Wrap(err, "cannot calculate size")
+		}
+	}
+	err = s.WriteManifest()
 	if err != nil {
 		return err
-	}
-
-	pl, _, err := m3u8.DecodeFrom(data, true)
-	if err != nil {
-		return err
-	}
-
-	masterpl := pl.(*m3u8.MasterPlaylist)
-	for _, plv := range masterpl.Variants {
-		data, err := doFile(s.FullPath(), plv.URI)
-		if err != nil {
-			return err
-		}
-
-		p, _, err := m3u8.DecodeFrom(data, true)
-		if err != nil {
-			return err
-		}
-		mediapl := p.(*m3u8.MediaPlaylist)
-
-		for _, seg := range mediapl.Segments {
-			if seg == nil {
-				continue
-			}
-			_, err := doFile(s.FullPath(), seg.URI)
-			if err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
 
-func readFile(rootPath ...string) ([]byte, error) {
-	return ioutil.ReadFile(path.Join(rootPath...))
+// func OpenLocalStream(path string) (*LocalStream, error) {
+// 	info, err := os.Stat(path)
+// 	if err != nil {
+// 		return nil, err
+// 	} else if !info.IsDir() {
+// 		return nil, fmt.Errorf("%v is not a directory", path)
+// 	}
+// 	return &LocalStream{Path: path}, nil
+// }
+
+func (s *LocalStream) Checksum() string {
+	if s.Manifest == nil {
+		return ""
+	}
+	return s.Manifest.Checksum
 }
 
-func (s RemoteStream) URL() string {
-	return s.url
+func (s *LocalStream) getChecksum() (string, error) {
+	hash := GetHash()
+	err := s.WalkPlaylists(
+		readFile,
+		func(data []byte, name string) error {
+			r := bytes.NewReader(data)
+			_, err := io.Copy(hash, r)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func (s *LightLocalStream) ChecksumString() string {
-	return hex.EncodeToString(s.Checksum)
+func (s *LocalStream) getSize() (int64, error) {
+	var size int64
+	err := s.Walk(func(fi fs.FileInfo, fullPath, name string) error {
+		if name == ManifestName {
+			return nil
+		}
+		size += fi.Size()
+		return nil
+	})
+	return size, err
 }
 
-func (s *LightLocalStream) ChecksumValid(checksum []byte) bool {
-	return bytes.Equal(checksum, s.Checksum)
-}
-
-func (s *LightLocalStream) Walk(walker StreamWalker) error {
+func (s *LocalStream) Walk(walker StreamWalker) error {
 	return godirwalk.Walk(s.Path, &godirwalk.Options{
 		Callback: func(fullPath string, de *godirwalk.Dirent) error {
 			if de.IsDir() {
@@ -237,15 +169,96 @@ func (s *LightLocalStream) Walk(walker StreamWalker) error {
 	})
 }
 
-func (s *LightLocalStream) WriteManifest(m *Manifest) error {
-	d, err := yaml.Marshal(m)
+// WalkPlaylists processes Local HLS stream, calling `loader` to load and `processor`
+// for each master/child playlists and all the files they reference.
+// `processor` with filename as second argument.
+func (s *LocalStream) WalkPlaylists(loader StreamFileLoader, processor StreamFileProcessor) error {
+	doFile := func(path ...string) (io.Reader, error) {
+		data, err := loader(path...)
+		if err != nil {
+			return nil, err
+		}
+
+		err = processor(data, path[len(path)-1])
+		if err != nil {
+			return nil, errors.Wrapf(err, `error processing stream item "%v"`, path[len(path)-1])
+		}
+		return bytes.NewReader(data), err
+	}
+
+	data, err := doFile(s.Path, MasterPlaylistName)
+	if err != nil {
+		return err
+	}
+
+	pl, _, err := m3u8.DecodeFrom(data, true)
+	if err != nil {
+		return err
+	}
+
+	masterpl := pl.(*m3u8.MasterPlaylist)
+	for _, plv := range masterpl.Variants {
+		data, err := doFile(s.Path, plv.URI)
+		if err != nil {
+			return err
+		}
+
+		p, _, err := m3u8.DecodeFrom(data, true)
+		if err != nil {
+			return err
+		}
+		mediapl := p.(*m3u8.MediaPlaylist)
+
+		for _, seg := range mediapl.Segments {
+			if seg == nil {
+				continue
+			}
+			_, err := doFile(s.Path, seg.URI)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Move just renames the stream directory, useful for adding to the library.
+// Does not support cross-volume action yet.
+func (s *LocalStream) Move(newDir string) error {
+	return os.Rename(s.Path, path.Join(newDir, s.BasePath()))
+}
+
+func (s *LocalStream) BasePath() string {
+	return path.Base(s.Path)
+}
+
+func (s *LocalStream) SDHash() string {
+	if s.Manifest == nil {
+		return ""
+	}
+	return s.Manifest.SDHash
+}
+
+func (s *LocalStream) Size() int64 {
+	if s.Manifest == nil {
+		return 0
+	}
+	return s.Manifest.Size
+}
+
+func (s *LocalStream) ChecksumValid(checksum string) bool {
+	return checksum == s.Checksum()
+}
+
+func (s *LocalStream) WriteManifest() error {
+	d, err := yaml.Marshal(s.Manifest)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path.Join(s.Path, ManifestName), d, os.ModePerm)
 }
 
-func (s *LightLocalStream) ReadManifest() error {
+func (s *LocalStream) ReadManifest() error {
 	m := &Manifest{}
 	d, err := os.ReadFile(path.Join(s.Path, ManifestName))
 	if err != nil {
@@ -257,4 +270,12 @@ func (s *LightLocalStream) ReadManifest() error {
 	}
 	s.Manifest = m
 	return nil
+}
+
+func (s RemoteStream) URL() string {
+	return s.url
+}
+
+func readFile(rootPath ...string) ([]byte, error) {
+	return ioutil.ReadFile(path.Join(rootPath...))
 }

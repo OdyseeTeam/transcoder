@@ -48,7 +48,7 @@ func (l *vlib) Path() string {
 	return ""
 }
 
-func (l *vlib) AddLightLocalStream(_, _ string, _ storage.LightLocalStream) (*video.Video, error) {
+func (l *vlib) AddLocalStream(_, _ string, _ storage.LocalStream) (*video.Video, error) {
 	return nil, nil
 }
 

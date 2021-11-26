@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"time"
 
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -34,12 +33,11 @@ const (
 )
 
 type pipeline struct {
-	workDir          string
-	hearbeatInterval time.Duration
-	workDirs         map[string]string
-	encoder          encoder.Encoder
-	batchUploader    uploader.BatchUploader
-	log              logging.KVLogger
+	workDir       string
+	workDirs      map[string]string
+	encoder       encoder.Encoder
+	batchUploader uploader.BatchUploader
+	log           logging.KVLogger
 }
 
 type task struct {
@@ -60,12 +58,11 @@ type pipelineProgress struct {
 	Percent float32      `json:"progress"`
 }
 
-func newPipeline(workDir string, encoder encoder.Encoder, hearbeatInterval time.Duration, logger logging.KVLogger) (*pipeline, error) {
+func newPipeline(workDir string, encoder encoder.Encoder, logger logging.KVLogger) (*pipeline, error) {
 	p := pipeline{
-		workDir:          workDir,
-		hearbeatInterval: hearbeatInterval,
-		encoder:          encoder,
-		log:              logger,
+		workDir: workDir,
+		encoder: encoder,
+		log:     logger,
 	}
 
 	p.workDirs = map[string]string{
@@ -85,7 +82,7 @@ func newPipeline(workDir string, encoder encoder.Encoder, hearbeatInterval time.
 }
 
 func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
-	var ls *storage.LightLocalStream
+	var ls *storage.LocalStream
 	log := logging.AddLogRef(c.log, t.sdHash)
 
 	status := make(chan pipelineProgress)
@@ -99,6 +96,7 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 	}
 
 	go func() {
+		defer close(tc.Errc)
 		defer close(tc.TaskDone)
 		var origFile, encodedPath string
 		{
@@ -128,7 +126,7 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 				tc.sendStatus(pipelineProgress{Percent: float32(p.GetProgress()), Stage: StageEncoding})
 			}
 
-			m := &storage.Manifest{
+			m := storage.Manifest{
 				URL:     t.url,
 				SDHash:  t.sdHash,
 				Formats: res.Formats,
@@ -137,12 +135,13 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 					Token:       t.token,
 				},
 			}
-			ls, err = storage.InitLocalStream(encodedPath, m)
+			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {
 				log.Error("could not initialize stream object", "err", err)
 				errc <- err
 				return
 			} else {
+				ls.FillManifest()
 				log.Info("transcoding done", "stream", ls)
 			}
 		}
@@ -150,13 +149,16 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 		{
 			tc.sendStatus(pipelineProgress{Stage: StageUploading, Percent: 0})
 			_, upDone, upErrc := c.batchUploader.Upload(ls)
-			select {
-			case <-upDone:
-				tc.sendStatus(pipelineProgress{Stage: StageUploading, Percent: 100})
-			case err := <-upErrc:
+			<-upDone
+			err := <-upErrc
+			if err != nil {
 				errc <- err
+				return
 			}
+			tc.sendStatus(pipelineProgress{Stage: StageUploading, Percent: 100})
 		}
+
+		tc.sendStatus(pipelineProgress{Stage: StageDone})
 	}()
 
 	return tc

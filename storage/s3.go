@@ -1,9 +1,10 @@
 package storage
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -97,30 +98,40 @@ type S3Driver struct {
 	session *session.Session
 }
 
-func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
+func (s *S3Driver) Put(ls *LocalStream) (*RemoteStream, error) {
 	dl := s3manager.NewDownloader(s.session)
 	_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s3Key(lstream.sdHash, MasterPlaylistName)),
+		Key:    aws.String(s3Key(ls.SDHash(), MasterPlaylistName)),
 	})
 	if err == nil {
-		return &RemoteStream{url: lstream.sdHash}, ErrStreamExists
+		return &RemoteStream{url: ls.SDHash()}, ErrStreamExists
 	}
 
 	ul := s3manager.NewUploader(s.session)
-	err = lstream.Dive(
-		readFile,
-		func(data []byte, name string) error {
-			ctype := FragmentContentType
-			if path.Ext(name) == PlaylistExt {
-				ctype = PlaylistContentType
+	err = ls.Walk(
+		func(fi fs.FileInfo, fullPath, name string) error {
+			var ctype string
+			f, err := os.Open(fullPath)
+			if err != nil {
+				return err
 			}
-			logger.Debugw("uploading", "key", s3Key(lstream.sdHash, name), "ctype", ctype, "size", len(data), "bucket", s.bucket)
-			_, err := ul.Upload(&s3manager.UploadInput{
+			defer f.Close()
+
+			switch path.Ext(name) {
+			case PlaylistExt:
+				ctype = PlaylistContentType
+			case FragmentExt:
+				ctype = FragmentContentType
+			default:
+				ctype = "text/plain"
+			}
+			logger.Debugw("uploading", "key", s3Key(ls.SDHash(), name), "ctype", ctype, "size", fi.Size(), "bucket", s.bucket)
+			_, err = ul.Upload(&s3manager.UploadInput{
 				Bucket:      aws.String(s.bucket),
-				Key:         aws.String(s3Key(lstream.sdHash, name)),
+				Key:         aws.String(s3Key(ls.SDHash(), name)),
 				ContentType: aws.String(ctype),
-				Body:        bytes.NewReader(data),
+				Body:        f,
 				ACL:         aws.String("public-read"),
 			})
 			if err != nil {
@@ -130,7 +141,7 @@ func (s *S3Driver) Put(lstream *LocalStream) (*RemoteStream, error) {
 		},
 	)
 
-	return &RemoteStream{url: lstream.sdHash}, err
+	return &RemoteStream{url: ls.SDHash()}, err
 }
 
 func (s *S3Driver) Delete(sdHash string) error {

@@ -2,6 +2,7 @@ package uploader
 
 import (
 	"archive/tar"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -14,12 +15,12 @@ import (
 
 // packStream takes a sourceDir and puts it into a TAR archive at tarPath,
 // returning SHA256 checksum of stream files.
-func packStream(stream *storage.LightLocalStream, tarPath string) ([]byte, error) {
+func packStream(stream *storage.LocalStream, tarPath string) (string, error) {
 	l := log.With("source_dir", stream.Path)
 
 	tarfile, err := os.Create(tarPath)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer tarfile.Close()
 
@@ -53,18 +54,18 @@ func packStream(stream *storage.LightLocalStream, tarPath string) ([]byte, error
 	})
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	if err := tw.Close(); err != nil {
-		return nil, err
+		return "", err
 	}
-	return hash.Sum(nil), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // unpackStream unpacks TAR file at tarPath into dstPath,
 // calculating SHA256 checksum of files.
-func unpackStream(tarReader io.ReadCloser, dstPath string) (*storage.LightLocalStream, error) {
+func unpackStream(tarReader io.ReadCloser, dstPath string) (*storage.LocalStream, error) {
 	var size int64
 
 	if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
@@ -107,5 +108,5 @@ func unpackStream(tarReader io.ReadCloser, dstPath string) (*storage.LightLocalS
 		}
 	}
 
-	return &storage.LightLocalStream{Path: dstPath, Checksum: hash.Sum(nil), Size: size}, nil
+	return storage.OpenLocalStream(dstPath, storage.Manifest{Checksum: hex.EncodeToString(hash.Sum(nil)), Size: size})
 }

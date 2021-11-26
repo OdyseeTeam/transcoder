@@ -1,8 +1,8 @@
 package uploader
 
 import (
-	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,7 +27,7 @@ type uploaderSuite struct {
 	suite.Suite
 
 	path, sdHash, inPath, tarPath string
-	localStream                   storage.LightLocalStream
+	localStream                   storage.LocalStream
 
 	client httpDoer
 
@@ -50,8 +50,8 @@ func (s *uploaderSuite) SetupTest() {
 		func(ctx *fasthttp.RequestCtx) bool {
 			return ctx.UserValue("token").(string) == secretToken
 		},
-		func(ls storage.LightLocalStream) {
-			s.uploaded[ls.SDHash] = ls.Path
+		func(ls storage.LocalStream) {
+			s.uploaded[ls.SDHash()] = ls.Path
 		},
 	)
 
@@ -61,9 +61,11 @@ func (s *uploaderSuite) SetupTest() {
 	storage.PopulateHLSPlaylist(s.T(), p, sdHash)
 	ls, err := storage.OpenLocalStream(path.Join(p, sdHash))
 	s.Require().NoError(err)
+	err = ls.FillManifest()
+	s.Require().NoError(err)
 
 	csum, err := packStream(ls, tarPath)
-	ls.Checksum = csum
+	ls.Manifest.Checksum = csum
 	s.Require().NoError(err)
 
 	ln := fasthttputil.NewInmemoryListener()
@@ -99,7 +101,7 @@ func (s *uploaderSuite) TearDownTest() {
 func (s *uploaderSuite) TestServer_Success() {
 	expectedStreamPath := path.Join(s.inPath, s.sdHash)
 
-	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum())
 	s.Require().NoError(err)
 	r, err := s.client.Do(req)
 	s.Require().NoError(err)
@@ -107,14 +109,14 @@ func (s *uploaderSuite) TestServer_Success() {
 	b, _ := ioutil.ReadAll(r.Body)
 	s.Require().Equal(http.StatusAccepted, r.StatusCode, string(b))
 
-	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum)
+	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum())
 	s.Require().NoError(err)
 
 	s.Equal(expectedStreamPath, s.uploaded[s.sdHash])
 }
 
 func (s *uploaderSuite) TestServer_InvalidToken() {
-	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, "wrongtoken", s.localStream.Checksum)
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, "wrongtoken", s.localStream.Checksum())
 	s.Require().NoError(err)
 	r, err := s.client.Do(req)
 	s.Require().NoError(err)
@@ -124,7 +126,7 @@ func (s *uploaderSuite) TestServer_InvalidToken() {
 }
 
 func (s *uploaderSuite) TestServer_InvalidChecksum() {
-	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, []byte("abc"))
+	req, err := buildUploadRequest(context.Background(), s.tarPath, "http://inmemory/"+s.sdHash, secretToken, "abc")
 	s.Require().NoError(err)
 	r, err := s.client.Do(req)
 	s.Require().NoError(err)
@@ -140,7 +142,7 @@ func (s *uploaderSuite) TestServer_EmptyFile() {
 	s.Require().NoError(err)
 	f.Close()
 
-	req, err := buildUploadRequest(context.Background(), f.Name(), "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum)
+	req, err := buildUploadRequest(context.Background(), f.Name(), "http://inmemory/"+s.sdHash, secretToken, s.localStream.Checksum())
 	s.Require().NoError(err)
 	r, err := s.client.Do(req)
 	s.Require().NoError(err)
@@ -164,7 +166,7 @@ func (s *uploaderSuite) TestUploader_Success() {
 	err := u.Upload(context.Background(), path.Join(s.path, s.sdHash), "http://inmemory/"+s.sdHash, secretToken)
 	s.Require().NoError(err)
 
-	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum)
+	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum())
 	s.Require().NoError(err)
 
 	s.Equal(expectedStreamPath, s.uploaded[s.sdHash])
@@ -195,7 +197,7 @@ func (s *uploaderSuite) TestUploader_Retry() {
 			}
 			return ctx.UserValue("token").(string) == secretToken
 		},
-		func(ls storage.LightLocalStream) {},
+		func(ls storage.LocalStream) {},
 	)
 
 	go func() {
@@ -211,11 +213,11 @@ func (s *uploaderSuite) TestUploader_Retry() {
 	err := u.Upload(context.Background(), path.Join(s.path, s.sdHash), "http://inmemory/"+s.sdHash, secretToken)
 	s.Require().NoError(err)
 
-	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum)
+	_, err = verifyPathChecksum(expectedStreamPath, s.localStream.Checksum())
 	s.Require().NoError(err)
 }
 
-func verifyPathChecksum(path string, csum []byte) (int64, error) {
+func verifyPathChecksum(path string, csum string) (int64, error) {
 	var size int64
 	hash := storage.GetHash()
 	err := godirwalk.Walk(path, &godirwalk.Options{
@@ -243,8 +245,8 @@ func verifyPathChecksum(path string, csum []byte) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	sum := hash.Sum(nil)
-	if !bytes.Equal(sum, csum) {
+	sum := hex.EncodeToString(hash.Sum(nil))
+	if sum != csum {
 		return 0, fmt.Errorf("checksum verification failed: %v != %v", sum, csum)
 	}
 	return size, nil

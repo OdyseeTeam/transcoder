@@ -19,7 +19,7 @@ func TestRetrieve(t *testing.T) {
 	r := p.Retrieve(url, outPath)
 	rv := <-r.Value()
 	require.NoError(t, r.Error)
-	dr := rv.(DownloadResult)
+	dr := rv.(*DownloadResult)
 
 	err := dr.File.Close()
 	require.NoError(t, err)

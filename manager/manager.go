@@ -29,9 +29,8 @@ var (
 
 type VideoLibrary interface {
 	Get(sdHash string) (*video.Video, error)
-	New(sdHash string) *storage.LocalStream
 	Add(params video.AddParams) (*video.Video, error)
-	AddLightLocalStream(url, channel string, ls storage.LightLocalStream) (*video.Video, error)
+	AddLocalStream(url, channel string, ls storage.LocalStream) (*video.Video, error)
 	Path() string
 }
 
