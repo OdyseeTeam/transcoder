@@ -155,6 +155,12 @@ func (q Library) ListLocalOnly() ([]*Video, error) {
 	return q.queries.ListLocalOnly(ctx)
 }
 
+func (q Library) ListAll() ([]*Video, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return q.queries.ListAll(ctx)
+}
+
 func (q Library) ListLocal() ([]*Video, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

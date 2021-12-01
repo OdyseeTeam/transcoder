@@ -24,6 +24,7 @@ var (
 		select strftime('%s', 'now') - strftime('%s', last_accessed) las from videos
 		where las > 3600 * 24 * 2 order by -las`
 	queryVideoDelete         = `delete from videos where sd_hash = $1`
+	queryVideoListAll        = fmt.Sprintf(`select %s from videos`, allVideoColumns)
 	queryVideoListLocalOnly  = fmt.Sprintf(`select %s from videos where path != "" and remote_path = ""`, allVideoColumns)
 	queryVideoListLocal      = fmt.Sprintf(`select %s from videos where path != "" and remote_path != ""`, allVideoColumns)
 	queryVideoListRemoteOnly = fmt.Sprintf(`select %s from videos where path = "" and remote_path != ""`, allVideoColumns)
@@ -72,6 +73,28 @@ func (q *Queries) Get(ctx context.Context, sdHash string) (*Video, error) {
 	}
 
 	return &i, nil
+}
+
+func (q *Queries) ListAll(ctx context.Context) ([]*Video, error) {
+	var (
+		err  error
+		list []*Video
+	)
+
+	rows, err := q.db.QueryContext(ctx, queryVideoListAll)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var i Video
+		if i, err = scan(rows); err != nil {
+			return nil, err
+		}
+		list = append(list, &i)
+	}
+
+	return list, nil
 }
 
 func (q *Queries) ListLocal(ctx context.Context) ([]*Video, error) {

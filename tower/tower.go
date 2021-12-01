@@ -16,9 +16,11 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/uploader"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/streadway/amqp"
+	"github.com/lbryio/transcoder/tower/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/rabbitmq/amqp091-go"
+	"github.com/streadway/amqp"
 	"github.com/valyala/fasthttp"
 	"github.com/wagslane/go-rabbitmq"
 )
@@ -264,6 +266,7 @@ func (s *Server) publishRequest(rr *RunningRequest) error {
 	if err != nil {
 		return err
 	}
+	metrics.TranscodingRequestsPublished.Inc()
 	logging.AddLogRef(s.log, rr.SDHash).Debug("publishing request")
 	return s.publisher.Publish(
 		body,
@@ -323,6 +326,10 @@ func (s *Server) startHttpServer() error {
 			rr, ok := s.state.Requests[ls.SDHash()]
 			s.state.lock.RUnlock()
 			if !ok {
+				metrics.TranscodingRequestsErrors.With(prometheus.Labels{
+					metrics.LabelWorkerName: rr.WorkerID,
+					metrics.LabelStage:      "upload",
+				})
 				log.Error("uploader callback received but no corresponding request found")
 				return
 			}
@@ -333,6 +340,10 @@ func (s *Server) startHttpServer() error {
 			if _, err := s.videoManager.Library().AddLocalStream(rr.URL, rr.Channel, ls); err != nil {
 				rr.Stage = StageFailedFatally
 				rr.Error = err.Error()
+				metrics.TranscodingRequestsErrors.With(prometheus.Labels{
+					metrics.LabelWorkerName: rr.WorkerID,
+					metrics.LabelStage:      "upload",
+				})
 				log.Error("failed to add stream", "url", rr.URL, "err", err)
 				return
 			}
@@ -340,9 +351,13 @@ func (s *Server) startHttpServer() error {
 			if rr.transcodingRequest != nil {
 				rr.transcodingRequest.Complete()
 			}
+			metrics.TranscodingRequestsDone.With(prometheus.Labels{metrics.LabelWorkerName: rr.WorkerID}).Inc()
+			metrics.TranscodingRequestsRunning.With(prometheus.Labels{metrics.LabelWorkerName: rr.WorkerID}).Dec()
 			log.Info("upload received", "url", rr.URL)
 		},
 	)
+
+	metrics.RegisterMetrics()
 	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
 
 	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
@@ -407,6 +422,7 @@ func (s *Server) startRequestSweep() {
 						"request", rr,
 					)
 					rr.Stage = StagePending
+					metrics.TranscodingRequestsRetries.With(prometheus.Labels{metrics.LabelWorkerName: rr.WorkerID})
 					s.publishRequest(rr)
 				}
 			}
@@ -441,6 +457,8 @@ func (s *Server) startWatchingWorkerStatus() {
 				s.registry.available += c.available
 			}
 			s.registry.Unlock()
+			metrics.WorkersCapacity.Set(float64(s.registry.capacity))
+			metrics.WorkersAvailable.Set(float64(s.registry.available))
 			s.log.Debug("registry updated", "capacity", s.registry.capacity, "available", s.registry.available, "workers", len(s.registry.workers))
 		default:
 			time.Sleep(10 * time.Millisecond)
@@ -473,7 +491,6 @@ func (s *Server) startConsumingWorkerStatus() error {
 		rabbitmq.WithConsumeOptionsConcurrency(1),
 		rabbitmq.WithConsumeOptionsBindingExchangeName("transcoder"),
 		rabbitmq.WithConsumeOptionsBindingExchangeKind("direct"),
-		// rabbitmq.WithConsumeOptionsConsumerName(responsesConsumerName),
 		rabbitmq.WithConsumeOptionsBindingExchangeDurable,
 		rabbitmq.WithConsumeOptionsQueueDurable,
 	)
@@ -492,13 +509,16 @@ func (s *Server) startConsumingResponses() error {
 
 			// TODO: Verify worker ID match
 			rr.WorkerID = getWorkerID(d)
+			promLabel := prometheus.Labels{metrics.LabelWorkerName: rr.WorkerID}
 
 			if rr.TsStarted.IsZero() {
+				metrics.TranscodingRequestsRunning.With(promLabel).Inc()
 				rr.TsStarted = d.Timestamp
 			}
 
 			switch WorkerMessageType(d.Type) {
 			case tHeartbeat:
+				metrics.WorkersHeartbeats.With(promLabel).Inc()
 				rr.TsHeartbeat = d.Timestamp
 				return rabbitmq.Ack
 			case tPipelineUpdate:
@@ -511,6 +531,7 @@ func (s *Server) startConsumingResponses() error {
 				rr.Progress = msg.Percent
 				rr.TsUpdated = d.Timestamp
 				rr.Stage = msg.Stage
+
 				log.Debug("progress received ", "msg", msg)
 
 				return rabbitmq.Ack
@@ -521,6 +542,8 @@ func (s *Server) startConsumingResponses() error {
 					log.Error("can't unmarshal received message", "err", err)
 					return rabbitmq.NackDiscard
 				}
+				promLabel[metrics.LabelStage] = string(rr.Stage)
+				metrics.TranscodingRequestsErrors.With(promLabel).Inc()
 				rr.Error = msg.Error
 				rr.Stage = StageFailed
 				log.Debug("request failed", "msg", msg)

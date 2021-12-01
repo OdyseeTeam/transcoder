@@ -100,8 +100,8 @@ func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	return &c, nil
 }
 
-// Download retrieves a stream from LBRY CDN and saves it into the dstPathination folder under original name.
-func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
+// Download retrieves a stream from LBRY CDN and saves it into dstDir folder under original name.
+func (c *TranscodingRequest) Download(dstDir string) (*os.File, int64, error) {
 	UDPPort := 5568
 	TCPPort := 5567
 	HTTPPort := 5569
@@ -112,12 +112,12 @@ func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
 	shared.ReflectorHttpServer = fmt.Sprintf("%s:%d", blobServer, HTTPPort)
 
 	var readLen int64
-	dstFile := path.Join(dstPath, c.streamFileName())
+	dstFile := path.Join(dstDir, c.streamFileName())
 
 	logger.Infow("downloading stream", "url", c.URI)
 	t := timer.Start()
 
-	if err := os.MkdirAll(dstPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(dstDir, os.ModePerm); err != nil {
 		return nil, 0, err
 	}
 
@@ -126,9 +126,10 @@ func (c *TranscodingRequest) Download(dstPath string) (*os.File, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstPath, tmpPath); err != nil {
+	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstDir, tmpPath); err != nil {
 		return nil, 0, err
 	}
+	os.RemoveAll(tmpPath)
 	t.Stop()
 
 	fi, err := os.Stat(dstFile)

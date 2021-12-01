@@ -31,7 +31,14 @@ func tailVideos(items []*Video, maxSize uint64, call func(v *Video) error) (tota
 // FurloughVideos deletes older videos locally, leaving them only on S3, keeping total size of
 // local videos at maxSize.
 func FurloughVideos(lib *Library, maxSize uint64) (uint64, uint64, error) {
-	items, err := lib.ListLocal()
+	var items []*Video
+	var err error
+	if lib.remote == nil {
+		items, err = lib.ListLocalOnly()
+	} else {
+		items, err = lib.ListLocal()
+	}
+
 	if err != nil {
 		return 0, 0, err
 	}

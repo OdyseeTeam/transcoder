@@ -104,6 +104,45 @@ func (s FurloughSuite) TestFurloughVideos() {
 	s.Equal(0, len(dummyrs.Ops))
 }
 
+func (s FurloughSuite) TestFurloughVideosWithoutRemote() {
+	var totalSize, sizeToKeep uint64
+
+	dummyls := storage.Dummy()
+	lib := NewLibrary(Configure().
+		LocalStorage(dummyls).
+		DB(s.db),
+	)
+
+	for range [100]int{} {
+		v, err := lib.Add(AddParams{
+			SDHash: randomString(96),
+			URL:    randomString(32),
+			Path:   randomString(96),
+			Size:   int64(1000000 + rand.Intn(1000000)),
+		})
+		s.Require().NoError(err)
+		_, err = lib.queries.db.ExecContext(
+			context.Background(),
+			"update videos set last_accessed = $2 where sd_hash = $1",
+			time.Now().AddDate(0, 0, -rand.Intn(30)),
+			v.SDHash,
+		)
+		s.Require().NoError(err)
+	}
+
+	r := lib.queries.db.QueryRowContext(context.Background(), `select sum(size) from videos`)
+	err := r.Scan(&totalSize)
+	s.Require().NoError(err)
+
+	sizeToKeep = uint64(rand.Int63n(1000000 * 50))
+	ts, fs, err := FurloughVideos(lib, sizeToKeep)
+	s.NoError(err)
+	s.Equal(totalSize, ts)
+	s.InDelta(sizeToKeep, ts-fs, 2000000)
+
+	s.GreaterOrEqual(len(dummyls.Ops), 10)
+}
+
 func (s FurloughSuite) TestRetireVideos() {
 	var totalSize, sizeToKeep, sizeRemoteOnly uint64
 	var initialCount, afterCount int64
