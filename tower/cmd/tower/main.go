@@ -9,8 +9,13 @@ import (
 	"syscall"
 
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/dispatcher"
+	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower"
 	"github.com/lbryio/transcoder/video"
@@ -48,9 +53,20 @@ func serve() {
 	var logger *zap.Logger
 
 	if CLI.Debug {
-		logger, _ = zap.NewDevelopmentConfig().Build()
+		logger = logging.Create("tower", logging.Dev).Desugar()
 	} else {
-		logger, _ = zap.NewProductionConfig().Build()
+		logger = logging.Create("tower", logging.Prod).Desugar()
+	}
+
+	if !CLI.Debug {
+		db.SetLogger(logging.Create("db", logging.Prod))
+		encoder.SetLogger(logging.Create("encoder", logging.Prod))
+		video.SetLogger(logging.Create("video", logging.Prod))
+		manager.SetLogger(logging.Create("claim", logging.Prod))
+		storage.SetLogger(logging.Create("storage", logging.Prod))
+		formats.SetLogger(logging.Create("formats", logging.Prod))
+		mfr.SetLogger(logging.Create("mfr", logging.Prod))
+		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
 	}
 
 	log := logger.Sugar()

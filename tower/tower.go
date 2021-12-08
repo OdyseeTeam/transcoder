@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -321,7 +322,7 @@ func (s *Server) startHttpServer() error {
 			return false
 		},
 		func(ls storage.LocalStream) {
-			log := logging.AddLogRef(s.log, ls.SDHash())
+			log := logging.AddLogRef(s.log, ls.SDHash()).With("stage", "upload")
 			s.state.lock.RLock()
 			rr, ok := s.state.Requests[ls.SDHash()]
 			s.state.lock.RUnlock()
@@ -331,6 +332,10 @@ func (s *Server) startHttpServer() error {
 					metrics.LabelStage:      "upload",
 				})
 				log.Error("uploader callback received but no corresponding request found")
+				err := os.RemoveAll(ls.Path)
+				if err != nil {
+					log.Error("failed to clean up the stream", "err", err)
+				}
 				return
 			}
 			rr.Uploaded = true
@@ -345,6 +350,10 @@ func (s *Server) startHttpServer() error {
 					metrics.LabelStage:      "upload",
 				})
 				log.Error("failed to add stream", "url", rr.URL, "err", err)
+				err := os.RemoveAll(ls.Path)
+				if err != nil {
+					log.Error("failed to clean up", "err", err)
+				}
 				return
 			}
 			rr.Stage = StageCompleted

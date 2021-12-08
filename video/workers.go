@@ -31,6 +31,7 @@ func (u s3uploader) Work(t dispatcher.Task) error {
 	rs, err := u.lib.remote.Put(ls)
 	if err != nil {
 		if err != storage.ErrStreamExists {
+			u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)
 			return err
 		}
 		v.RemotePath = rs.URL()
@@ -61,6 +62,11 @@ func SpawnS3uploader(lib *Library) chan<- interface{} {
 				if err != nil {
 					logger.Errorw("listing non-uploaded videos failed", "err", err)
 					return
+				}
+				if len(videos) > 0 {
+					logger.Infow("found non-uploaded videos", "count", len(videos))
+				} else {
+					logger.Infow("no non-uploaded videos found")
 				}
 				for _, v := range videos {
 					absent := s3up.processing.SetIfAbsent(v.SDHash, &v)
