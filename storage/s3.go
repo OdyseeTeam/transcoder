@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -99,13 +100,17 @@ type S3Driver struct {
 }
 
 func (s *S3Driver) Put(ls *LocalStream) (*RemoteStream, error) {
+	return s.PutWithContext(aws.BackgroundContext(), ls)
+}
+
+func (s *S3Driver) PutWithContext(ctx context.Context, ls *LocalStream) (*RemoteStream, error) {
 	dl := s3manager.NewDownloader(s.session)
 	_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(s3Key(ls.SDHash(), MasterPlaylistName)),
 	})
 	if err == nil {
-		return &RemoteStream{url: ls.SDHash()}, ErrStreamExists
+		return &RemoteStream{URL: ls.SDHash(), Manifest: ls.Manifest}, ErrStreamExists
 	}
 
 	ul := s3manager.NewUploader(s.session)
@@ -127,7 +132,7 @@ func (s *S3Driver) Put(ls *LocalStream) (*RemoteStream, error) {
 				ctype = "text/plain"
 			}
 			logger.Debugw("uploading", "key", s3Key(ls.SDHash(), name), "ctype", ctype, "size", fi.Size(), "bucket", s.bucket)
-			_, err = ul.Upload(&s3manager.UploadInput{
+			_, err = ul.UploadWithContext(ctx, &s3manager.UploadInput{
 				Bucket:      aws.String(s.bucket),
 				Key:         aws.String(s3Key(ls.SDHash(), name)),
 				ContentType: aws.String(ctype),
@@ -141,7 +146,7 @@ func (s *S3Driver) Put(ls *LocalStream) (*RemoteStream, error) {
 		},
 	)
 
-	return &RemoteStream{url: ls.SDHash()}, err
+	return &RemoteStream{URL: ls.SDHash(), Manifest: ls.Manifest}, err
 }
 
 func (s *S3Driver) Delete(sdHash string) error {

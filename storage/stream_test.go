@@ -18,10 +18,6 @@ func TestOpenLocalStream(t *testing.T) {
 	m := Manifest{
 		URL:    "lbry://what",
 		SDHash: sdHash,
-		Tower: &TowerStreamCredentials{
-			CallbackURL: randomdata.Alphanumeric(255),
-			Token:       randomdata.Alphanumeric(32),
-		},
 	}
 	ls, err := OpenLocalStream(path.Join(dir, sdHash), m)
 	require.NoError(t, err)

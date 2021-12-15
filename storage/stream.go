@@ -33,12 +33,13 @@ const (
 
 var SDHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/`)
 
-type RemoteStream struct {
-	url string
-}
-
 type LocalStream struct {
 	Path     string
+	Manifest *Manifest
+}
+
+type RemoteStream struct {
+	URL      string
 	Manifest *Manifest
 }
 
@@ -53,8 +54,7 @@ type Manifest struct {
 	Size       int64  `yaml:",omitempty"`
 	Checksum   string `yaml:",omitempty"`
 
-	Formats []formats.Format        `yaml:",omitempty,flow"`
-	Tower   *TowerStreamCredentials `yaml:",omitempty,flow"`
+	Formats []formats.Format `yaml:",omitempty,flow"`
 }
 
 type StreamFileLoader func(rootPath ...string) ([]byte, error)
@@ -62,7 +62,7 @@ type StreamFileProcessor func(data []byte, name string) error
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
 
-func GetHash() hash.Hash {
+func GetStreamHasher() hash.Hash {
 	return sha512.New512_224()
 }
 
@@ -121,7 +121,7 @@ func (s *LocalStream) Checksum() string {
 }
 
 func (s *LocalStream) getChecksum() (string, error) {
-	hash := GetHash()
+	hash := GetStreamHasher()
 	err := s.WalkPlaylists(
 		readFile,
 		func(data []byte, name string) error {
@@ -272,8 +272,25 @@ func (s *LocalStream) ReadManifest() error {
 	return nil
 }
 
-func (s RemoteStream) URL() string {
-	return s.url
+func (s *RemoteStream) SDHash() string {
+	if s.Manifest == nil {
+		return ""
+	}
+	return s.Manifest.SDHash
+}
+
+func (s *RemoteStream) Size() int64 {
+	if s.Manifest == nil {
+		return 0
+	}
+	return s.Manifest.Size
+}
+
+func (s *RemoteStream) Checksum() string {
+	if s.Manifest == nil {
+		return ""
+	}
+	return s.Manifest.Checksum
 }
 
 func readFile(rootPath ...string) ([]byte, error) {

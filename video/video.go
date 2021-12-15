@@ -2,6 +2,7 @@ package video
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
@@ -80,7 +81,7 @@ func (q Library) Add(params AddParams) (*Video, error) {
 	return q.queries.Add(context.Background(), params)
 }
 
-// AddLocalStream moves the stream folder resiging elsewhere into videos folder
+// AddLocalStream moves the stream folder resiging elsewhere into videos folder.
 // and saves it into database.
 func (q Library) AddLocalStream(url, channel string, ls storage.LocalStream) (*Video, error) {
 	if err := ls.Move(q.local.Path()); err != nil {
@@ -95,6 +96,25 @@ func (q Library) AddLocalStream(url, channel string, ls storage.LocalStream) (*V
 		Path:     ls.BasePath(),
 		Size:     ls.Size(),
 		Checksum: ls.Checksum(),
+	}
+	return q.queries.Add(context.Background(), p)
+}
+
+// AddRemoteStream writes remote stream into database.
+// and saves it into database.
+func (q Library) AddRemoteStream(rs storage.RemoteStream) (*Video, error) {
+	if rs.Manifest == nil {
+		return nil, errors.New("cannot add remote stream, manifest is missing")
+	}
+	m := rs.Manifest
+	p := AddParams{
+		URL:        m.URL,
+		SDHash:     m.SDHash,
+		Channel:    m.ChannelURL,
+		RemotePath: rs.URL,
+		Size:       rs.Size(),
+		Checksum:   rs.Checksum(),
+		Type:       formats.TypeHLS,
 	}
 	return q.queries.Add(context.Background(), p)
 }

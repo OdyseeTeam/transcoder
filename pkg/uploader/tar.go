@@ -26,7 +26,7 @@ func packStream(stream *storage.LocalStream, tarPath string) (string, error) {
 
 	tw := tar.NewWriter(tarfile)
 
-	hash := storage.GetHash()
+	hash := storage.GetStreamHasher()
 
 	err = stream.Walk(func(fi fs.FileInfo, fullPath, name string) error {
 		header, err := tar.FileInfoHeader(fi, name)
@@ -72,7 +72,7 @@ func unpackStream(tarReader io.ReadCloser, dstPath string) (*storage.LocalStream
 		return nil, err
 	}
 
-	hash := storage.GetHash()
+	hash := storage.GetStreamHasher()
 	tr := tar.NewReader(tarReader)
 
 	for {

@@ -52,6 +52,10 @@ func (l *vlib) AddLocalStream(_, _ string, _ storage.LocalStream) (*video.Video,
 	return nil, nil
 }
 
+func (l *vlib) AddRemoteStream(storage.RemoteStream) (*video.Video, error) {
+	return nil, nil
+}
+
 func (s *managerSuite) SetupSuite() {
 	logger = logging.Create("manager", logging.Dev)
 }
@@ -124,7 +128,7 @@ func (s *managerSuite) TestVideo() {
 	for _, u := range urlsDisabled {
 		v, err := mgr.Video(u)
 		s.Nil(v)
-		s.Equal(ErrTranscodingDisabled, err)
+		s.Equal(ErrChannelNotEnabled, err)
 	}
 
 	for _, u := range urlsNoChannel {

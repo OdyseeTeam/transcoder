@@ -24,13 +24,13 @@ import (
 
 var CLI struct {
 	GetFragmentUrl struct {
-		Server string `optional name:"server" help:"Transcoding server" default:"na-w2.transcoder.odysee.com:18081"`
+		Server string `optional name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
 		URL    string `name:"url" help:"LBRY URL"`
 		SDHash string `name:"sd-hash" help:"SD hash"`
 		Name   string `optional name:"name" help:"Fragment file name" default:"master.m3u8"`
 	} `cmd help:"Get fragment URL"`
 	GetVideoUrl struct {
-		Server string `optional name:"server" help:"Transcoding server" default:"use-w1.transcoder.odysee.com:18081"`
+		Server string `optional name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
 		URL    string `name:"url" help:"LBRY URL"`
 	} `cmd help:"Get video URL"`
 	GenerateManifests struct {
@@ -57,7 +57,7 @@ func main() {
 
 		fmt.Println(c.BuildUrl(c.GetPlaybackPath(CLI.GetFragmentUrl.URL, CLI.GetFragmentUrl.SDHash)))
 	case "get-video-url":
-		fmt.Printf("http://%s/api/v2/video/%s\n", CLI.GetVideoUrl.Server, url.PathEscape(CLI.GetVideoUrl.URL))
+		fmt.Printf("http://%s/api/v2/video/%s\n", CLI.GetVideoUrl.Server, url.PathEscape(strings.TrimSpace(CLI.GetVideoUrl.URL)))
 	case "generate-manifests":
 		var count int64
 		vdb := db.OpenDB(CLI.GenerateManifests.DBPath)

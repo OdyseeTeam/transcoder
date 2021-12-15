@@ -219,7 +219,7 @@ func (s *uploaderSuite) TestUploader_Retry() {
 
 func verifyPathChecksum(path string, csum string) (int64, error) {
 	var size int64
-	hash := storage.GetHash()
+	hash := storage.GetStreamHasher()
 	err := godirwalk.Walk(path, &godirwalk.Options{
 		Callback: func(fullPath string, de *godirwalk.Dirent) error {
 			if de.IsDir() && fullPath == path {

@@ -1,30 +1,43 @@
 package tower
 
 import (
-	"fmt"
 	"io/ioutil"
-	"net"
-	"path"
 	"testing"
 
 	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
-	"github.com/lbryio/transcoder/pkg/uploader"
 	"github.com/lbryio/transcoder/storage"
+
+	"github.com/draganm/miniotest"
 	"github.com/stretchr/testify/suite"
-	"github.com/valyala/fasthttp"
 )
 
 type pipelineSuite struct {
 	suite.Suite
 	workDir, uploadDir string
-	upServer           *fasthttp.Server
-	upAddr             string
+	s3addr             string
+	s3cleanup          func() error
+	s3drv              *storage.S3Driver
 }
 
 func TestPipelineSuite(t *testing.T) {
 	suite.Run(t, new(pipelineSuite))
+}
+
+func (s *pipelineSuite) SetupSuite() {
+	var err error
+	s.s3addr, s.s3cleanup, err = miniotest.StartEmbedded()
+	s.Require().NoError(err)
+
+	s.s3drv, err = storage.InitS3Driver(
+		storage.S3Configure().
+			Endpoint(s.s3addr).
+			Region("us-east-1").
+			Credentials("minioadmin", "minioadmin").
+			Bucket("storage-s3-test").
+			DisableSSL(),
+	)
+	s.Require().NoError(err)
 }
 
 func (s *pipelineSuite) SetupTest() {
@@ -34,21 +47,6 @@ func (s *pipelineSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.workDir = workDir
 	s.uploadDir = uploadDir
-
-	upServer := uploader.NewUploadServer(
-		uploadDir,
-		func(_ *fasthttp.RequestCtx) bool { return true },
-		func(_ storage.LocalStream) {},
-	)
-
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	s.Require().NoError(err)
-	s.upAddr = l.Addr().String()
-	go func() {
-		upServer.Serve(l)
-	}()
-	s.upServer = upServer
-	s.T().Logf("listening on %v", s.upAddr)
 }
 
 func (s *pipelineSuite) TestProcessSuccess() {
@@ -56,59 +54,56 @@ func (s *pipelineSuite) TestProcessSuccess() {
 	sdh := "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 	enc, err := encoder.NewEncoder(encoder.Configure())
 	s.Require().NoError(err)
-	c, err := newPipeline(s.workDir, enc, zapadapter.NewKV(logging.Create("pipeline", logging.Dev).Desugar()))
+	c, err := newPipeline(s.workDir, s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
 	stop := make(chan struct{})
 
-	t := &task{url: url, sdHash: sdh, callbackURL: fmt.Sprintf("http://%v/%v", s.upAddr, sdh)}
-	defer t.cleanup()
+	wt := createWorkerTask(MsgTranscodingTask{URL: url, SDHash: sdh})
 
-	tc := c.Process(stop, t)
-	p, err := s.watchTask(tc)
+	c.Process(stop, wt)
+	var r taskResult
+loop:
+	for {
+		select {
+		case p := <-wt.progress:
+			s.Require().NotEmpty(p.Stage)
+		case r = <-wt.result:
+			s.Require().NotNil(r.remoteStream)
+			break loop
+		case err := <-wt.errChan:
+			s.FailNow("unexpected error", err)
+			break loop
+		}
+	}
+
+	sf, err := s.s3drv.GetFragment(r.remoteStream.URL, storage.MasterPlaylistName)
 	s.Require().NoError(err)
-	s.Require().Equal(StageDone, p.Stage)
-	s.FileExists(path.Join(s.uploadDir, sdh, "master.m3u8"))
+	s.Require().NotNil(sf)
 }
 
-func (s *pipelineSuite) TestProcessFinalFailure() {
-	url := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+func (s *pipelineSuite) TestProcessFailure() {
+	url := "lbry://@specialoperationstest#3/nonexisting#a"
 	sdh := "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 	enc, err := encoder.NewEncoder(encoder.Configure())
 	s.Require().NoError(err)
-	c, err := newPipeline(s.workDir, enc, zapadapter.NewKV(logging.Create("pipeline", logging.Dev).Desugar()))
+	c, err := newPipeline(s.workDir, s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
 	stop := make(chan struct{})
 
-	// This will trigger upload failure
-	s.upServer.MaxRequestBodySize = 1
+	wt := createWorkerTask(MsgTranscodingTask{URL: url, SDHash: sdh})
+	c.Process(stop, wt)
 
-	t := &task{url: url, callbackURL: fmt.Sprintf("http://%v/%v", s.upAddr, sdh)}
-	defer t.cleanup()
-
-	tc := c.Process(stop, t)
-	p, err := s.watchTask(tc)
-	s.Require().Nil(p)
-	s.Require().Error(err)
-}
-
-// watchTask will watch the task until it's done, then returning its final stage status.
-func (s *pipelineSuite) watchTask(tc taskControl) (*pipelineProgress, error) {
+loop:
 	for {
 		select {
-		case p := <-tc.Progress:
+		case p := <-wt.progress:
 			s.Require().NotEmpty(p.Stage)
-			if p.Stage == StageDone {
-				return &p, nil
-			}
-		case <-tc.TaskDone:
-			select {
-			case err := <-tc.Errc:
-				if err != nil {
-					return nil, err
-				}
-			default:
-				return nil, nil
-			}
+		case <-wt.result:
+			s.FailNow("did not expect this to succeed")
+			break loop
+		case err := <-wt.errChan:
+			s.Require().EqualError(err, "could not resolve stream URI")
+			break loop
 		}
 	}
 }

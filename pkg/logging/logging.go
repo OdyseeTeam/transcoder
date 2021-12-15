@@ -19,6 +19,7 @@ var Dev = zap.NewDevelopmentConfig()
 
 func init() {
 	Prod.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	zap.ReplaceGlobals(Create("", Dev).Desugar())
 }
 
 func Create(name string, cfg zap.Config) *zap.SugaredLogger {

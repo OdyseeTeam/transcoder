@@ -10,6 +10,14 @@ const (
 	responsesQueueName    = "responses"
 	requestsQueueName     = "requests"
 	workerStatusQueueName = "worker-status"
+	workRequestsQueueName = "work-requests"
+	taskProgressQueueName = "task-progress"
+	taskErrorsQueueName   = "task-errors"
+	taskDoneQueueName     = "task-done"
+
+	replyToQueueName = "amq.rabbitmq.reply-to"
+
+	workersExchange = "workers"
 
 	headerRequestRef = "request-ref"
 	headerRequestKey = "request-key"

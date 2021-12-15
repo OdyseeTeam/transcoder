@@ -14,10 +14,11 @@ import (
 
 var CLI struct {
 	Start struct {
-		RMQAddr string `optional help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
-		Workers int    `optional help:"Encoding workers to spawn" default:16`
-		Threads int    `optional help:"Encoding threads per encoding worker" default:2`
-		WorkDir string `optional help:"Directory for storing downloaded and transcoded files" default:"./"`
+		WorkerID string `help:"Worker ID"`
+		RMQAddr  string `optional help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
+		Workers  int    `optional help:"Encoding workers to spawn" default:16`
+		Threads  int    `optional help:"Encoding threads per encoding worker" default:2`
+		WorkDir  string `optional help:"Directory for storing downloaded and transcoded files" default:"./"`
 	} `cmd help:"Start transcoding worker"`
 	Debug bool `optional help:"Enable debug logging" default:false`
 }
@@ -41,6 +42,7 @@ func main() {
 			log.Fatal(err)
 		}
 		c, err := tower.NewWorker(tower.DefaultWorkerConfig().
+			WorkerID(CLI.Start.WorkerID).
 			Logger(zapadapter.NewKV(logger.Named("tower.worker"))).
 			PoolSize(CLI.Start.Workers).
 			WorkDir(CLI.Start.WorkDir).

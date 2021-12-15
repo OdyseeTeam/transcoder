@@ -42,7 +42,7 @@ func (s *DummyStorage) GetFragment(sdHash, name string) (StreamFragment, error) 
 
 func (s *DummyStorage) Put(ls *LocalStream) (*RemoteStream, error) {
 	s.Ops = append(s.Ops, StorageOp{OpGetFragment, ls.SDHash()})
-	return &RemoteStream{url: "http://dummy/url"}, nil
+	return &RemoteStream{URL: "http://dummy/url"}, nil
 }
 
 // PopulateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.

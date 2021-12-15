@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -8,8 +9,10 @@ import (
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/retriever"
-	"github.com/lbryio/transcoder/pkg/uploader"
 	"github.com/lbryio/transcoder/storage"
+
+	"github.com/karrick/godirwalk"
+	"github.com/pkg/errors"
 )
 
 // inject task: url. claim id, sd hash
@@ -33,11 +36,11 @@ const (
 )
 
 type pipeline struct {
-	workDir       string
-	workDirs      map[string]string
-	encoder       encoder.Encoder
-	batchUploader uploader.BatchUploader
-	log           logging.KVLogger
+	workDir  string
+	workDirs map[string]string
+	encoder  encoder.Encoder
+	s3       *storage.S3Driver
+	log      logging.KVLogger
 }
 
 type task struct {
@@ -46,19 +49,19 @@ type task struct {
 }
 
 type taskControl struct {
-	Progress chan pipelineProgress
+	Progress chan taskProgress
 	TaskDone chan struct{}
 	Errc     chan error
 	Stop     chan struct{}
 	Next     chan taskControl
 }
 
-type pipelineProgress struct {
-	Stage   RequestStage `json:"stage"`
-	Percent float32      `json:"progress"`
+type streamUploadResult struct {
+	err error
+	url string // sd hash
 }
 
-func newPipeline(workDir string, encoder encoder.Encoder, logger logging.KVLogger) (*pipeline, error) {
+func newPipeline(workDir string, s3 *storage.S3Driver, encoder encoder.Encoder, logger logging.KVLogger) (*pipeline, error) {
 	p := pipeline{
 		workDir: workDir,
 		encoder: encoder,
@@ -69,76 +72,95 @@ func newPipeline(workDir string, encoder encoder.Encoder, logger logging.KVLogge
 		dirStreams:    path.Join(p.workDir, dirStreams),
 		dirTranscoded: path.Join(p.workDir, dirTranscoded),
 	}
-	p.batchUploader = uploader.StartBatchUploader(uploader.NewUploader(
-		uploader.DefaultUploaderConfig().Logger(logger),
-	), 10)
+	p.s3 = s3
 
-	// Upload left over streams
-	err := p.batchUploader.UploadDir(workDir)
-	if err != nil {
-		return nil, err
-	}
 	return &p, nil
 }
 
-func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
-	var ls *storage.LocalStream
-	log := logging.AddLogRef(c.log, t.sdHash)
+func (p *pipeline) UploadLeftovers(stop chan struct{}) (<-chan streamUploadResult, error) {
+	// Upload left over streams
+	// tc.sendStatus(taskProgress{Stage: StageUploading, Percent: 0})
+	streams, err := godirwalk.ReadDirnames(p.workDirs[dirTranscoded], nil)
 
-	status := make(chan pipelineProgress)
-	done := make(chan struct{})
-	errc := make(chan error, 1)
-	tc := taskControl{
-		Progress: status,
-		TaskDone: done,
-		Errc:     errc,
-		Next:     make(chan taskControl, 1),
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot get streams list")
 	}
 
+	results := make(chan streamUploadResult)
+
 	go func() {
-		defer close(tc.Errc)
-		defer close(tc.TaskDone)
+		defer close(results)
+		for _, sdHash := range streams {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			// Skip non-sdHashes
+			if len(sdHash) != 96 {
+				continue
+			}
+			res := streamUploadResult{url: sdHash}
+			ls, err := storage.OpenLocalStream(path.Join(p.workDirs[dirTranscoded], sdHash))
+			if err != nil {
+				res.err = errors.Wrap(err, "cannot open stream")
+				results <- res
+				return
+			}
+			_, err = p.s3.Put(ls)
+			if err != nil {
+				res.err = errors.Wrap(err, "cannot upload stream")
+				results <- res
+				return
+			}
+			results <- res
+		}
+	}()
+	return results, nil
+}
+
+func (c *pipeline) Process(stop chan struct{}, task workerTask) {
+	var ls *storage.LocalStream
+	log := logging.AddLogRef(c.log, task.payload.SDHash)
+
+	go func() {
 		var origFile, encodedPath string
 		{
-			tc.sendStatus(pipelineProgress{Stage: StageDownloading})
-			res, err := retriever.Retrieve(t.url, c.workDirs[dirStreams])
+			task.progress <- taskProgress{Stage: StageDownloading}
+			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
-				errc <- err
+				task.errChan <- err
 				return
 			}
 			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
 			origFile = res.File.Name()
-			t.addPath(origFile)
-			t.addPath(encodedPath)
+			defer os.RemoveAll(origFile)
+			defer os.RemoveAll(encodedPath)
 		}
 
 		{
-			tc.sendStatus(pipelineProgress{Stage: StageEncoding})
+			task.progress <- taskProgress{Stage: StageEncoding}
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
 				log.Error("encoder failed", err)
-				errc <- err
+				task.errChan <- err
 				return
 			}
 
 			for p := range res.Progress {
-				tc.sendStatus(pipelineProgress{Percent: float32(p.GetProgress()), Stage: StageEncoding})
+				task.progress <- taskProgress{Percent: float32(p.GetProgress()), Stage: StageEncoding}
 			}
 
 			m := storage.Manifest{
-				URL:     t.url,
-				SDHash:  t.sdHash,
+				URL:     task.payload.URL,
+				SDHash:  task.payload.SDHash,
 				Formats: res.Formats,
-				Tower: &storage.TowerStreamCredentials{
-					CallbackURL: t.callbackURL,
-					Token:       t.token,
-				},
 			}
 			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {
 				log.Error("could not initialize stream object", "err", err)
-				errc <- err
+				task.errChan <- err
 				return
 			} else {
 				ls.FillManifest()
@@ -147,24 +169,19 @@ func (c *pipeline) Process(stop chan struct{}, t *task) taskControl {
 		}
 
 		{
-			tc.sendStatus(pipelineProgress{Stage: StageUploading, Percent: 0})
-			_, upDone, upErrc := c.batchUploader.Upload(ls)
-			<-upDone
-			err := <-upErrc
+			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
+			rs, err := c.s3.PutWithContext(context.Background(), ls)
 			if err != nil {
-				errc <- err
+				task.errChan <- err
 				return
 			}
-			tc.sendStatus(pipelineProgress{Stage: StageUploading, Percent: 100})
+			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
+			task.result <- taskResult{remoteStream: rs}
 		}
-
-		tc.sendStatus(pipelineProgress{Stage: StageDone})
 	}()
-
-	return tc
 }
 
-func (c taskControl) sendStatus(p pipelineProgress) {
+func (c taskControl) sendStatus(p taskProgress) {
 	for {
 		select {
 		case <-c.Stop:

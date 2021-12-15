@@ -31,6 +31,7 @@ type VideoLibrary interface {
 	Get(sdHash string) (*video.Video, error)
 	Add(params video.AddParams) (*video.Video, error)
 	AddLocalStream(url, channel string, ls storage.LocalStream) (*video.Video, error)
+	AddRemoteStream(storage.RemoteStream) (*video.Video, error)
 	Path() string
 }
 
@@ -144,7 +145,7 @@ func (m *VideoManager) Video(uri string) (*video.Video, error) {
 
 	for _, e := range disabledChannels {
 		if e == tr.ChannelURI {
-			return nil, ErrTranscodingDisabled
+			return nil, ErrChannelNotEnabled
 		}
 	}
 

@@ -31,13 +31,14 @@ var (
 )
 
 type AddParams struct {
-	URL      string
-	SDHash   string
-	Type     string
-	Path     string
-	Channel  string
-	Size     int64
-	Checksum string
+	URL        string
+	SDHash     string
+	Type       string
+	Path       string
+	RemotePath string
+	Channel    string
+	Size       int64
+	Checksum   string
 }
 
 func (q *Queries) Add(ctx context.Context, arg AddParams) (*Video, error) {

@@ -34,16 +34,16 @@ func (u s3uploader) Work(t dispatcher.Task) error {
 			u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)
 			return err
 		}
-		v.RemotePath = rs.URL()
+		v.RemotePath = rs.URL
 	}
 
 	err = u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)
 	if err != nil {
-		logger.Errorw("error updating video", "sd_hash", v.SDHash, "remote_path", rs.URL(), "err", err)
+		logger.Errorw("error updating video", "sd_hash", v.SDHash, "remote_path", rs.URL, "err", err)
 		return err
 	}
 	metrics.S3UploadedSizeMB.Add(float64(v.GetSize()))
-	logger.Infow("uploaded stream to S3", "sd_hash", v.SDHash, "remote_path", rs.URL(), "size", v.GetSize())
+	logger.Infow("uploaded stream to S3", "sd_hash", v.SDHash, "remote_path", rs.URL, "size", v.GetSize())
 	return nil
 }
 
