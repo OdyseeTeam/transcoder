@@ -19,9 +19,8 @@ const (
 
 	workersExchange = "workers"
 
-	headerRequestRef = "request-ref"
-	headerRequestKey = "request-key"
-	headerWorkerID   = "worker-id"
+	headerTaskID   = "task-id"
+	headerWorkerID = "worker-id"
 
 	defaultHeartbeatInterval = 30 * time.Second
 	maxFailedAttempts        = 5

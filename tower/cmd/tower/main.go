@@ -18,6 +18,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower"
+	"github.com/lbryio/transcoder/tower/queue"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/alecthomas/kong"
@@ -28,14 +29,15 @@ import (
 const configName = "tower"
 
 var CLI struct {
+	queue.MigratorCLI
 	Serve struct {
-		RMQAddr   string `optional help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
-		HttpBind  string `optional help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
+		RMQAddr   string `optional:"" help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
+		HttpBind  string `optional:"" help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
 		HttpURL   string `help:"URL at which callback server will be accessible from the outside"`
-		StateFile string `optional help:"State file to synchronize to and load on start up"`
+		StateFile string `optional:"" help:"State file to synchronize to and load on start up"`
 		DevMode   bool   `help:"Development mode (purges queues before start)"`
-	} `cmd help:"Start tower server"`
-	Debug bool `optional help:"Enable debug logging" default:false`
+	} `cmd:"" help:"Start tower server"`
+	Debug bool `optional:"" help:"Enable debug logging" default:false`
 }
 
 func main() {

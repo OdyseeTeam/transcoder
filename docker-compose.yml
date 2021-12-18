@@ -7,6 +7,20 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+  db:
+    image: postgres:14
+    restart: always
+    container_name: db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: odyseeteam
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    command:
+      - -clogging_collector=on
+      - -clog_statement=all
+      - -clog_destination=stderr
   worker:
     image: odyseeteam/transcoder-worker:dev
     container_name: worker
@@ -90,3 +104,4 @@ services:
 
 volumes:
   tower-data: {}
+  db-data: {}

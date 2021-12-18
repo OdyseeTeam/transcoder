@@ -18,7 +18,6 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/valyala/fasthttp"
-	"github.com/wagslane/go-rabbitmq"
 )
 
 const (
@@ -33,6 +32,7 @@ const (
 
 type ServerConfig struct {
 	rmqAddr                 string
+	dsn                     string
 	workDir, workDirUploads string
 	httpServerBind          string
 	httpServerURL           string
@@ -122,27 +122,32 @@ func (c *ServerConfig) RMQAddr(addr string) *ServerConfig {
 	return c
 }
 
+func (c *ServerConfig) DSN(addr string) *ServerConfig {
+	c.dsn = addr
+	return c
+}
+
 func (c *ServerConfig) DevMode() *ServerConfig {
 	c.devMode = true
 	return c
 }
 
 func NewServer(config *ServerConfig) (*Server, error) {
-	server := Server{
+	var err error
+	s := Server{
 		ServerConfig: config,
 		registry:     &workerRegistry{workers: map[string]*worker{}},
 		stopChan:     make(chan struct{}),
 	}
 
-	server.workDirUploads = path.Join(server.workDir, "uploads")
-	rpc, err := newrpc(server.rmqAddr, server.log)
+	s.workDirUploads = path.Join(s.workDir, "uploads")
+	s.rpc, err = newTowerRPC(s.rmqAddr, s.dsn, s.log)
 	if err != nil {
 		return nil, err
 	}
-	server.rpc = &towerRPC{rpc: rpc, tasks: map[string]*activeTask{}, tasksLock: sync.Mutex{}}
-	server.state.StartDump()
+	s.state.StartDump()
 
-	return &server, nil
+	return &s, nil
 }
 
 func (s *Server) StartAll() error {
@@ -276,26 +281,6 @@ func (s *Server) startHttpServer() error {
 	}()
 
 	return nil
-}
-
-func (s *Server) authenticateMessage(d rabbitmq.Delivery) (*RunningRequest, error) {
-	ref := getRequestRef(d)
-	if ref == "" {
-		return nil, errors.New("no request referred")
-	}
-	log := logging.AddLogRef(s.log, ref).With("type", d.Type)
-	s.state.lock.RLock()
-	defer s.state.lock.RUnlock()
-	req, ok := s.state.Requests[ref]
-	if !ok {
-		log.Warn("referred request not found", "ref", ref)
-		return nil, errors.New("no request referred")
-	}
-	if req.CallbackToken != getWorkerKey(d) {
-		log.Info("worker key mismatch", "remote_key", getWorkerKey(d), "local_key", req.CallbackToken)
-		// return nil, errors.New("worker key mismatch")
-	}
-	return req, nil
 }
 
 func defaultTimings() Timings {

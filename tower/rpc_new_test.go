@@ -24,9 +24,12 @@ func TestRPCSuite(t *testing.T) {
 }
 
 func (s *rpcSuite) SetupTest() {
-	rpc, err := newrpc("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
+	var err error
+	s.tower, err = newTowerRPC(
+		"amqp://guest:guest@localhost/",
+		"postgres://postgres:odyseeteam@localhost/postgres",
+		zapadapter.NewKV(nil))
 	s.Require().NoError(err)
-	s.tower = &towerRPC{rpc: rpc, tasks: map[string]*activeTask{}, tasksLock: sync.Mutex{}}
 	s.Require().NoError(s.tower.deleteQueues())
 	s.Require().NoError(s.tower.declareQueues())
 }
@@ -67,8 +70,7 @@ func (s *rpcSuite) TestWorkRequests() {
 						t.Reset(timeout)
 					case <-ctx.Done():
 						s.FailNowf("unexpected timeout waiting for task progress", "%s timed out", at.workerID)
-					case d := <-at.done:
-						s.Equal(d.WorkerID, at.workerID)
+					case <-at.done:
 						break ProgressLoop
 					}
 				}

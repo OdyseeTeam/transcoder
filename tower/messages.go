@@ -42,23 +42,17 @@ type MsgWorkerStatus struct {
 }
 
 type MsgWorkerProgress struct {
-	WorkerID  string       `json:"worker_id"`
-	TaskID    string       `json:"task_id"`
 	Stage     RequestStage `json:"stage"`
 	Percent   float32      `json:"progress"`
 	Timestamp time.Time    `json:"timestamp"`
 }
 
 type MsgWorkerError struct {
-	WorkerID  string    `json:"worker_id"`
-	TaskID    string    `json:"task_id"`
 	Error     string    `json:"error"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
 type MsgWorkerResult struct {
-	WorkerID     string                `json:"worker_id"`
-	TaskID       string                `json:"task_id"`
 	Timestamp    time.Time             `json:"timestamp"`
 	RemoteStream *storage.RemoteStream `json:"remote_stream"`
 }

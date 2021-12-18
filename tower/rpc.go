@@ -4,10 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"sync"
+	"os"
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/tower/queue"
 
 	"github.com/pkg/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -25,31 +26,13 @@ type rpc struct {
 
 type towerRPC struct {
 	*rpc
-	tasks     map[string]*activeTask
-	tasksLock sync.Mutex
+	tasks *taskList
 }
 
 type workerRPC struct {
 	*rpc
 	capacity, available int
 	eagerness           chan int
-}
-
-type activeTask struct {
-	id       string
-	workerID string
-	payload  chan MsgTranscodingTask
-	progress chan MsgWorkerProgress
-	errChan  chan error
-	done     chan MsgWorkerResult
-	reject   chan struct{}
-}
-
-type workerTask struct {
-	payload  MsgTranscodingTask
-	progress chan taskProgress
-	errChan  chan error
-	result   chan taskResult
 }
 
 func newrpc(rmqAddr string, log logging.KVLogger) (*rpc, error) {
@@ -121,32 +104,21 @@ func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency
 	return s.consumer.StartConsuming(handler, queue, routingKeys, opts...)
 }
 
-func (s *rpc) publish(queue string, message interface{}) error {
-	ll := s.log.With("queue", queue, "message", message)
-	body, err := json.Marshal(message)
+func newTowerRPC(rmqAddr, dsn string, log logging.KVLogger) (*towerRPC, error) {
+	rpc, err := newrpc("amqp://guest:guest@localhost/", log)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	opts := []func(*rabbitmq.PublishOptions){
-		rabbitmq.WithPublishOptionsTimestamp(time.Now()),
-		rabbitmq.WithPublishOptionsContentType("application/json"),
-		rabbitmq.WithPublishOptionsExpiration("0"),
-		rabbitmq.WithPublishOptionsMandatory,
-		rabbitmq.WithPublishOptionsPersistentDelivery,
+
+	db, err := queue.NewDB(dsn)
+	if err != nil {
+		return nil, err
 	}
-	if queue == workRequestsQueueName {
-		opts = append(opts, rabbitmq.WithPublishOptionsReplyTo(replyToQueueName))
+	t := &towerRPC{
+		rpc:   rpc,
+		tasks: &taskList{db: db},
 	}
-	if queue == taskDoneQueueName {
-		s.log.Info("publishing to queue")
-	} else {
-		s.log.Debug("publishing to queue")
-	}
-	return s.publisher.Publish(
-		body,
-		[]string{queue},
-		opts...,
-	)
+	return t, nil
 }
 
 func (s *towerRPC) declareQueues() error {
@@ -169,61 +141,70 @@ func (s *towerRPC) deleteQueues() error {
 	return nil
 }
 
+func (s *towerRPC) getMessageData(d rabbitmq.Delivery, m interface{}) (*activeTask, error) {
+	err := json.Unmarshal(d.Body, m)
+	if err != nil {
+		s.log.Warn("cannot parse incoming message", "err", err)
+		return nil, errors.Wrap(err, "cannot parse incoming message")
+	}
+	tid := getTaskID(d)
+	wid := getWorkerID(d)
+	at, ok := s.tasks.getActive(tid)
+	if !ok {
+		s.log.Warn("no matching task found", "task_id", tid, "worker_id", wid)
+		return nil, errors.New("no matching task found")
+	}
+	return at, nil
+}
+
+func (s *rpc) consumeTaskReports(queue string, handler rabbitmq.Handler) error {
+	routingKeys := []string{queue}
+	opts := []func(*rabbitmq.ConsumeOptions){
+		rabbitmq.WithConsumeOptionsConcurrency(5),
+		rabbitmq.WithConsumeOptionsQueueDurable,
+	}
+	s.log.Debug("consuming queue", "queue", queue, "routing_keys", routingKeys)
+	return s.consumer.StartConsuming(handler, queue, routingKeys, opts...)
+}
+
 func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 	tasks := make(chan *activeTask)
 
 	// Start consuming task progress reports first
 	var err error
-	err = s.startConsuming(taskProgressQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
+	err = s.consumeTaskReports(taskProgressQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
 		msg := MsgWorkerProgress{}
-		err := json.Unmarshal(d.Body, &msg)
+		at, err := s.getMessageData(d, &msg)
 		if err != nil {
-			s.log.Warn("botched message received", "err", err)
 			return rabbitmq.NackDiscard
 		}
-		at, ok := s.getActiveTask(msg.TaskID)
-		if !ok {
-			s.log.Warn("no matching task found", "task_id", msg.TaskID, "worker_id", msg.WorkerID)
-			return rabbitmq.NackDiscard
-		} else {
-			at.progress <- msg
-			return rabbitmq.Ack
-		}
-	}, 5, true)
+		at.RecordProgress(msg)
+		return rabbitmq.Ack
+	})
 	if err != nil {
 		return nil, err
 	}
-	err = s.startConsuming(taskErrorsQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
+	err = s.consumeTaskReports(taskErrorsQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
 		msg := MsgWorkerError{}
-		err := json.Unmarshal(d.Body, &msg)
+		at, err := s.getMessageData(d, &msg)
 		if err != nil {
-			s.log.Warn("botched message received", "err", err)
 			return rabbitmq.NackDiscard
 		}
-		if at, ok := s.getActiveTask(msg.TaskID); !ok {
-			return rabbitmq.NackDiscard
-		} else {
-			at.errChan <- errors.New(msg.Error)
-			return rabbitmq.Ack
-		}
-	}, 5, true)
+		at.SetError(msg.Error)
+		return rabbitmq.Ack
+	})
 	if err != nil {
 		return nil, err
 	}
-	err = s.startConsuming(taskDoneQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
+	err = s.consumeTaskReports(taskDoneQueueName, func(d rabbitmq.Delivery) rabbitmq.Action {
 		msg := MsgWorkerResult{}
-		err := json.Unmarshal(d.Body, &msg)
+		at, err := s.getMessageData(d, &msg)
 		if err != nil {
-			s.log.Warn("botched message received", "err", err)
 			return rabbitmq.NackDiscard
 		}
-		if at, ok := s.getActiveTask(msg.TaskID); !ok {
-			return rabbitmq.NackDiscard
-		} else {
-			at.done <- msg
-			return rabbitmq.Ack
-		}
-	}, 5, true)
+		at.MarkDone(msg)
+		return rabbitmq.Ack
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -238,23 +219,19 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 			return rabbitmq.NackDiscard
 		}
 		at := createActiveTask(ws.WorkerID)
-		s.tasksLock.Lock()
-		s.tasks[at.id] = at
-		s.tasksLock.Unlock()
+		s.tasks.preInsert(at)
 		go func() {
 			for {
 				select {
-				case tt := <-at.payload:
-					body, err := json.Marshal(tt)
+				case tcTask := <-at.payload:
+					body, err := json.Marshal(tcTask)
 					if err != nil {
 						s.log.Error("failure publishing task", "err", err)
 						select {
 						case at.reject <- struct{}{}:
 						default:
 						}
-						s.tasksLock.Lock()
-						delete(s.tasks, at.id)
-						s.tasksLock.Unlock()
+						s.tasks.preDelete(at.id)
 						return
 					}
 					opts := []func(*rabbitmq.PublishOptions){
@@ -262,7 +239,7 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 						rabbitmq.WithPublishOptionsContentType("application/json"),
 						rabbitmq.WithPublishOptionsExchange(workersExchange),
 					}
-					s.log.Debug("publishing to queue", "queue", d.ReplyTo, "message", tt)
+					s.log.Debug("publishing to queue", "queue", d.ReplyTo, "message", tcTask)
 					err = s.publisher.Publish(
 						body,
 						[]string{d.ReplyTo},
@@ -274,10 +251,10 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 						case at.reject <- struct{}{}:
 						default:
 						}
-						s.tasksLock.Lock()
-						delete(s.tasks, at.id)
-						s.tasksLock.Unlock()
+						s.tasks.preDelete(at.id)
+						return
 					}
+					s.tasks.persist(at.id, tcTask)
 					return
 				case <-at.done:
 					return
@@ -290,47 +267,63 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 	}, 1, true)
 }
 
-func (s *towerRPC) getActiveTask(id string) (*activeTask, bool) {
-	s.tasksLock.Lock()
-	defer s.tasksLock.Unlock()
-	at, ok := s.tasks[id]
-	return at, ok
-
+func (s *workerRPC) publishResponse(queue string, taskID string, message interface{}) error {
+	ll := s.log.With("queue", queue, "message", message)
+	body, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	opts := []func(*rabbitmq.PublishOptions){
+		rabbitmq.WithPublishOptionsTimestamp(time.Now()),
+		rabbitmq.WithPublishOptionsContentType("application/json"),
+		rabbitmq.WithPublishOptionsExpiration("0"),
+		rabbitmq.WithPublishOptionsMandatory,
+		rabbitmq.WithPublishOptionsHeaders(rabbitmq.Table{headerTaskID: taskID, headerWorkerID: "workerokerokeroker"}),
+		rabbitmq.WithPublishOptionsPersistentDelivery,
+	}
+	if queue == taskDoneQueueName {
+		ll.Info("publishing to queue")
+	} else {
+		ll.Debug("publishing to queue")
+	}
+	return s.publisher.Publish(
+		body,
+		[]string{queue},
+		opts...,
+	)
 }
+func (s *workerRPC) workerQueueName() string {
+	return fmt.Sprintf("worker-tasks-%v", s.id)
+}
+
 func (s *workerRPC) sendWorkRequest() error {
-	return s.publish(workRequestsQueueName, &MsgWorkRequest{WorkerID: s.id})
-	// msg := &MsgWorkRequest{WorkerID: s.id}
-	// body, err := json.Marshal(msg)
-	// if err != nil {
-	// 	return err
-	// }
-	// return s.publisher.Publish(
-	// 	body,
-	// 	[]string{requestsQueueName},
-	// 	// rabbitmq.WithPublishOptionsHeaders(rabbitmq.Table{"type": "request.new"}),
-	// 	rabbitmq.WithPublishOptionsContentType("application/json"),
-	// 	rabbitmq.WithPublishOptionsExchange("transcoder"),
-	// 	rabbitmq.WithPublishOptionsMandatory,
-	// 	rabbitmq.WithPublishOptionsPersistentDelivery,
-	// )
+	msg := &MsgWorkRequest{WorkerID: s.id}
+	body, _ := json.Marshal(msg)
+	return s.publisher.Publish(
+		body,
+		[]string{workRequestsQueueName},
+		rabbitmq.WithPublishOptionsContentType("application/json"),
+		rabbitmq.WithPublishOptionsMandatory,
+		rabbitmq.WithPublishOptionsHeaders(rabbitmq.Table{headerWorkerID: s.id}),
+		rabbitmq.WithPublishOptionsPersistentDelivery,
+		rabbitmq.WithPublishOptionsReplyTo(s.workerQueueName()),
+	)
 }
 
-func (s *workerRPC) sendWorkerStatus(capacity, available int) error {
-	s.log.Debug("sending work request", "capacity", capacity, "available", available)
-	return s.publish(workerStatusQueueName, MsgWorkerStatus{
-		WorkerID:  s.id,
-		Capacity:  capacity,
-		Available: available,
-		Timestamp: time.Now(),
-	})
-}
+// func (s *workerRPC) sendWorkerStatus(capacity, available int) error {
+// 	s.log.Debug("sending work request", "capacity", capacity, "available", available)
+// 	return s.publish(workerStatusQueueName, MsgWorkerStatus{
+// 		WorkerID:  s.id,
+// 		Capacity:  capacity,
+// 		Available: available,
+// 		Timestamp: time.Now(),
+// 	})
+// }
 
 func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 	requests := make(chan workerTask)
 	s.capacity = concurrency
 	s.eagerness = make(chan int)
-
-	workerQueueName := fmt.Sprintf("worker-tasks-%v", s.id)
 
 	// Start listening for replies to work requests
 	err := s.consumer.StartConsuming(
@@ -352,40 +345,26 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 				for {
 					select {
 					case p := <-wt.progress:
-						s.publish(taskProgressQueueName, &MsgWorkerProgress{
-							WorkerID: s.id,
-							TaskID:   mtt.TaskID,
-							Stage:    p.Stage,
-							Percent:  p.Percent,
+						s.publishResponse(taskProgressQueueName, mtt.TaskID, &MsgWorkerProgress{
+							Stage:   p.Stage,
+							Percent: p.Percent,
 						})
 					case err := <-wt.errChan:
-						s.publish(taskErrorsQueueName, &MsgWorkerError{
-							WorkerID: s.id,
-							TaskID:   mtt.TaskID,
-							Error:    err.Error(),
-						})
+						s.publishResponse(taskErrorsQueueName, mtt.TaskID, &MsgWorkerError{Error: err.Error()})
 						return
 					case r := <-wt.result:
-						s.publish(taskDoneQueueName, &MsgWorkerResult{
-							WorkerID:     s.id,
-							TaskID:       mtt.TaskID,
-							RemoteStream: r.remoteStream,
-						})
+						s.publishResponse(taskDoneQueueName, mtt.TaskID, &MsgWorkerResult{RemoteStream: r.remoteStream})
 						return
 					case <-s.stopChan:
-						s.publish(taskErrorsQueueName, &MsgWorkerError{
-							WorkerID: s.id,
-							TaskID:   mtt.TaskID,
-							Error:    "exiting",
-						})
+						s.publishResponse(taskErrorsQueueName, mtt.TaskID, &MsgWorkerError{Error: "exiting"})
 						return
 					}
 				}
 			}()
 			return rabbitmq.Ack
 		},
-		workerQueueName,
-		[]string{workerQueueName},
+		s.workerQueueName(),
+		[]string{s.workerQueueName()},
 		rabbitmq.WithConsumeOptionsQueueExclusive,
 		rabbitmq.WithConsumeOptionsQueueAutoDelete,
 		rabbitmq.WithConsumeOptionsBindingExchangeDurable, // Survive rabbitmq restart
@@ -407,19 +386,10 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 				s.available += val
 				// s.sendWorkerStatus(s.capacity, s.available)
 				if val > 0 {
-					// err := s.sendWorkRequest()
-					msg := &MsgWorkRequest{WorkerID: s.id}
-					body, _ := json.Marshal(msg)
-					err := s.publisher.Publish(
-						body,
-						[]string{workRequestsQueueName},
-						rabbitmq.WithPublishOptionsContentType("application/json"),
-						rabbitmq.WithPublishOptionsMandatory,
-						rabbitmq.WithPublishOptionsPersistentDelivery,
-						rabbitmq.WithPublishOptionsReplyTo(workerQueueName),
-					)
+					err := s.sendWorkRequest()
 					if err != nil {
 						s.log.Error("failure sending work request", "err", err)
+						os.Exit(1)
 					}
 				}
 			case <-s.stopChan:
@@ -465,14 +435,6 @@ func generateUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), err
 }
 
-func getWorkerKey(d rabbitmq.Delivery) string {
-	v, ok := d.Headers[headerRequestKey].(string)
-	if !ok {
-		return ""
-	}
-	return v
-}
-
 func getWorkerID(d rabbitmq.Delivery) string {
 	v, ok := d.Headers[headerWorkerID].(string)
 	if !ok {
@@ -481,8 +443,8 @@ func getWorkerID(d rabbitmq.Delivery) string {
 	return v
 }
 
-func getRequestRef(d rabbitmq.Delivery) string {
-	v, ok := d.Headers[headerRequestRef].(string)
+func getTaskID(d rabbitmq.Delivery) string {
+	v, ok := d.Headers[headerTaskID].(string)
 	if !ok {
 		return ""
 	}

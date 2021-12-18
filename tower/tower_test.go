@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sync"
 	"testing"
 	"time"
 
@@ -32,9 +31,12 @@ func TestTowerSuite(t *testing.T) {
 }
 
 func (s *towerSuite) SetupTest() {
-	rpc, err := newrpc("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
+	var err error
+	s.tower, err = newTowerRPC(
+		"amqp://guest:guest@localhost/",
+		"postgres://postgres:odyseeteam@localhost/postgres",
+		zapadapter.NewKV(nil))
 	s.Require().NoError(err)
-	s.tower = &towerRPC{rpc: rpc, tasks: map[string]*activeTask{}, tasksLock: sync.Mutex{}}
 	s.Require().NoError(s.tower.deleteQueues())
 	s.Require().NoError(s.tower.declareQueues())
 

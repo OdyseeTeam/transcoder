@@ -53,7 +53,6 @@ func main() {
 		}
 
 		log.Infow("starting tower worker", "tower_server", CLI.Start.RMQAddr)
-		go c.StartSendingStatus()
 		c.StartWorkers()
 
 		stopChan := make(chan os.Signal, 1)
