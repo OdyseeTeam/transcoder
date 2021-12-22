@@ -3,6 +3,7 @@ package video
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
@@ -116,6 +117,7 @@ func (q Library) AddRemoteStream(rs storage.RemoteStream) (*Video, error) {
 		Checksum:   rs.Checksum(),
 		Type:       formats.TypeHLS,
 	}
+	fmt.Printf("BZZZZZT %+v\n", p)
 	return q.queries.Add(context.Background(), p)
 }
 

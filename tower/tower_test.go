@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/storage"
+	"github.com/lbryio/transcoder/tower/queue"
 	"github.com/lbryio/transcoder/video"
 
 	"github.com/stretchr/testify/suite"
@@ -20,10 +22,11 @@ import (
 type towerSuite struct {
 	suite.Suite
 	tower     *towerRPC
-	worker    *workerRPC
 	s3addr    string
 	s3cleanup func() error
 	s3drv     *storage.S3Driver
+	db        *sql.DB
+	dbCleanup func() error
 }
 
 func TestTowerSuite(t *testing.T) {
@@ -31,12 +34,14 @@ func TestTowerSuite(t *testing.T) {
 }
 
 func (s *towerSuite) SetupTest() {
-	var err error
-	s.tower, err = newTowerRPC(
-		"amqp://guest:guest@localhost/",
-		"postgres://postgres:odyseeteam@localhost/postgres",
-		zapadapter.NewKV(nil))
+	rpc, err := newrpc("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
 	s.Require().NoError(err)
+	db, clup, err := queue.CreateTestDB()
+	s.Require().NoError(err)
+	s.tower = newTowerRPC(rpc, newTaskList(queue.New(db)))
+	s.db = db
+	s.dbCleanup = clup
+
 	s.Require().NoError(s.tower.deleteQueues())
 	s.Require().NoError(s.tower.declareQueues())
 
@@ -77,6 +82,7 @@ func (s *towerSuite) TestSuccess() {
 
 	libCfg := video.Configure().
 		LocalStorage(storage.Local(libPath)).
+		RemoteStorage(s.s3drv).
 		DB(vdb)
 
 	manager.LoadConfiguredChannels([]string{"@specialoperationstest#3"}, []string{}, []string{})
@@ -87,6 +93,7 @@ func (s *towerSuite) TestSuccess() {
 			Logger(zapadapter.NewKV(nil)).
 			HttpServer(":18080", "http://localhost:18080/").
 			VideoManager(mgr).
+			DB(s.db).
 			WorkDir(srvWorkDir).
 			DevMode(),
 	)
@@ -116,6 +123,6 @@ func (s *towerSuite) TestSuccess() {
 		time.Sleep(500 * time.Millisecond)
 	}
 	s.Equal(trReq.SDHash, v.SDHash)
-	_, err = s.s3drv.GetFragment(v.URL, storage.MasterPlaylistName)
-	s.NoError(err)
+	_, err = s.s3drv.GetFragment(v.RemotePath, storage.MasterPlaylistName)
+	s.NoError(err, "remote path does not exist: %s/%s", v.RemotePath, storage.MasterPlaylistName)
 }

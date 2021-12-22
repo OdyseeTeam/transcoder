@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -53,26 +54,31 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 		return nil, err
 	}
 
-	worker := Worker{
+	w := Worker{
 		WorkerConfig:        config,
 		stopChan:            make(chan struct{}),
 		activePipelines:     map[string]struct{}{},
 		activePipelinesLock: sync.Mutex{},
 		bgTasks:             &sync.WaitGroup{},
 	}
-	p, err := newPipeline(config.workDir, config.s3, enc, worker.log)
+	p, err := newPipeline(config.workDir, config.s3, enc, w.log)
 	if err != nil {
 		return nil, err
 	}
-	worker.processor = p
+	w.processor = p
 
-	rpc, err := newrpc(worker.rmqAddr, worker.log)
+	rpc, err := newrpc(w.rmqAddr, w.log)
 	if err != nil {
 		return nil, err
 	}
-	worker.rpc = &workerRPC{rpc: rpc}
-	worker.id = config.id
-	return &worker, nil
+	w.rpc = &workerRPC{rpc: rpc}
+	if config.id == "" {
+		return nil, errors.New("no worker ID set")
+	}
+	w.id = config.id
+	w.rpc.id = config.id
+	w.log.Info("worker configured", "id", w.id)
+	return &w, nil
 }
 
 func (c *WorkerConfig) RMQAddr(addr string) *WorkerConfig {

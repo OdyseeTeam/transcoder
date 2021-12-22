@@ -18,6 +18,7 @@ require (
 	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
 	github.com/lbryio/lbry.go/v2 v2.7.2-0.20210416195322-6516df1418e3
+	github.com/lib/pq v1.10.4 // indirect
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/nikooo777/lbry-blobs-downloader v1.0.8
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6

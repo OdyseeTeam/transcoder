@@ -2,6 +2,7 @@ package tower
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/tower/metrics"
+	"github.com/lbryio/transcoder/tower/queue"
 	"github.com/prometheus/client_golang/prometheus"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -32,7 +34,7 @@ const (
 
 type ServerConfig struct {
 	rmqAddr                 string
-	dsn                     string
+	db                      *sql.DB
 	workDir, workDirUploads string
 	httpServerBind          string
 	httpServerURL           string
@@ -122,8 +124,8 @@ func (c *ServerConfig) RMQAddr(addr string) *ServerConfig {
 	return c
 }
 
-func (c *ServerConfig) DSN(addr string) *ServerConfig {
-	c.dsn = addr
+func (c *ServerConfig) DB(db *sql.DB) *ServerConfig {
+	c.db = db
 	return c
 }
 
@@ -134,6 +136,10 @@ func (c *ServerConfig) DevMode() *ServerConfig {
 
 func NewServer(config *ServerConfig) (*Server, error) {
 	var err error
+
+	if config.db == nil {
+		return nil, errors.New("SQL DB not set")
+	}
 	s := Server{
 		ServerConfig: config,
 		registry:     &workerRegistry{workers: map[string]*worker{}},
@@ -141,7 +147,11 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	}
 
 	s.workDirUploads = path.Join(s.workDir, "uploads")
-	s.rpc, err = newTowerRPC(s.rmqAddr, s.dsn, s.log)
+	rpc, err := newrpc(s.rmqAddr, s.log)
+	if err != nil {
+		return nil, err
+	}
+	s.rpc = newTowerRPC(rpc, newTaskList(queue.New(config.db)))
 	if err != nil {
 		return nil, err
 	}
@@ -241,6 +251,7 @@ func (s *Server) manageTask(ctx context.Context, at *activeTask, tr *manager.Tra
 				}
 				return
 			}
+			s.log.Info("added remote stream", "url", d.RemoteStream.URL)
 			if tr != nil {
 				tr.Complete()
 			}

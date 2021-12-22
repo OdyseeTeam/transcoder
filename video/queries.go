@@ -13,9 +13,9 @@ var (
 	queryVideoGet = fmt.Sprintf(`select %v from videos where sd_hash = $1 limit 1`, allVideoColumns)
 	queryVideoAdd = `
 		insert into videos (
-			url, sd_hash, type, path, channel, size, checksum, created_at
+			url, sd_hash, type, path, remote_path, channel, size, checksum, created_at
 		) values (
-			$1, $2, $3, $4, $5, $6, $7, datetime('now')
+			$1, $2, $3, $4, $5, $6, $7, $8, datetime('now')
 		)`
 	queryVideoUpdateAccess     = `update videos set last_accessed = datetime('now'), access_count = access_count + 1 where sd_hash = $2`
 	queryVideoUpdateRemotePath = `update videos set remote_path = $1 where sd_hash = $2`
@@ -44,7 +44,7 @@ type AddParams struct {
 func (q *Queries) Add(ctx context.Context, arg AddParams) (*Video, error) {
 	res, err := q.db.ExecContext(
 		ctx, queryVideoAdd,
-		arg.URL, arg.SDHash, arg.Type, arg.Path, arg.Channel, arg.Size, arg.Checksum,
+		arg.URL, arg.SDHash, arg.Type, arg.Path, arg.RemotePath, arg.Channel, arg.Size, arg.Checksum,
 	)
 	if err != nil {
 		return nil, err
