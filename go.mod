@@ -18,7 +18,7 @@ require (
 	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
 	github.com/lbryio/lbry.go/v2 v2.7.2-0.20210416195322-6516df1418e3
-	github.com/lib/pq v1.10.4 // indirect
+	github.com/lib/pq v1.10.4
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/nikooo777/lbry-blobs-downloader v1.0.8
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
@@ -26,7 +26,7 @@ require (
 	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rabbitmq/amqp091-go v0.0.0-20210823000215-c428a6150891
-	github.com/rubenv/sql-migrate v0.0.0-20211023115951-9f02b1e13857 // indirect
+	github.com/rubenv/sql-migrate v0.0.0-20211023115951-9f02b1e13857
 	github.com/simukti/sqldb-logger v0.0.0-20201125162808-c35f87e285f2
 	github.com/simukti/sqldb-logger/logadapter/zapadapter v0.0.0-20201125162808-c35f87e285f2
 	github.com/spf13/viper v1.7.1

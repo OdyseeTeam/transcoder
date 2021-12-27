@@ -3,7 +3,6 @@ package video
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/lbryio/transcoder/db"
@@ -12,7 +11,7 @@ import (
 )
 
 type RemoteDriver interface {
-	Put(stream *storage.LocalStream) (*storage.RemoteStream, error)
+	Put(stream *storage.LocalStream, _ bool) (*storage.RemoteStream, error)
 	Delete(sdHash string) error
 	GetFragment(sdHash, name string) (storage.StreamFragment, error)
 }
@@ -117,7 +116,6 @@ func (q Library) AddRemoteStream(rs storage.RemoteStream) (*Video, error) {
 		Checksum:   rs.Checksum(),
 		Type:       formats.TypeHLS,
 	}
-	fmt.Printf("BZZZZZT %+v\n", p)
 	return q.queries.Add(context.Background(), p)
 }
 

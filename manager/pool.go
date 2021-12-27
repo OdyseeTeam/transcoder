@@ -41,7 +41,7 @@ func (p *Pool) AddQueue(name string, minHits uint, k Gatekeeper) {
 	p.levels = append(p.levels, &level{name: name, queue: mfr.NewQueue(), keeper: k, minHits: minHits})
 }
 
-// Admit attempts to put item into the first queue that would accept it.
+// Admit retries to put item into the first queue that would accept it.
 // Queues are traversed in the same order they are added.
 // If gatekeeper returns an error, admission stops and the error is returned to the caller.
 func (p *Pool) Admit(key string, value interface{}) error {

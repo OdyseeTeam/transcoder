@@ -99,22 +99,25 @@ type S3Driver struct {
 	session *session.Session
 }
 
-func (s *S3Driver) Put(ls *LocalStream) (*RemoteStream, error) {
-	return s.PutWithContext(aws.BackgroundContext(), ls)
+func (s *S3Driver) Put(ls *LocalStream, overwrite bool) (*RemoteStream, error) {
+	return s.PutWithContext(aws.BackgroundContext(), ls, overwrite)
 }
 
-func (s *S3Driver) PutWithContext(ctx context.Context, ls *LocalStream) (*RemoteStream, error) {
-	dl := s3manager.NewDownloader(s.session)
-	_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s3Key(ls.SDHash(), MasterPlaylistName)),
-	})
-	if err == nil {
-		return &RemoteStream{URL: ls.SDHash(), Manifest: ls.Manifest}, ErrStreamExists
+func (s *S3Driver) PutWithContext(ctx context.Context, ls *LocalStream, overwrite bool) (*RemoteStream, error) {
+	if !overwrite {
+		dl := s3manager.NewDownloader(s.session)
+		_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
+			Bucket: aws.String(s.bucket),
+			Key:    aws.String(s3Key(ls.SDHash(), MasterPlaylistName)),
+		})
+		if err == nil {
+			return &RemoteStream{URL: ls.SDHash(), Manifest: ls.Manifest}, ErrStreamExists
+		}
+
 	}
 
 	ul := s3manager.NewUploader(s.session)
-	err = ls.Walk(
+	err := ls.Walk(
 		func(fi fs.FileInfo, fullPath, name string) error {
 			var ctype string
 			f, err := os.Open(fullPath)

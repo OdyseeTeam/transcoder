@@ -121,9 +121,9 @@ func serve() {
 	lib := video.NewLibrary(libConfig)
 
 	var s3StopChan chan<- interface{}
-	if s3cfg["bucket"] != "" {
-		s3StopChan = video.SpawnS3uploader(lib)
-	}
+	// if s3cfg["bucket"] != "" {
+	// 	s3StopChan = video.SpawnS3uploader(lib)
+	// }
 
 	manager.LoadConfiguredChannels(
 		cfg.GetStringSlice("prioritychannels"),
@@ -137,30 +137,19 @@ func serve() {
 	minHits, _ := strconv.Atoi(adQueue["minhits"])
 	mgr := manager.NewManager(lib, minHits)
 
+	qCfg := cfg.GetStringMapString("queue")
+	qDB, err := queue.ConnectDB(queue.DefaultDBConfig().DSN(qCfg["dsn"]))
+	if err != nil {
+		log.Fatal("queue db initialization failed", err)
+	}
+
 	serverConfig := tower.DefaultServerConfig().
 		Logger(zapadapter.NewKV(logger)).
 		HttpServer(CLI.Serve.HttpBind, CLI.Serve.HttpURL).
 		VideoManager(mgr).
 		WorkDir(towerCfg["workdir"]).
-		RMQAddr(CLI.Serve.RMQAddr)
-
-	if CLI.Serve.StateFile != "" {
-		if _, err := os.Stat(CLI.Serve.StateFile); err != nil {
-			log.Info("creating new state file", "path", CLI.Serve.StateFile)
-			state, err := tower.NewState(CLI.Serve.StateFile, false)
-			if err != nil {
-				log.Fatal("cannot create tower state file", err)
-			}
-			serverConfig = serverConfig.State(state)
-		} else {
-			log.Info("loading state file", "path", CLI.Serve.StateFile)
-			state, err := tower.NewState(CLI.Serve.StateFile, true)
-			if err != nil {
-				log.Fatal("cannot load tower state file", err)
-			}
-			serverConfig = serverConfig.State(state)
-		}
-	}
+		RMQAddr(CLI.Serve.RMQAddr).
+		DB(qDB)
 
 	if CLI.Serve.DevMode {
 		serverConfig = serverConfig.DevMode()

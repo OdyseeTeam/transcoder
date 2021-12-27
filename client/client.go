@@ -222,7 +222,7 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.Respon
 		ll.Debugf("error getting fragment: %v, retrying", err)
 	}
 	if err != nil {
-		msg := fmt.Errorf("failed to serve fragment after %v attempts: %w", fragmentRetrievalRetries, err)
+		msg := fmt.Errorf("failed to serve fragment after %v retries: %w", fragmentRetrievalRetries, err)
 		ll.Info(msg)
 		return err
 	}

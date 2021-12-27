@@ -10,15 +10,15 @@ import (
 
 const createTask = `-- name: CreateTask :one
 INSERT INTO tasks (
-  status, ref, worker, url, sd_hash
+  status, uuid, worker, url, sd_hash
 ) VALUES (
   'new', $1, $2, $3, $4
 )
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
 `
 
 type CreateTaskParams struct {
-	Ref    string
+	Uuid   string
 	Worker string
 	URL    string
 	SDHash string
@@ -26,7 +26,7 @@ type CreateTaskParams struct {
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
 	row := q.db.QueryRowContext(ctx, createTask,
-		arg.Ref,
+		arg.Uuid,
 		arg.Worker,
 		arg.URL,
 		arg.SDHash,
@@ -36,65 +36,126 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,
 		&i.Result,
 	)
 	return i, err
+}
+
+const getActiveTasks = `-- name: GetActiveTasks :many
+SELECT id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result FROM tasks
+WHERE status IN ('new', 'processing', 'retrying')
+`
+
+func (q *Queries) GetActiveTasks(ctx context.Context) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getActiveTasks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Uuid,
+			&i.Status,
+			&i.Retries,
+			&i.Stage,
+			&i.StageProgress,
+			&i.Error,
+			&i.Fatal,
+			&i.Worker,
+			&i.URL,
+			&i.SDHash,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRetriableTasks = `-- name: GetRetriableTasks :many
+SELECT id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result FROM tasks
+WHERE status = 'errored' AND (fatal IS FALSE OR retries < 10)
+`
+
+func (q *Queries) GetRetriableTasks(ctx context.Context) ([]Task, error) {
+	rows, err := q.db.QueryContext(ctx, getRetriableTasks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Task
+	for rows.Next() {
+		var i Task
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Uuid,
+			&i.Status,
+			&i.Retries,
+			&i.Stage,
+			&i.StageProgress,
+			&i.Error,
+			&i.Fatal,
+			&i.Worker,
+			&i.URL,
+			&i.SDHash,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result FROM tasks
-WHERE id = $1 AND STATUS IN ('new', 'active') LIMIT 1
+SELECT id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result FROM tasks
+WHERE uuid = $1 LIMIT 1
 `
 
-func (q *Queries) GetTask(ctx context.Context, id int32) (Task, error) {
-	row := q.db.QueryRowContext(ctx, getTask, id)
+func (q *Queries) GetTask(ctx context.Context, uuid string) (Task, error) {
+	row := q.db.QueryRowContext(ctx, getTask, uuid)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
-		&i.Worker,
-		&i.URL,
-		&i.SDHash,
-		&i.Result,
-	)
-	return i, err
-}
-
-const incAttempts = `-- name: IncAttempts :one
-UPDATE tasks
-SET attempts = attempts + 1 WHERE ref = $1
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
-`
-
-func (q *Queries) IncAttempts(ctx context.Context, ref string) (Task, error) {
-	row := q.db.QueryRowContext(ctx, incAttempts, ref)
-	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Ref,
-		&i.Status,
-		&i.Attempts,
-		&i.Stage,
-		&i.StageProgress,
-		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,
@@ -105,28 +166,57 @@ func (q *Queries) IncAttempts(ctx context.Context, ref string) (Task, error) {
 
 const markDone = `-- name: MarkDone :one
 UPDATE tasks
-SET status = 'done', stage = 'done', result = $2 WHERE ref = $1
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
+SET status = 'done', stage = 'done', result = $2, updated_at = NOW() WHERE uuid = $1
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
 `
 
 type MarkDoneParams struct {
-	Ref    string
+	Uuid   string
 	Result sql.NullString
 }
 
 func (q *Queries) MarkDone(ctx context.Context, arg MarkDoneParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, markDone, arg.Ref, arg.Result)
+	row := q.db.QueryRowContext(ctx, markDone, arg.Uuid, arg.Result)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
+		&i.Fatal,
+		&i.Worker,
+		&i.URL,
+		&i.SDHash,
+		&i.Result,
+	)
+	return i, err
+}
+
+const markRetrying = `-- name: MarkRetrying :one
+UPDATE tasks
+SET status = 'retrying', retries = retries + 1, updated_at = NOW() WHERE uuid = $1
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
+`
+
+func (q *Queries) MarkRetrying(ctx context.Context, uuid string) (Task, error) {
+	row := q.db.QueryRowContext(ctx, markRetrying, uuid)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Uuid,
+		&i.Status,
+		&i.Retries,
+		&i.Stage,
+		&i.StageProgress,
+		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,
@@ -137,28 +227,30 @@ func (q *Queries) MarkDone(ctx context.Context, arg MarkDoneParams) (Task, error
 
 const setError = `-- name: SetError :one
 UPDATE tasks
-SET status = 'error', error = $2 WHERE ref = $1
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
+SET status = 'errored', error = $2, fatal = $3, updated_at = NOW() WHERE uuid = $1
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
 `
 
 type SetErrorParams struct {
-	Ref   string
+	Uuid  string
 	Error sql.NullString
+	Fatal sql.NullBool
 }
 
 func (q *Queries) SetError(ctx context.Context, arg SetErrorParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, setError, arg.Ref, arg.Error)
+	row := q.db.QueryRowContext(ctx, setError, arg.Uuid, arg.Error, arg.Fatal)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,
@@ -169,29 +261,30 @@ func (q *Queries) SetError(ctx context.Context, arg SetErrorParams) (Task, error
 
 const setStageProgress = `-- name: SetStageProgress :one
 UPDATE tasks
-SET stage = $2, stage_progress = $3 WHERE ref = $1
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
+SET stage = $2, stage_progress = $3, status = 'processing', updated_at = NOW() WHERE uuid = $1 AND status IN ('new', 'processing', 'retrying')
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
 `
 
 type SetStageProgressParams struct {
-	Ref           string
+	Uuid          string
 	Stage         sql.NullString
 	StageProgress sql.NullInt32
 }
 
 func (q *Queries) SetStageProgress(ctx context.Context, arg SetStageProgressParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, setStageProgress, arg.Ref, arg.Stage, arg.StageProgress)
+	row := q.db.QueryRowContext(ctx, setStageProgress, arg.Uuid, arg.Stage, arg.StageProgress)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,
@@ -202,28 +295,29 @@ func (q *Queries) SetStageProgress(ctx context.Context, arg SetStageProgressPara
 
 const setStatus = `-- name: SetStatus :one
 UPDATE tasks
-SET status = $2 WHERE ref = $1
-RETURNING id, created_at, updated_at, ref, status, attempts, stage, stage_progress, error, worker, url, sd_hash, result
+SET status = $2 WHERE uuid = $1
+RETURNING id, created_at, updated_at, uuid, status, retries, stage, stage_progress, error, fatal, worker, url, sd_hash, result
 `
 
 type SetStatusParams struct {
-	Ref    string
-	Status string
+	Uuid   string
+	Status Status
 }
 
 func (q *Queries) SetStatus(ctx context.Context, arg SetStatusParams) (Task, error) {
-	row := q.db.QueryRowContext(ctx, setStatus, arg.Ref, arg.Status)
+	row := q.db.QueryRowContext(ctx, setStatus, arg.Uuid, arg.Status)
 	var i Task
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Ref,
+		&i.Uuid,
 		&i.Status,
-		&i.Attempts,
+		&i.Retries,
 		&i.Stage,
 		&i.StageProgress,
 		&i.Error,
+		&i.Fatal,
 		&i.Worker,
 		&i.URL,
 		&i.SDHash,

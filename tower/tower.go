@@ -1,11 +1,9 @@
 package tower
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"net"
 	"path"
 	"strings"
 	"sync"
@@ -20,6 +18,7 @@ import (
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/pprofhandler"
 )
 
 const (
@@ -78,7 +77,6 @@ func DefaultServerConfig() *ServerConfig {
 		workDir:        ".",
 		httpServerBind: ":18080",
 		log:            logging.NoopKVLogger{},
-		state:          &State{lock: sync.RWMutex{}, Requests: map[string]*RunningRequest{}},
 		timings:        defaultTimings(),
 	}
 }
@@ -137,25 +135,25 @@ func (c *ServerConfig) DevMode() *ServerConfig {
 func NewServer(config *ServerConfig) (*Server, error) {
 	var err error
 
-	if config.db == nil {
-		return nil, errors.New("SQL DB not set")
-	}
 	s := Server{
 		ServerConfig: config,
 		registry:     &workerRegistry{workers: map[string]*worker{}},
 		stopChan:     make(chan struct{}),
 	}
 
+	if config.db == nil {
+		return nil, errors.New("SQL DB not set")
+	}
+
 	s.workDirUploads = path.Join(s.workDir, "uploads")
-	rpc, err := newrpc(s.rmqAddr, s.log)
+	tl, err := newTaskList(queue.New(config.db))
 	if err != nil {
 		return nil, err
 	}
-	s.rpc = newTowerRPC(rpc, newTaskList(queue.New(config.db)))
+	s.rpc, err = newTowerRPC(s.rmqAddr, tl, s.log)
 	if err != nil {
 		return nil, err
 	}
-	s.state.StartDump()
 
 	return &s, nil
 }
@@ -186,7 +184,7 @@ func (s *Server) StopAll() {
 }
 
 func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingRequest) error {
-	activeTasks, err := s.rpc.startConsumingWorkRequests()
+	activeTaskChan, err := s.rpc.startConsumingWorkRequests()
 	if err != nil {
 		return err
 	}
@@ -194,21 +192,21 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 	go func() {
 		for {
 			select {
-			case at := <-activeTasks:
-				go func() {
-					tr := <-requests
-					mtt := MsgTranscodingTask{
-						Ref:    tr.SDHash,
-						URL:    tr.URI,
-						SDHash: tr.SDHash,
-					}
-					// Sending actual transcoding task to worker
-					at.SendPayload(mtt)
-					// Timing out a task means it will be shipped back to the queue again
-					ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-					s.manageTask(ctx, at, tr)
-					defer cancel()
-				}()
+			case task := <-activeTaskChan:
+				if task.restored {
+				} else if task.exPayload != nil {
+					task.SendPayload(task.exPayload)
+				} else {
+					trReq := <-requests
+					task.SendPayload(&MsgTranscodingTask{
+						URL:    trReq.URI,
+						SDHash: trReq.SDHash,
+					})
+				}
+				// Timing out a task means it will be shipped back to the queue again
+				// ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+				// defer cancel()
+				go s.manageTask(task)
 			case <-s.stopChan:
 				return
 			}
@@ -218,49 +216,41 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 	return nil
 }
 
-func (s *Server) manageTask(ctx context.Context, at *activeTask, tr *manager.TranscodingRequest) {
+// func (s *Server) manageTask(ctx context.Context, at *activeTask) {
+func (s *Server) manageTask(at *activeTask) {
+	labels := prometheus.Labels{metrics.LabelWorkerName: at.workerID}
+	metrics.TranscodingRequestsRunning.With(labels).Inc()
+	defer metrics.TranscodingRequestsRunning.With(labels).Dec()
 	for {
 		select {
 		case p := <-at.progress:
 			s.log.Info("progress received", "progress", p.Percent, "stage", p.Stage)
-		case <-ctx.Done():
-			s.log.Error("active task timed out")
-			if tr != nil {
-				tr.Release()
-			}
+		// case <-ctx.Done():
+		// 	s.log.Error("active task timed out")
+		// 	return
+		case e := <-at.errors:
+			s.log.Error("task errored", "task_id", at.id, "worker", at.workerID, "error", e)
+			metrics.TranscodingRequestsErrors.With(labels).Inc()
 			return
 		case d := <-at.done:
 			m := d.RemoteStream.Manifest
 			if m == nil {
 				s.log.Error("remote stream missing manifest", "task", fmt.Sprintf("%+v", at))
-				metrics.TranscodingRequestsErrors.With(prometheus.Labels{
-					metrics.LabelWorkerName: at.workerID,
-					metrics.LabelStage:      "add",
-				}).Inc()
+				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
 			metrics.TranscodingRequestsRunning.With(prometheus.Labels{metrics.LabelWorkerName: at.workerID}).Dec()
 			if _, err := s.videoManager.Library().AddRemoteStream(*d.RemoteStream); err != nil {
 				s.log.Error("error adding remote stream", "err", err)
-				metrics.TranscodingRequestsErrors.With(prometheus.Labels{
-					metrics.LabelWorkerName: at.workerID,
-					metrics.LabelStage:      "add",
-				}).Inc()
-				if tr != nil {
-					tr.Reject()
-				}
+				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
 			s.log.Info("added remote stream", "url", d.RemoteStream.URL)
-			if tr != nil {
-				tr.Complete()
-			}
-			metrics.TranscodingRequestsDone.With(prometheus.Labels{metrics.LabelWorkerName: at.workerID}).Inc()
+			metrics.TranscodingRequestsDone.With(labels).Inc()
 			return
 		case <-s.stopChan:
 			return
 		}
-
 	}
 }
 
@@ -270,25 +260,29 @@ func (s *Server) startHttpServer() error {
 	metrics.RegisterMetrics()
 	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
 
-	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
-	l, err := net.Listen("tcp", s.httpServerBind)
-	if err != nil {
-		return err
-	}
+	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)
 
+	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
 	// TODO: Cleanup middleware attachment.
 	httpServer := &fasthttp.Server{
-		Handler: manager.MetricsMiddleware(manager.CORSMiddleware(router.Handler)),
-		Name:    "tower",
+		Handler:          manager.MetricsMiddleware(manager.CORSMiddleware(router.Handler)),
+		Name:             "tower",
+		DisableKeepalive: true,
 	}
 	// s.upAddr = l.Addr().String()
 
 	s.httpServer = httpServer
 	go func() {
-		go httpServer.Serve(l)
-		<-s.stopChan
+		err := httpServer.ListenAndServe(s.httpServerBind)
+		if err != nil {
+			s.log.Error("http server error", "err", err)
+			close(s.stopChan)
+		}
+	}()
+	go func() {
 		s.log.Info("shutting down tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
 		httpServer.Shutdown()
+		<-s.stopChan
 	}()
 
 	return nil

@@ -9,7 +9,6 @@ services:
       - "15672:15672"
   db:
     image: postgres:14
-    restart: always
     container_name: db
     ports:
       - "5432:5432"
@@ -21,6 +20,17 @@ services:
       - -clogging_collector=on
       - -clog_statement=all
       - -clog_destination=stderr
+  s3:
+    image: minio/minio
+    container_name: s3
+    ports:
+      - "9000:9000"
+    volumes:
+      - s3-data:/data
+    environment:
+      MINIO_ACCESS_KEY: ody
+      MINIO_SECRET_KEY: odyseetes3
+    command: server --address 0.0.0.0:9000 /data
   worker:
     image: odyseeteam/transcoder-worker:dev
     container_name: worker
@@ -32,9 +42,12 @@ services:
       - --debug
       - --workers=1
       - --threads=4
+      - --worker-id=worker1
     # build:
     #   context: .
     #   dockerfile: Dockerfile-worker
+    volumes:
+      - ${PWD}/worker.ex.yml:/app/worker.yml
   worker2:
     image: odyseeteam/transcoder-worker:dev
     container_name: worker2
@@ -46,6 +59,9 @@ services:
       - --debug
       - --workers=1
       - --threads=4
+      - --worker-id=worker2
+    volumes:
+      - ${PWD}/worker.ex.yml:/app/worker.yml
     # build:
     #   context: .
     #   dockerfile: Dockerfile-worker
@@ -62,6 +78,7 @@ services:
       - --state-file=/storage/state.json
     volumes:
       - tower-data:/storage
+      - ${PWD}/tower.ex.yml:/app/tower.yml
     ports:
       - "8080:8080"
     # build:
@@ -105,3 +122,4 @@ services:
 volumes:
   tower-data: {}
   db-data: {}
+  s3-data: {}

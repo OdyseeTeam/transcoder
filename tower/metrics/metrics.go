@@ -53,7 +53,7 @@ var (
 	}, []string{LabelWorkerName})
 	TranscodingRequestsErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoding_requests_errors",
-	}, []string{LabelWorkerName, LabelStage})
+	}, []string{LabelWorkerName})
 )
 
 func RegisterMetrics() {

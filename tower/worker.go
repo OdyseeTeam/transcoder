@@ -53,7 +53,9 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if config.s3 == nil {
+		return nil, errors.New("s3 configuration not set")
+	}
 	w := Worker{
 		WorkerConfig:        config,
 		stopChan:            make(chan struct{}),
@@ -133,7 +135,7 @@ func (c *Worker) handleRequest(wt workerTask) {
 	// 		err := <-tc.Errc
 	// 		if err != nil {
 	// 			log.Error("processor failed", "err", err)
-	// 			wt.errChan <- err
+	// 			wt.errors <- err
 	// 		} else {
 	// 			wt.done
 	// 		}

@@ -77,7 +77,10 @@ func AttachVideoHandler(r *router.Router, prefix, videoPath string, manager *Vid
 	g.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
 	g.GET("/api/v2/video/{url}", h.handleVideo)
 	g.GET("/api/v3/video", h.handleVideo) // accepts URL as a query param
-	g.ServeFiles(path.Join(httpVideoPath, "{filepath:*}"), videoPath)
+	g.GET(httpVideoPath+"/{filepath:*}", func(ctx *fasthttp.RequestCtx) {
+		p, _ := ctx.UserValue("filepath").(string)
+		ctx.Redirect("remote://"+p, http.StatusSeeOther)
+	})
 
 	metrics.RegisterMetrics()
 	dispatcher.RegisterMetrics()

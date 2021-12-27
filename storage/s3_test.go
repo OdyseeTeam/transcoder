@@ -55,7 +55,7 @@ func (s *s3suite) TestPutDelete() {
 	err = ls.FillManifest()
 	s.Require().NoError(err)
 
-	rs, err := s3drv.Put(ls)
+	rs, err := s3drv.Put(ls, false)
 	s.Require().NoError(err)
 	s.Equal(ls.SDHash(), rs.URL)
 
@@ -67,9 +67,13 @@ func (s *s3suite) TestPutDelete() {
 	s.Require().NoError(err)
 	s.Require().NotNil(mf)
 
-	rs2, err := s3drv.Put(ls)
+	rs2, err := s3drv.Put(ls, false)
 	s.Equal(rs2.URL, rs.URL)
-	s.Equal(err, ErrStreamExists)
+	s.Equal(ErrStreamExists, err)
+
+	rs3, err := s3drv.Put(ls, true)
+	s.Equal(rs3.URL, rs.URL)
+	s.NoError(err)
 
 	err = s3drv.Delete(ls.SDHash())
 	s.Require().NoError(err)

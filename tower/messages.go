@@ -12,7 +12,6 @@ type Payload struct {
 
 type MsgTranscodingTask struct {
 	TaskID string `json:"task_id"`
-	Ref    string `json:"ref"`
 	URL    string `json:"url"`
 	SDHash string `json:"sd_hash"`
 }
@@ -24,6 +23,11 @@ type taskProgress struct {
 
 type taskResult struct {
 	remoteStream *storage.RemoteStream
+}
+
+type taskError struct {
+	err   error
+	fatal bool
 }
 
 type mPipelineError struct {
@@ -49,6 +53,7 @@ type MsgWorkerProgress struct {
 
 type MsgWorkerError struct {
 	Error     string    `json:"error"`
+	Fatal     bool      `json:"fatal"`
 	Timestamp time.Time `json:"timestamp"`
 }
 

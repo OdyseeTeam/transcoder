@@ -2,7 +2,6 @@ package tower
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path"
 
@@ -41,19 +40,6 @@ type pipeline struct {
 	encoder  encoder.Encoder
 	s3       *storage.S3Driver
 	log      logging.KVLogger
-}
-
-type task struct {
-	url, sdHash, callbackURL, token string
-	paths                           []string
-}
-
-type taskControl struct {
-	Progress chan taskProgress
-	TaskDone chan struct{}
-	Errc     chan error
-	Stop     chan struct{}
-	Next     chan taskControl
 }
 
 type streamUploadResult struct {
@@ -107,7 +93,7 @@ func (p *pipeline) UploadLeftovers(stop chan struct{}) (<-chan streamUploadResul
 				results <- res
 				return
 			}
-			_, err = p.s3.Put(ls)
+			_, err = p.s3.Put(ls, true)
 			if err != nil {
 				res.err = errors.Wrap(err, "cannot upload stream")
 				results <- res
@@ -130,7 +116,7 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
-				task.errChan <- err
+				task.errors <- taskError{err: err, fatal: false}
 				return
 			}
 			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
@@ -143,8 +129,8 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			task.progress <- taskProgress{Stage: StageEncoding}
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
-				log.Error("encoder failed", err)
-				task.errChan <- err
+				log.Error("encoder failed", "err", err)
+				task.errors <- taskError{err: errors.Wrap(err, "encoder failed"), fatal: true}
 				return
 			}
 
@@ -159,51 +145,28 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			}
 			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {
-				log.Error("could not initialize stream object", "err", err)
-				task.errChan <- err
+				log.Error("stream object initialization failed", "err", err)
+				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
 				return
-			} else {
-				ls.FillManifest()
-				log.Info("transcoding done", "stream", ls)
 			}
+			ls.FillManifest()
+			log.Info("encoding done", "stream", ls)
+			defer os.RemoveAll(ls.Path)
 		}
 
 		{
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
-			rs, err := c.s3.PutWithContext(context.Background(), ls)
+			rs, err := c.s3.PutWithContext(context.Background(), ls, true)
 			if err != nil {
-				task.errChan <- err
+				e := taskError{err: errors.Wrap(err, "stream upload failed")}
+				if errors.Is(err, storage.ErrStreamExists) {
+					e.fatal = true
+				}
+				task.errors <- e
 				return
 			}
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
 			task.result <- taskResult{remoteStream: rs}
 		}
 	}()
-}
-
-func (c taskControl) sendStatus(p taskProgress) {
-	for {
-		select {
-		case <-c.Stop:
-			return
-		case <-c.TaskDone:
-			return
-		case c.Progress <- p:
-			return
-		}
-	}
-}
-
-func (t *task) addPath(p string) error {
-	if !path.IsAbs(p) {
-		return fmt.Errorf("path is not absolute: %v", p)
-	}
-	t.paths = append(t.paths, p)
-	return nil
-}
-
-func (t *task) cleanup() {
-	for _, p := range t.paths {
-		os.RemoveAll(p)
-	}
 }

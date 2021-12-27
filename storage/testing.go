@@ -40,7 +40,7 @@ func (s *DummyStorage) GetFragment(sdHash, name string) (StreamFragment, error) 
 	return nil, nil
 }
 
-func (s *DummyStorage) Put(ls *LocalStream) (*RemoteStream, error) {
+func (s *DummyStorage) Put(ls *LocalStream, _ bool) (*RemoteStream, error) {
 	s.Ops = append(s.Ops, StorageOp{OpGetFragment, ls.SDHash()})
 	return &RemoteStream{URL: "http://dummy/url"}, nil
 }

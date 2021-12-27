@@ -28,7 +28,7 @@ func (u s3uploader) Work(t dispatcher.Task) error {
 		return err
 	}
 
-	rs, err := u.lib.remote.Put(ls)
+	rs, err := u.lib.remote.Put(ls, true)
 	if err != nil {
 		if err != storage.ErrStreamExists {
 			u.lib.UpdateRemotePath(v.SDHash, v.RemotePath)

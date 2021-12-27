@@ -34,13 +34,12 @@ func TestTowerSuite(t *testing.T) {
 }
 
 func (s *towerSuite) SetupTest() {
-	rpc, err := newrpc("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
+	db, dbCleanup, err := queue.CreateTestDB()
 	s.Require().NoError(err)
-	db, clup, err := queue.CreateTestDB()
-	s.Require().NoError(err)
-	s.tower = newTowerRPC(rpc, newTaskList(queue.New(db)))
 	s.db = db
-	s.dbCleanup = clup
+	s.dbCleanup = dbCleanup
+	s.Require().NoError(err)
+	s.tower = CreateTestTowerRPC(s.T(), db)
 
 	s.Require().NoError(s.tower.deleteQueues())
 	s.Require().NoError(s.tower.declareQueues())

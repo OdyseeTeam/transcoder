@@ -70,7 +70,7 @@ loop:
 		case r = <-wt.result:
 			s.Require().NotNil(r.remoteStream)
 			break loop
-		case err := <-wt.errChan:
+		case err := <-wt.errors:
 			s.FailNow("unexpected error", err)
 			break loop
 		}
@@ -101,8 +101,8 @@ loop:
 		case <-wt.result:
 			s.FailNow("did not expect this to succeed")
 			break loop
-		case err := <-wt.errChan:
-			s.Require().EqualError(err, "could not resolve stream URI")
+		case e := <-wt.errors:
+			s.Require().EqualError(e.err, "could not resolve stream URI")
 			break loop
 		}
 	}
