@@ -18,7 +18,7 @@ type activeTask struct {
 	payload   chan MsgTranscodingTask
 	progress  chan MsgWorkerProgress
 	errors    chan MsgWorkerError
-	done      chan MsgWorkerResult
+	success   chan MsgWorkerSuccess
 	tl        *taskList
 }
 
@@ -45,19 +45,26 @@ func newTaskList(q *queue.Queries) (*taskList, error) {
 	return tl, nil
 }
 
-func (t *taskList) restore(taskChan chan<- *activeTask) error {
+func (t *taskList) restore() (<-chan *activeTask, error) {
+	restoreChan := make(chan *activeTask)
 	dbt, err := t.q.GetActiveTasks(context.Background())
 	if err != nil && err != sql.ErrNoRows {
-		return err
+		return nil, err
+	}
+	restored := []*activeTask{}
+	for _, dt := range dbt {
+		at := t.newActiveTask(dt.Worker, dt.ULID, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
+		at.restored = true
+		at.tl.insert(at)
+		restored = append(restored, at)
 	}
 	go func() {
-		for _, dt := range dbt {
-			at := t.newActiveTask(dt.Worker, dt.Uuid, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
-			at.restored = true
-			taskChan <- at
+		for _, at := range restored {
+			restoreChan <- at
 		}
+		close(restoreChan)
 	}()
-	return nil
+	return restoreChan, nil
 }
 
 func (t *taskList) loadRetriable(taskChan chan<- *activeTask) error {
@@ -66,34 +73,44 @@ func (t *taskList) loadRetriable(taskChan chan<- *activeTask) error {
 		return err
 	}
 	for _, dt := range dbTasks {
-		at := t.newActiveTask(dt.Worker, dt.Uuid, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
+		at := t.newActiveTask(dt.Worker, dt.ULID, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
 		at.retries = dt.Retries.Int32 + 1
+		at.tl.insert(at)
 		taskChan <- at
 	}
 	for _, dt := range dbTasks {
-		t.q.MarkRetrying(context.Background(), dt.Uuid)
+		t.q.MarkRetrying(context.Background(), dt.ULID)
 	}
 	return nil
 }
 
-func (t *taskList) newActiveTask(wid, uuid string, exPayload *MsgTranscodingTask) *activeTask {
-	if uuid == "" {
-		uuid, _ = generateUUID()
+func (t *taskList) newEmptyTask(wid, ulid string) *activeTask {
+	at := &activeTask{
+		workerID: wid,
+		id:       ulid,
+		payload:  make(chan MsgTranscodingTask),
+		progress: make(chan MsgWorkerProgress),
+		errors:   make(chan MsgWorkerError),
+		success:  make(chan MsgWorkerSuccess),
+		tl:       t,
 	}
+	return at
+}
+
+func (t *taskList) newActiveTask(wid, ulid string, exPayload *MsgTranscodingTask) *activeTask {
 	at := &activeTask{
 		workerID:  wid,
-		id:        uuid,
+		id:        ulid,
 		exPayload: exPayload,
 		payload:   make(chan MsgTranscodingTask),
 		progress:  make(chan MsgWorkerProgress),
 		errors:    make(chan MsgWorkerError),
-		done:      make(chan MsgWorkerResult),
+		success:   make(chan MsgWorkerSuccess),
 		tl:        t,
 	}
 	if exPayload != nil {
 		exPayload.TaskID = at.id
 	}
-	t.insert(at)
 	return at
 }
 
@@ -109,29 +126,10 @@ func (t *taskList) delete(id string) {
 	t.Unlock()
 }
 
-func (t *taskList) commit(id string, tt MsgTranscodingTask) {
-	t.RLock()
-	at := t.active[id]
-	t.RUnlock()
-	t.q.CreateTask(context.Background(), queue.CreateTaskParams{
-		Uuid:   at.id,
-		Worker: at.workerID,
-		URL:    tt.URL,
-		SDHash: tt.SDHash,
-	})
-}
-
-func (t *taskList) getActive(ref string) (*activeTask, bool) {
+func (t *taskList) get(ref string) (*activeTask, bool) {
 	t.RLock()
 	defer t.RUnlock()
 	at, ok := t.active[ref]
-	// if !ok {
-	// 	dbt, err := t.q.GetTask(context.Background(), ref)
-	// 	if err != nil {
-	// 		return nil, false
-	// 	}
-	// 	return t.newActiveTask(dbt.Worker, dbt.Uuid), true
-	// }
 	return at, ok
 }
 
@@ -141,29 +139,33 @@ func (at *activeTask) SendPayload(mtt *MsgTranscodingTask) {
 }
 
 func (at *activeTask) RecordProgress(m MsgWorkerProgress) (queue.Task, error) {
-	at.progress <- m
 	t, err := at.tl.q.SetStageProgress(context.Background(), queue.SetStageProgressParams{
-		Uuid:          at.id,
+		ULID:          at.id,
 		Stage:         sql.NullString{String: string(m.Stage), Valid: true},
 		StageProgress: sql.NullInt32{Int32: int32(math.Ceil(float64(m.Percent))), Valid: true},
 	})
+	at.progress <- m
+	// select {
+	// case at.progress <- m:
+	// default:
+	// }
 	return t, err
 }
 
 func (at *activeTask) SetError(m MsgWorkerError) (queue.Task, error) {
 	at.errors <- m
 	t, err := at.tl.q.SetError(context.Background(), queue.SetErrorParams{
-		Uuid:  at.id,
+		ULID:  at.id,
 		Error: sql.NullString{String: m.Error, Valid: true},
 		Fatal: sql.NullBool{Bool: m.Fatal, Valid: true},
 	})
 	return t, err
 }
 
-func (at *activeTask) MarkDone(m MsgWorkerResult) (queue.Task, error) {
-	at.done <- m
+func (at *activeTask) MarkDone(m MsgWorkerSuccess) (queue.Task, error) {
+	at.success <- m
 	return at.tl.q.MarkDone(context.Background(), queue.MarkDoneParams{
-		Uuid:   at.id,
+		ULID:   at.id,
 		Result: sql.NullString{String: m.RemoteStream.URL, Valid: true},
 	})
 }

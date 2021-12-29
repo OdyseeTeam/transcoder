@@ -34,7 +34,7 @@ type Task struct {
 	ID            int32
 	CreatedAt     time.Time
 	UpdatedAt     sql.NullTime
-	Uuid          string
+	ULID          string
 	Status        Status
 	Retries       sql.NullInt32
 	Stage         sql.NullString

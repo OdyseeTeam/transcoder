@@ -9,18 +9,19 @@ const (
 	responsesConsumerName = "response-consumer"
 	responsesQueueName    = "responses"
 	requestsQueueName     = "requests"
-	workerStatusQueueName = "worker-status"
-	workRequestsQueueName = "work-requests"
-	taskProgressQueueName = "task-progress"
-	taskErrorsQueueName   = "task-errors"
-	taskDoneQueueName     = "task-done"
-
-	replyToQueueName = "amq.rabbitmq.reply-to"
+	workerHandshakeQueue  = "worker-handshake"
+	workRequestsQueue     = "work-requests"
+	taskStatusQueue       = "task-status"
 
 	workersExchange = "workers"
 
-	headerTaskID   = "task-id"
-	headerWorkerID = "worker-id"
+	headerTaskID      = "task-id"
+	headerWorkerID    = "worker-id"
+	headerMessageType = "message-type"
+
+	mTypeProgress = "progress"
+	mTypeSuccess  = "success"
+	mTypeError    = "error"
 
 	defaultHeartbeatInterval = 30 * time.Second
 	maxFailedAttempts        = 5

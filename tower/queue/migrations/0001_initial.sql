@@ -13,7 +13,7 @@ CREATE TABLE tasks (
     created_at timestamp NOT NULL DEFAULT NOW(),
     updated_at timestamp,
 
-    uuid text NOT NULL CHECK (uuid <> ''),
+    ulid text NOT NULL CHECK (ulid <> ''),
     status status NOT NULL,
     retries integer DEFAULT 0,
     stage text,
@@ -26,7 +26,7 @@ CREATE TABLE tasks (
     sd_hash text NOT NULL,
     result text,
 
-    UNIQUE ("uuid")
+    UNIQUE ("ulid")
 );
 
 -- +migrate Down

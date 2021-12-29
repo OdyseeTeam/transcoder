@@ -180,7 +180,6 @@ func (s *Server) StopAll() {
 	s.rpc.consumer.StopConsuming("", false)
 	s.rpc.consumer.Disconnect()
 	s.rpc.publisher.StopPublishing()
-	s.state.StopDump()
 }
 
 func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingRequest) error {
@@ -192,21 +191,23 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 	go func() {
 		for {
 			select {
-			case task := <-activeTaskChan:
-				if task.restored {
-				} else if task.exPayload != nil {
-					task.SendPayload(task.exPayload)
+			case at := <-activeTaskChan:
+				ll := s.log.With("tid", at.id, "wid", at.workerID)
+				if at.restored {
+					ll.Info("restored task received")
 				} else {
 					trReq := <-requests
-					task.SendPayload(&MsgTranscodingTask{
+					mtt := &MsgTranscodingTask{
 						URL:    trReq.URI,
 						SDHash: trReq.SDHash,
-					})
+					}
+					ll.Info("new task received, sending payload", "payload", mtt)
+					at.SendPayload(mtt)
 				}
-				// Timing out a task means it will be shipped back to the queue again
+				// Timing out a at means it will be shipped back to the queue again
 				// ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 				// defer cancel()
-				go s.manageTask(task)
+				go s.manageTask(at)
 			case <-s.stopChan:
 				return
 			}
@@ -218,34 +219,36 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 
 // func (s *Server) manageTask(ctx context.Context, at *activeTask) {
 func (s *Server) manageTask(at *activeTask) {
+	ll := s.log.With("tid", at.id, "wid", at.workerID)
 	labels := prometheus.Labels{metrics.LabelWorkerName: at.workerID}
 	metrics.TranscodingRequestsRunning.With(labels).Inc()
 	defer metrics.TranscodingRequestsRunning.With(labels).Dec()
+	ll.Info("managing task", "restored", at.restored)
 	for {
 		select {
 		case p := <-at.progress:
-			s.log.Info("progress received", "progress", p.Percent, "stage", p.Stage)
+			ll.Info("progress received", "progress", p.Percent, "stage", p.Stage)
 		// case <-ctx.Done():
 		// 	s.log.Error("active task timed out")
 		// 	return
 		case e := <-at.errors:
-			s.log.Error("task errored", "task_id", at.id, "worker", at.workerID, "error", e)
+			ll.Error("task errored", "err", e)
 			metrics.TranscodingRequestsErrors.With(labels).Inc()
 			return
-		case d := <-at.done:
+		case d := <-at.success:
 			m := d.RemoteStream.Manifest
 			if m == nil {
-				s.log.Error("remote stream missing manifest", "task", fmt.Sprintf("%+v", at))
+				ll.Error("remote stream missing manifest", "task", fmt.Sprintf("%+v", at))
 				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
 			metrics.TranscodingRequestsRunning.With(prometheus.Labels{metrics.LabelWorkerName: at.workerID}).Dec()
 			if _, err := s.videoManager.Library().AddRemoteStream(*d.RemoteStream); err != nil {
-				s.log.Error("error adding remote stream", "err", err)
+				ll.Info("error adding remote stream", "err", err)
 				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
-			s.log.Info("added remote stream", "url", d.RemoteStream.URL)
+			ll.Info("added remote stream", "url", d.RemoteStream.URL)
 			metrics.TranscodingRequestsDone.With(labels).Inc()
 			return
 		case <-s.stopChan:
@@ -280,9 +283,9 @@ func (s *Server) startHttpServer() error {
 		}
 	}()
 	go func() {
+		<-s.stopChan
 		s.log.Info("shutting down tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
 		httpServer.Shutdown()
-		<-s.stopChan
 	}()
 
 	return nil

@@ -21,6 +21,7 @@ require (
 	github.com/lib/pq v1.10.4
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/nikooo777/lbry-blobs-downloader v1.0.8
+	github.com/oklog/ulid/v2 v2.0.2 // indirect
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0

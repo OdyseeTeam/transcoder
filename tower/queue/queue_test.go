@@ -14,13 +14,13 @@ func TestConnect(t *testing.T) {
 	defer teardown()
 	q := New(db)
 	task, err := q.CreateTask(context.Background(), CreateTaskParams{
-		Uuid:   randomdata.Alphanumeric(36),
+		ULID:   randomdata.Alphanumeric(36),
 		Worker: randomdata.Alphanumeric(12),
 		URL:    randomdata.Alphanumeric(28),
 		SDHash: randomdata.Alphanumeric(96),
 	})
 	require.NoError(t, err)
-	task2, err := q.GetTask(context.Background(), task.Uuid)
+	task2, err := q.GetTask(context.Background(), task.ULID)
 	require.NoError(t, err)
 	require.EqualValues(t, task, task2)
 }

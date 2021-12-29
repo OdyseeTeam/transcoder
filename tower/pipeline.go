@@ -2,6 +2,7 @@ package tower
 
 import (
 	"context"
+	"math"
 	"os"
 	"path"
 
@@ -126,6 +127,7 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 		}
 
 		{
+			seen := map[int]bool{}
 			task.progress <- taskProgress{Stage: StageEncoding}
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
@@ -135,7 +137,12 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			}
 
 			for p := range res.Progress {
-				task.progress <- taskProgress{Percent: float32(p.GetProgress()), Stage: StageEncoding}
+				pg := int(math.Ceil(p.GetProgress()))
+				if !seen[pg] {
+					task.progress <- taskProgress{Percent: float32(pg), Stage: StageEncoding}
+				} else {
+					seen[pg] = true
+				}
 			}
 
 			m := storage.Manifest{

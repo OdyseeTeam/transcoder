@@ -8,3 +8,4 @@ packages:
 rename:
   url: "URL"
   sd_hash: "SDHash"
+  ulid: "ULID"

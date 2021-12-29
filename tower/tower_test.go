@@ -111,7 +111,6 @@ func (s *towerSuite) TestSuccess() {
 	wrk.StartWorkers()
 
 	httpURL := fmt.Sprintf("%vapi/v2/video/%v", srv.httpServerURL, url.PathEscape(streamURL))
-	fmt.Println(httpURL)
 	resp, err := http.Get(httpURL)
 	s.Require().NoError(err)
 	s.Require().EqualValues(http.StatusAccepted, resp.StatusCode)

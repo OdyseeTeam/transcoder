@@ -32,7 +32,7 @@ services:
       MINIO_SECRET_KEY: odyseetes3
     command: server --address 0.0.0.0:9000 /data
   worker:
-    image: odyseeteam/transcoder-worker:dev
+    image: odyseeteam/transcoder-worker:dev3
     container_name: worker
     command:
       - ./worker
@@ -49,7 +49,7 @@ services:
     volumes:
       - ${PWD}/worker.ex.yml:/app/worker.yml
   worker2:
-    image: odyseeteam/transcoder-worker:dev
+    image: odyseeteam/transcoder-worker:dev3
     container_name: worker2
     command:
       - ./worker

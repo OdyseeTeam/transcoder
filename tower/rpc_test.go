@@ -47,6 +47,16 @@ func (s *rpcSuite) TearDownTest() {
 	s.dbCleanup()
 }
 
+func (s *rpcSuite) Test_generateULID() {
+	seen := map[string]bool{}
+	for i := 0; i < 100000; i++ {
+		v := s.tower.generateULID()
+		s.Require().NotEmpty(v)
+		seen[v] = true
+	}
+	s.Equal(100000, len(seen))
+}
+
 func (s *rpcSuite) TestWorkRequests() {
 	var activeTaskCounter int
 	workers, capacity := 10, 3
@@ -99,7 +109,7 @@ func (s *rpcSuite) TestWorkRequests() {
 						t.Reset(timeout)
 					case <-ctx.Done():
 						s.FailNowf("unexpected timeout waiting for task progress", "%s timed out", at.workerID)
-					case <-at.done:
+					case <-at.success:
 						break ProgressLoop
 					}
 				}
@@ -141,7 +151,7 @@ func (s *rpcSuite) TestWorkRequestReject() {
 		s.Require().Equal(e.Error, "worker exiting")
 	case <-at.progress:
 		s.FailNow("unexpected progress received")
-	case <-at.done:
+	case <-at.success:
 		s.FailNow("unexpected done signal received")
 	case <-ctx.Done():
 		s.FailNowf("timed out waiting for task rejection", at.workerID)
@@ -200,7 +210,7 @@ func (s *rpcSuite) TestServerGoingAway() {
 
 	var (
 		p MsgWorkerProgress
-		d MsgWorkerResult
+		d MsgWorkerSuccess
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -208,12 +218,50 @@ func (s *rpcSuite) TestServerGoingAway() {
 	case e := <-at.errors:
 		s.FailNow("worker unexpectedly errored", e.Error)
 	case p = <-at.progress:
-	case d = <-at.done:
+	case d = <-at.success:
 	case <-ctx.Done():
 		s.FailNowf("timed out waiting for task progress", at.workerID)
 	}
 	s.NotNil(p, "no task progress received")
 	s.NotNil(d, "no task completion received")
+}
+
+func (s *rpcSuite) TestWorkerGoingAway() {
+	w, err := newWorkerRPC("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
+	s.Require().NoError(err)
+	w.id = "testworker-1"
+
+	taskChan, err := w.startWorking(3) // this is sending out work requests
+	s.Require().NoError(err)
+
+	payload := &MsgTranscodingTask{SDHash: randomdata.Alphanumeric(96), URL: "lbry://what"}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-taskChan
+		wg.Done()
+		time.Sleep(5 * time.Second)
+	}()
+
+	activeTasks, err := s.tower.startConsumingWorkRequests()
+	s.Require().NoError(err)
+	at := <-activeTasks
+	at.SendPayload(payload)
+
+	wg.Wait()
+	w.Stop()
+
+	w, err = newWorkerRPC("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
+	s.Require().NoError(err)
+	w.id = "testworker-1"
+
+	taskChan, err = w.startWorking(3) // this is sending out work requests
+	s.Require().NoError(err)
+
+	task := <-taskChan
+
+	s.Equal(*at.exPayload, task.payload)
 }
 
 func (s *rpcSuite) TestRetry() {
@@ -254,7 +302,7 @@ func (s *rpcSuite) TestRetry() {
 			case progress <- <-at.progress:
 			case errors <- <-at.errors:
 				return
-			case <-at.done:
+			case <-at.success:
 				// s.FailNow("unexpected done signal received")
 				return
 			case <-stopChan:

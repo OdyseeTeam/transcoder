@@ -1,8 +1,6 @@
 package tower
 
 import (
-	"time"
-
 	"github.com/lbryio/transcoder/storage"
 )
 
@@ -11,7 +9,7 @@ type Payload struct {
 }
 
 type MsgTranscodingTask struct {
-	TaskID string `json:"task_id"`
+	TaskID string `json:"tid"`
 	URL    string `json:"url"`
 	SDHash string `json:"sd_hash"`
 }
@@ -38,30 +36,32 @@ type workerMessage struct {
 	RequestStage int
 }
 
-type MsgWorkerStatus struct {
-	WorkerID  string    `json:"worker_id"`
-	Capacity  int       `json:"capacity"`
-	Available int       `json:"available"`
-	Timestamp time.Time `json:"timestamp"`
+type workerMsgMeta struct {
+	tid, wid, mType string
+}
+
+type MsgWorkerHandshake struct {
+	WorkerID  string `json:"worker_id"`
+	Capacity  int    `json:"capacity"`
+	Available int    `json:"available"`
+	SessionID string `json:"session_id"`
+}
+
+type MsgWorkerRequest struct {
+	WorkerID  string `json:"worker_id"`
+	SessionID string `json:"session"`
 }
 
 type MsgWorkerProgress struct {
-	Stage     RequestStage `json:"stage"`
-	Percent   float32      `json:"progress"`
-	Timestamp time.Time    `json:"timestamp"`
+	Stage   RequestStage `json:"stage"`
+	Percent float32      `json:"progress"`
 }
 
 type MsgWorkerError struct {
-	Error     string    `json:"error"`
-	Fatal     bool      `json:"fatal"`
-	Timestamp time.Time `json:"timestamp"`
+	Error string `json:"error"`
+	Fatal bool   `json:"fatal"`
 }
 
-type MsgWorkerResult struct {
-	Timestamp    time.Time             `json:"timestamp"`
+type MsgWorkerSuccess struct {
 	RemoteStream *storage.RemoteStream `json:"remote_stream"`
-}
-
-type MsgWorkRequest struct {
-	WorkerID string `json:"worker_id"`
 }
