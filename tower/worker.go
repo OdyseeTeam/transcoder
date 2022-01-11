@@ -63,11 +63,6 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 		activePipelinesLock: sync.Mutex{},
 		bgTasks:             &sync.WaitGroup{},
 	}
-	p, err := newPipeline(config.workDir, config.s3, enc, w.log)
-	if err != nil {
-		return nil, err
-	}
-	w.processor = p
 
 	rpc, err := newrpc(w.rmqAddr, w.log)
 	if err != nil {
@@ -79,6 +74,13 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 	}
 	w.id = config.id
 	w.rpc.id = config.id
+
+	p, err := newPipeline(config.workDir, w.id, config.s3, enc, w.log)
+	if err != nil {
+		return nil, err
+	}
+	w.processor = p
+
 	w.log.Info("worker configured", "id", w.id)
 	return &w, nil
 }

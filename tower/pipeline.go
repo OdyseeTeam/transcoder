@@ -10,6 +10,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/retriever"
 	"github.com/lbryio/transcoder/storage"
+	"github.com/lbryio/transcoder/tower/metrics"
 
 	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
@@ -37,6 +38,7 @@ const (
 
 type pipeline struct {
 	workDir  string
+	workerID string
 	workDirs map[string]string
 	encoder  encoder.Encoder
 	s3       *storage.S3Driver
@@ -48,11 +50,12 @@ type streamUploadResult struct {
 	url string // sd hash
 }
 
-func newPipeline(workDir string, s3 *storage.S3Driver, encoder encoder.Encoder, logger logging.KVLogger) (*pipeline, error) {
+func newPipeline(workDir, workerID string, s3 *storage.S3Driver, encoder encoder.Encoder, logger logging.KVLogger) (*pipeline, error) {
 	p := pipeline{
-		workDir: workDir,
-		encoder: encoder,
-		log:     logger,
+		workDir:  workDir,
+		encoder:  encoder,
+		log:      logger,
+		workerID: workerID,
 	}
 
 	p.workDirs = map[string]string{
@@ -113,13 +116,19 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 	go func() {
 		var origFile, encodedPath string
 		{
+			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageDownloading))
+
 			task.progress <- taskProgress{Stage: StageDownloading}
+
+			mtr.Inc()
 			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
 				task.errors <- taskError{err: err, fatal: false}
+				mtr.Dec()
 				return
 			}
+			mtr.Dec()
 			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
 			origFile = res.File.Name()
 			defer os.RemoveAll(origFile)
@@ -127,21 +136,23 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 		}
 
 		{
-			seen := map[int]bool{}
+			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageEncoding))
 			task.progress <- taskProgress{Stage: StageEncoding}
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
 				log.Error("encoder failed", "err", err)
 				task.errors <- taskError{err: errors.Wrap(err, "encoder failed"), fatal: true}
+				mtr.Dec()
 				return
 			}
 
+			mtr.Inc()
+
+			seen := map[int]bool{}
 			for p := range res.Progress {
 				pg := int(math.Ceil(p.GetProgress()))
-				if !seen[pg] {
+				if pg%10 == 0 && !seen[pg] {
 					task.progress <- taskProgress{Percent: float32(pg), Stage: StageEncoding}
-				} else {
-					seen[pg] = true
 				}
 			}
 
@@ -154,15 +165,19 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			if err != nil {
 				log.Error("stream object initialization failed", "err", err)
 				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
+				mtr.Dec()
 				return
 			}
+			mtr.Dec()
 			ls.FillManifest()
 			log.Info("encoding done", "stream", ls)
 			defer os.RemoveAll(ls.Path)
 		}
 
 		{
+			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageUploading))
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
+			mtr.Inc()
 			rs, err := c.s3.PutWithContext(context.Background(), ls, true)
 			if err != nil {
 				e := taskError{err: errors.Wrap(err, "stream upload failed")}
@@ -170,8 +185,10 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 					e.fatal = true
 				}
 				task.errors <- e
+				mtr.Dec()
 				return
 			}
+			mtr.Dec()
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
 			task.result <- taskResult{remoteStream: rs}
 		}

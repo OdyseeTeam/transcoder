@@ -144,28 +144,34 @@ func (at *activeTask) RecordProgress(m MsgWorkerProgress) (queue.Task, error) {
 		Stage:         sql.NullString{String: string(m.Stage), Valid: true},
 		StageProgress: sql.NullInt32{Int32: int32(math.Ceil(float64(m.Percent))), Valid: true},
 	})
-	at.progress <- m
-	// select {
-	// case at.progress <- m:
-	// default:
-	// }
+	select {
+	case at.progress <- m:
+	default:
+	}
 	return t, err
 }
 
 func (at *activeTask) SetError(m MsgWorkerError) (queue.Task, error) {
-	at.errors <- m
 	t, err := at.tl.q.SetError(context.Background(), queue.SetErrorParams{
 		ULID:  at.id,
 		Error: sql.NullString{String: m.Error, Valid: true},
 		Fatal: sql.NullBool{Bool: m.Fatal, Valid: true},
 	})
+	select {
+	case at.errors <- m:
+	default:
+	}
 	return t, err
 }
 
 func (at *activeTask) MarkDone(m MsgWorkerSuccess) (queue.Task, error) {
-	at.success <- m
-	return at.tl.q.MarkDone(context.Background(), queue.MarkDoneParams{
+	t, err := at.tl.q.MarkDone(context.Background(), queue.MarkDoneParams{
 		ULID:   at.id,
 		Result: sql.NullString{String: m.RemoteStream.URL, Valid: true},
 	})
+	select {
+	case at.success <- m:
+	default:
+	}
+	return t, err
 }

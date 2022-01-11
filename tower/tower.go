@@ -154,6 +154,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.rpc.videoManager = s.videoManager
 
 	return &s, nil
 }
@@ -260,7 +261,7 @@ func (s *Server) manageTask(at *activeTask) {
 func (s *Server) startHttpServer() error {
 	router := router.New()
 
-	metrics.RegisterMetrics()
+	metrics.RegisterTowerMetrics()
 	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
 
 	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)

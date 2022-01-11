@@ -17,9 +17,10 @@ const (
 var (
 	once = sync.Once{}
 
-	WorkersCapacity = prometheus.NewGauge(prometheus.GaugeOpts{
+	WorkersCapacity = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "workers_capacity",
-	})
+	}, []string{LabelWorkerName})
+
 	WorkersAvailable = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "workers_available",
 	})
@@ -48,21 +49,36 @@ var (
 		Name: "transcoding_requests_done",
 	}, []string{LabelWorkerName})
 
+	TranscodingRequestsBackupDone = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "transcoding_requests_backup_done",
+	}, []string{LabelWorkerName})
+
 	TranscodingRequestsRetries = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoding_requests_retries",
 	}, []string{LabelWorkerName})
 	TranscodingRequestsErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoding_requests_errors",
 	}, []string{LabelWorkerName})
+
+	PipelineStagesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "transcoding_pipeline_stages_running",
+	}, []string{LabelWorkerName, LabelStage})
 )
 
-func RegisterMetrics() {
+func RegisterTowerMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
-			WorkersCapacity, WorkersAvailable, WorkersSpentSeconds,
+			WorkersAvailable, WorkersSpentSeconds,
 			TranscodedSeconds, TranscodedSizeMB,
-			TranscodingRequestsRunning, TranscodingRequestsRetries, TranscodingRequestsErrors, TranscodingRequestsDone,
+			TranscodingRequestsRunning, TranscodingRequestsRetries, TranscodingRequestsErrors, TranscodingRequestsDone, TranscodingRequestsBackupDone,
 		)
 	})
+}
 
+func RegisterWorkerMetrics() {
+	once.Do(func() {
+		prometheus.MustRegister(
+			WorkersCapacity, PipelineStagesRunning,
+		)
+	})
 }
