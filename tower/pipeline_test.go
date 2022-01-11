@@ -54,7 +54,7 @@ func (s *pipelineSuite) TestProcessSuccess() {
 	sdh := "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 	enc, err := encoder.NewEncoder(encoder.Configure())
 	s.Require().NoError(err)
-	c, err := newPipeline(s.workDir, s.s3drv, enc, zapadapter.NewKV(nil))
+	c, err := newPipeline(s.workDir, "", s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
 	stop := make(chan struct{})
 
@@ -86,7 +86,7 @@ func (s *pipelineSuite) TestProcessFailure() {
 	sdh := "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 	enc, err := encoder.NewEncoder(encoder.Configure())
 	s.Require().NoError(err)
-	c, err := newPipeline(s.workDir, s.s3drv, enc, zapadapter.NewKV(nil))
+	c, err := newPipeline(s.workDir, "", s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
 	stop := make(chan struct{})
 

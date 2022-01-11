@@ -80,7 +80,7 @@ func (s *rpcSuite) TestWorkRequests() {
 					wt.progress <- taskProgress{Percent: float32(i * 10)}
 					time.Sleep(50 * time.Millisecond)
 				}
-				wt.result <- taskResult{remoteStream: &storage.RemoteStream{URL: randomdata.Alphanumeric(25)}}
+				wt.result <- taskResult{remoteStream: &storage.RemoteStream{URL: randomdata.Alphanumeric(25), Manifest: &storage.Manifest{URL: randomdata.Alphanumeric(25)}}}
 			}
 		}()
 	}

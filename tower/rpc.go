@@ -9,11 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
 )
@@ -32,6 +35,8 @@ type towerRPC struct {
 	tasks      *taskList
 	retryTasks *retryTasks
 	randPool   sync.Pool
+
+	videoManager *manager.VideoManager
 }
 
 type workerRPC struct {
@@ -141,7 +146,7 @@ func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency
 }
 
 func (s *towerRPC) declareQueues() error {
-	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue}
+	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue, backupSuccessQueue}
 	for _, q := range queues {
 		if _, err := s.backCh.QueueDeclare(q, true, false, false, false, amqp.Table{}); err != nil {
 			return err
@@ -289,6 +294,48 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 
 		return rabbitmq.Ack
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.consumer.StartConsuming(
+		func(d rabbitmq.Delivery) rabbitmq.Action {
+			wid, _ := d.Headers[headerWorkerID].(string)
+			if err != nil {
+				s.log.Error("cannot parse meta", "err", err)
+				return rabbitmq.NackDiscard
+			}
+			msg := &MsgWorkerSuccess{}
+			err = json.Unmarshal(d.Body, msg)
+			if err != nil {
+				s.log.Error("cannot parse backup message", "err", err)
+				return rabbitmq.NackDiscard
+			}
+			labels := prometheus.Labels{metrics.LabelWorkerName: wid}
+			m := msg.RemoteStream.Manifest
+			if m == nil {
+				s.log.Error("remote stream missing manifest", "msg", msg)
+				metrics.TranscodingRequestsErrors.With(labels).Inc()
+				return rabbitmq.NackDiscard
+			}
+			if s.videoManager == nil {
+				s.log.Info("hacked-in videomanager missing")
+				return rabbitmq.Ack
+			}
+			if _, err := s.videoManager.Library().AddRemoteStream(*msg.RemoteStream); err != nil {
+				s.log.Error("error adding remote stream", "err", err)
+				metrics.TranscodingRequestsErrors.With(labels).Inc()
+				return rabbitmq.Ack
+			}
+			s.log.Info("added remote stream", "manifest", msg.RemoteStream.Manifest)
+			metrics.TranscodingRequestsBackupDone.With(labels).Inc()
+			return rabbitmq.Ack
+		},
+		backupSuccessQueue,
+		[]string{backupSuccessQueue},
+		rabbitmq.WithConsumeOptionsConcurrency(1),
+		rabbitmq.WithConsumeOptionsQueueDurable,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -448,8 +495,7 @@ func (s *towerRPC) publishTask(wrkQueue string, mtt MsgTranscodingTask) error {
 	)
 }
 
-func (s *workerRPC) sendTaskStatus(tid, mType string, message interface{}) error {
-	queue := taskStatusQueue
+func (s *workerRPC) sendTaskStatus(queue, tid, mType string, message interface{}) error {
 	headers := rabbitmq.Table{headerTaskID: tid, headerWorkerID: s.id, headerMessageType: mType}
 	ll := s.log.With("type", mType, "message", message, "headers", headers)
 	body, err := json.Marshal(message)
@@ -545,7 +591,7 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 					var err error
 					select {
 					case p := <-wt.progress:
-						err = s.sendTaskStatus(mtt.TaskID, mTypeProgress, &MsgWorkerProgress{
+						err = s.sendTaskStatus(taskStatusQueue, mtt.TaskID, mTypeProgress, &MsgWorkerProgress{
 							Stage:   p.Stage,
 							Percent: p.Percent,
 						})
@@ -553,7 +599,7 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 							s.log.Warn("error publishing task progress", "err", err)
 						}
 					case te := <-wt.errors:
-						err = s.sendTaskStatus(mtt.TaskID, mTypeError, &MsgWorkerError{
+						err = s.sendTaskStatus(taskStatusQueue, mtt.TaskID, mTypeError, &MsgWorkerError{
 							Error: te.err.Error(),
 							Fatal: te.fatal,
 						})
@@ -562,14 +608,18 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 						}
 						return
 					case r := <-wt.result:
-						err = s.sendTaskStatus(mtt.TaskID, mTypeSuccess, &MsgWorkerSuccess{RemoteStream: r.remoteStream})
+						err = s.sendTaskStatus(taskStatusQueue, mtt.TaskID, mTypeSuccess, &MsgWorkerSuccess{RemoteStream: r.remoteStream})
 						if err != nil {
 							s.log.Error("error publishing task result", "err", err)
+						}
+						err = s.sendTaskStatus(backupSuccessQueue, mtt.TaskID, mTypeSuccess, &MsgWorkerSuccess{RemoteStream: r.remoteStream})
+						if err != nil {
+							s.log.Error("error publishing backup task result", "err", err)
 						}
 						return
 					case <-s.stopChan:
 						s.log.Info("worker exiting")
-						err = s.sendTaskStatus(mtt.TaskID, mTypeError, &MsgWorkerError{Error: "worker exiting"})
+						err = s.sendTaskStatus(taskStatusQueue, mtt.TaskID, mTypeError, &MsgWorkerError{Error: "worker exiting"})
 						if err != nil {
 							s.log.Warn("error while publishing exit message", "err", err)
 						}
