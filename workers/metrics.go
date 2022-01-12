@@ -20,10 +20,10 @@ var (
 	TranscodingDownloading = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "transcoding_downloading",
 	})
+
 	TranscodingSpentSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_spent_seconds",
 	})
-
 	TranscodedSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_seconds",
 	})

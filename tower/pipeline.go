@@ -115,20 +115,23 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 
 	go func() {
 		var origFile, encodedPath string
+		errMtr := metrics.TranscodingErrors
+
 		{
-			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageDownloading))
+			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageDownloading))
 
 			task.progress <- taskProgress{Stage: StageDownloading}
 
-			mtr.Inc()
+			runMtr.Inc()
 			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
 				task.errors <- taskError{err: err, fatal: false}
-				mtr.Dec()
+				runMtr.Dec()
+				errMtr.WithLabelValues(string(StageDownloading)).Inc()
 				return
 			}
-			mtr.Dec()
+			runMtr.Dec()
 			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
 			origFile = res.File.Name()
 			defer os.RemoveAll(origFile)
@@ -136,18 +139,18 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 		}
 
 		{
-			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageEncoding))
+			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageEncoding))
 			task.progress <- taskProgress{Stage: StageEncoding}
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
 				log.Error("encoder failed", "err", err)
 				task.errors <- taskError{err: errors.Wrap(err, "encoder failed"), fatal: true}
-				mtr.Dec()
+				runMtr.Dec()
+				errMtr.WithLabelValues(string(StageEncoding)).Inc()
 				return
 			}
 
-			mtr.Inc()
-
+			runMtr.Inc()
 			seen := map[int]bool{}
 			for p := range res.Progress {
 				pg := int(math.Ceil(p.GetProgress()))
@@ -165,19 +168,29 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			if err != nil {
 				log.Error("stream object initialization failed", "err", err)
 				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
-				mtr.Dec()
+				runMtr.Dec()
+				errMtr.WithLabelValues(string(StageUploading)).Inc()
 				return
 			}
-			mtr.Dec()
-			ls.FillManifest()
+			runMtr.Dec()
+
+			err = ls.FillManifest()
+			if err != nil {
+				log.Error("failed to fill manifest", "err", err)
+				task.errors <- taskError{err: errors.Wrap(err, "failed to fill manifest"), fatal: true}
+				runMtr.Dec()
+				errMtr.WithLabelValues(string(StageMetadataFill)).Inc()
+				return
+			}
+
 			log.Info("encoding done", "stream", ls)
 			defer os.RemoveAll(ls.Path)
 		}
 
 		{
-			mtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageUploading))
+			runMtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageUploading))
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
-			mtr.Inc()
+			runMtr.Inc()
 			rs, err := c.s3.PutWithContext(context.Background(), ls, true)
 			if err != nil {
 				e := taskError{err: errors.Wrap(err, "stream upload failed")}
@@ -185,10 +198,11 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 					e.fatal = true
 				}
 				task.errors <- e
-				mtr.Dec()
+				runMtr.Dec()
+				errMtr.WithLabelValues(string(StageUploading)).Inc()
 				return
 			}
-			mtr.Dec()
+			runMtr.Dec()
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
 			task.result <- taskResult{remoteStream: rs}
 		}

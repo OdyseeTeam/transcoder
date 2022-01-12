@@ -1,4 +1,4 @@
-package formats
+package ladder
 
 import (
 	"github.com/lbryio/transcoder/pkg/logging"

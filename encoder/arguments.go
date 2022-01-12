@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 )
 
 type Argument [2]string
@@ -13,7 +13,7 @@ type Argument [2]string
 const (
 	MasterPlaylist     = "master.m3u8"
 	preset             = "veryfast"
-	keyint             = "100"
+	keyint             = "120"
 	videoCodec         = "libx264"
 	constantRateFactor = "26"
 	hlsTime            = "10"
@@ -21,7 +21,7 @@ const (
 
 type Arguments struct {
 	defaultArgs []Argument
-	formats     []formats.Format
+	formats     []ladder.Format
 	out         string
 	fps         int
 }
@@ -31,7 +31,7 @@ func HLSArguments() Arguments {
 	return Arguments{
 		defaultArgs: []Argument{
 			{"threads", "2"},
-			{"preset", "ultrafast"},
+			{"preset", preset},
 			{"g", keyint},
 			{"sc_threshold", "0"},
 			{"c:v", videoCodec},
@@ -54,7 +54,7 @@ func HLSArguments() Arguments {
 	}
 }
 
-func NewArguments(out string, formats []formats.Format, fps int) (Arguments, error) {
+func NewArguments(out string, formats []ladder.Format, fps int) (Arguments, error) {
 	a := HLSArguments()
 	if len(formats) == 0 {
 		return a, errors.New("no target formats supplied")

@@ -1,4 +1,4 @@
-package formats
+package ladder
 
 import (
 	"fmt"
@@ -52,13 +52,13 @@ var Resolutions = []Resolution{
 
 // H264 codec with its suggested bitrates
 var H264 = Codec{
-	Format{UHD4K, Bitrate{FPS30: 18000, FPS60: 28000}},
-	Format{QHD2K, Bitrate{FPS30: 10000, FPS60: 16000}},
-	Format{HD1080, Bitrate{FPS30: 2000, FPS60: 3200}},
-	Format{HD720, Bitrate{FPS30: 1200, FPS60: 2000}},
+	Format{UHD4K, Bitrate{FPS30: 18000}},
+	Format{QHD2K, Bitrate{FPS30: 10000}},
+	Format{HD1080, Bitrate{FPS30: 3300}},
+	Format{HD720, Bitrate{FPS30: 2200}},
 	// Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
-	Format{SD360, Bitrate{FPS30: 350, FPS60: 560}},
-	Format{SD144, Bitrate{FPS30: 100, FPS60: 160}},
+	Format{SD360, Bitrate{FPS30: 500}},
+	Format{SD144, Bitrate{FPS30: 100}},
 }
 
 // brResolutionFactor is a quality factor for non-standard resolution videos. The higher it is

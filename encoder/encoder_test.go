@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/stretchr/testify/suite"
 )
@@ -50,7 +50,7 @@ func (s *encoderSuite) TestEncode() {
 	res, err := e.Encode(absPath, s.out)
 	s.Require().NoError(err)
 
-	vs := formats.GetVideoStream(res.Meta)
+	vs := ladder.GetVideoStream(res.Meta)
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
 
@@ -61,10 +61,10 @@ func (s *encoderSuite) TestEncode() {
 
 	s.Require().GreaterOrEqual(progress, 99.5)
 
-	s.Equal(formats.HD1080, res.Formats[0].Resolution)
-	s.Equal(formats.HD720, res.Formats[1].Resolution)
-	s.Equal(formats.SD360, res.Formats[2].Resolution)
-	s.Equal(formats.SD144, res.Formats[3].Resolution)
+	s.Equal(ladder.HD1080, res.Formats[0].Resolution)
+	s.Equal(ladder.HD720, res.Formats[1].Resolution)
+	s.Equal(ladder.SD360, res.Formats[2].Resolution)
+	s.Equal(ladder.SD144, res.Formats[3].Resolution)
 
 	outFiles := map[string]string{
 		"master.m3u8": `

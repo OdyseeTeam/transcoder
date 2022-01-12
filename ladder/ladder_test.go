@@ -1,4 +1,4 @@
-package formats
+package ladder
 
 import (
 	"fmt"
@@ -59,12 +59,12 @@ func TestTargetFormatsErr(t *testing.T) {
 
 func TestFormat(t *testing.T) {
 	f := H264.CustomFormat(HD1080)
-	assert.Equal(t, 2000, f.Bitrate.FPS30)
-	assert.Equal(t, 3200, f.Bitrate.FPS60)
+	assert.Equal(t, 3300, f.Bitrate.FPS30)
+	assert.Equal(t, 5280, f.Bitrate.FPS60)
 
 	f = H264.CustomFormat(Resolution{800, 600})
 	assert.Equal(t, 528, f.Bitrate.FPS30)
-	assert.Equal(t, 823, f.Bitrate.FPS60)
+	assert.Equal(t, 844, f.Bitrate.FPS60)
 }
 
 func generateMeta(w, h, br, fr int) ffmpeg.Metadata {

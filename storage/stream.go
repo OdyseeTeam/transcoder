@@ -15,7 +15,7 @@ import (
 
 	"github.com/grafov/m3u8"
 	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -54,7 +54,7 @@ type Manifest struct {
 	Size       int64  `yaml:",omitempty"`
 	Checksum   string `yaml:",omitempty"`
 
-	Formats []formats.Format `yaml:",omitempty,flow"`
+	Formats []ladder.Format `yaml:",omitempty,flow"`
 }
 
 type StreamFileLoader func(rootPath ...string) ([]byte, error)

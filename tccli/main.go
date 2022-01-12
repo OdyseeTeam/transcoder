@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/client"
@@ -111,7 +112,7 @@ func main() {
 			}
 			f.Close()
 			inPath, _ = filepath.Abs(f.Name())
-			outPath = rr.SDHash
+			outPath = url.PathEscape(rr.URI)
 			m = storage.Manifest{URL: rr.URI, ChannelURL: rr.ChannelURI, SDHash: rr.SDHash}
 			defer os.RemoveAll(tmpDir)
 		}
@@ -120,7 +121,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		// r, err := e.Encode("zzzz", rr.SDHash)
+		t := time.Now()
 		r, err := e.Encode(inPath, outPath)
 		if err != nil {
 			panic(err)
@@ -128,7 +129,7 @@ func main() {
 		for p := range r.Progress {
 			fmt.Printf("%.2f ", p.GetProgress())
 		}
-		fmt.Println("done")
+		fmt.Printf("done in %.2f seconds\n", time.Since(t).Seconds())
 		m.Formats = r.Formats
 		ls, err := storage.OpenLocalStream(outPath, m)
 		if err != nil {

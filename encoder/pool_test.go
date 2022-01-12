@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/stretchr/testify/suite"
 )
@@ -49,7 +49,7 @@ func (s *poolSuite) TestEncode() {
 
 	res := (<-p.Encode(absPath, s.out).Value()).(*Result)
 
-	vs := formats.GetVideoStream(res.Meta)
+	vs := ladder.GetVideoStream(res.Meta)
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
 

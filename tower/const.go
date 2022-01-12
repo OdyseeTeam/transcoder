@@ -31,10 +31,11 @@ const (
 const (
 	StagePending RequestStage = "pending"
 
-	StageAccepted    RequestStage = "accepted"
-	StageDownloading RequestStage = "downloading"
-	StageEncoding    RequestStage = "encoding"
-	StageUploading   RequestStage = "uploading"
+	StageAccepted     RequestStage = "accepted"
+	StageDownloading  RequestStage = "downloading"
+	StageEncoding     RequestStage = "encoding"
+	StageUploading    RequestStage = "uploading"
+	StageMetadataFill RequestStage = "metadata_fill"
 
 	StageFailedRequeued   RequestStage = "failed_requeued"
 	StageTimedOutRequeued RequestStage = "timed_out_requeued"

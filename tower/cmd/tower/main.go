@@ -10,7 +10,7 @@ import (
 
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -66,7 +66,7 @@ func serve() {
 		video.SetLogger(logging.Create("video", logging.Prod))
 		manager.SetLogger(logging.Create("claim", logging.Prod))
 		storage.SetLogger(logging.Create("storage", logging.Prod))
-		formats.SetLogger(logging.Create("formats", logging.Prod))
+		ladder.SetLogger(logging.Create("formats", logging.Prod))
 		mfr.SetLogger(logging.Create("mfr", logging.Prod))
 		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
 	}

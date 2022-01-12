@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/db"
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/stretchr/testify/suite"
 )
@@ -41,7 +41,7 @@ func (s *LibrarySuite) TestVideoAdd() {
 	params := AddParams{
 		URL:     "what",
 		SDHash:  "string",
-		Type:    formats.TypeHLS,
+		Type:    ladder.TypeHLS,
 		Path:    "string",
 		Channel: "@specialoperationstest#3",
 	}
@@ -62,7 +62,7 @@ func (s *LibrarySuite) TestVideoGet() {
 	params := AddParams{
 		URL:     "what",
 		SDHash:  "string",
-		Type:    formats.TypeHLS,
+		Type:    ladder.TypeHLS,
 		Path:    "string",
 		Channel: "@specialoperationstest#3",
 	}

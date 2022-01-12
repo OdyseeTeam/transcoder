@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/pkg/logging"
 
 	ffmpegt "github.com/floostack/transcoder"
@@ -30,7 +30,7 @@ type encoder struct {
 type Result struct {
 	Input, Output string
 	Meta          *ffmpeg.Metadata
-	Formats       []formats.Format
+	Formats       []ladder.Format
 	Progress      <-chan ffmpegt.Progress
 }
 
@@ -111,7 +111,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	targetFormats, err := formats.TargetFormats(formats.H264, meta)
+	targetFormats, err := ladder.TargetFormats(ladder.H264, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}
 	}
 
-	fps, err := formats.DetectFPS(meta)
+	fps, err := ladder.DetectFPS(meta)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	vs := formats.GetVideoStream(meta)
+	vs := ladder.GetVideoStream(meta)
 	e.log.Info(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),

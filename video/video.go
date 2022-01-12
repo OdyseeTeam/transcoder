@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/db"
-	"github.com/lbryio/transcoder/formats"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/storage"
 )
 
@@ -91,7 +91,7 @@ func (q Library) AddLocalStream(url, channel string, ls storage.LocalStream) (*V
 	p := AddParams{
 		URL:      url,
 		SDHash:   ls.SDHash(),
-		Type:     formats.TypeHLS,
+		Type:     ladder.TypeHLS,
 		Channel:  channel,
 		Path:     ls.BasePath(),
 		Size:     ls.Size(),
@@ -114,7 +114,7 @@ func (q Library) AddRemoteStream(rs storage.RemoteStream) (*Video, error) {
 		RemotePath: rs.URL,
 		Size:       rs.Size(),
 		Checksum:   rs.Checksum(),
-		Type:       formats.TypeHLS,
+		Type:       ladder.TypeHLS,
 	}
 	return q.queries.Add(context.Background(), p)
 }

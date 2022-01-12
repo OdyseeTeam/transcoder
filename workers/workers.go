@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/formats"
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
@@ -108,7 +108,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	_, err = lib.Add(video.AddParams{
 		URL:      r.URI,
 		SDHash:   r.SDHash,
-		Type:     formats.TypeHLS,
+		Type:     ladder.TypeHLS,
 		Channel:  r.ChannelURI,
 		Path:     ls.BasePath(),
 		Size:     ls.Size(),
