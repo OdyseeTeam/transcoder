@@ -131,7 +131,7 @@ func serve() {
 		cfg.GetStringSlice("disabledchannels"),
 	)
 
-	cleanStopChan := video.SpawnLibraryCleaning(lib)
+	cleanStopChan := video.SpawnRemoteLibraryCleaning(lib)
 
 	adQueue := cfg.GetStringMapString("adaptivequeue")
 	minHits, _ := strconv.Atoi(adQueue["minhits"])

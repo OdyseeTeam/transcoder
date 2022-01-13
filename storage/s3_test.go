@@ -81,6 +81,7 @@ func (s *s3suite) TestPutDelete() {
 	deletedPieces := []string{"", MasterPlaylistName, "stream_0.m3u8", "stream_1.m3u8", "stream_2.m3u8", "stream_3.m3u8"}
 	for _, n := range deletedPieces {
 		p, err := s3drv.GetFragment(s.sdHash, n)
+		s.NotNil(err)
 		awsErr := err.(awserr.Error)
 		s.Equal("NoSuchKey", awsErr.Code())
 		s.Nil(p)

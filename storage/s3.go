@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -153,30 +154,56 @@ func (s *S3Driver) PutWithContext(ctx context.Context, ls *LocalStream, overwrit
 }
 
 func (s *S3Driver) Delete(sdHash string) error {
+	ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
 	client := s3.New(s.session)
 	bucket := aws.String(s.bucket)
-	input := &s3.DeleteObjectsInput{
-		Bucket: bucket,
-		Delete: &s3.Delete{
-			Objects: []*s3.ObjectIdentifier{},
-			Quiet:   aws.Bool(false),
-		},
-	}
-	objects, err := client.ListObjects(&s3.ListObjectsInput{
-		Bucket: bucket,
-		Prefix: aws.String(sdHash),
+	objects, err := client.ListObjectsWithContext(ctx, &s3.ListObjectsInput{
+		Bucket:  bucket,
+		Prefix:  aws.String(sdHash),
+		MaxKeys: aws.Int64(500),
 	})
+	cancelFn()
 	if err != nil {
 		return err
-	}
-	for _, o := range objects.Contents {
-		input.Delete.Objects = append(input.Delete.Objects, &s3.ObjectIdentifier{Key: o.Key})
 	}
 
-	_, err = client.DeleteObjects(input)
-	if err != nil {
-		return err
+	delObjects := []*s3.ObjectIdentifier{}
+	for _, o := range objects.Contents {
+		delObjects = append(delObjects, &s3.ObjectIdentifier{Key: o.Key})
+		if len(delObjects) >= 100 {
+			delInput := &s3.DeleteObjectsInput{
+				Bucket: bucket,
+				Delete: &s3.Delete{
+					Objects: delObjects,
+					Quiet:   aws.Bool(false),
+				},
+			}
+			ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
+			_, err = client.DeleteObjectsWithContext(ctx, delInput)
+			cancelFn()
+			if err != nil {
+				return err
+			}
+			delObjects = []*s3.ObjectIdentifier{}
+		}
 	}
+
+	if len(delObjects) > 0 {
+		delInput := &s3.DeleteObjectsInput{
+			Bucket: bucket,
+			Delete: &s3.Delete{
+				Objects: delObjects,
+				Quiet:   aws.Bool(false),
+			},
+		}
+		ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
+		_, err = client.DeleteObjectsWithContext(ctx, delInput)
+		cancelFn()
+		if err != nil {
+			return err
+		}
+	}
+
 	if *objects.IsTruncated {
 		return s.Delete(sdHash)
 	}
