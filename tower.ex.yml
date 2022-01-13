@@ -1,0 +1,27 @@
+S3:
+  Endpoint: http://s3:9000
+  Bucket: transcoded
+  Key: ody
+  Secret: odyseetes3
+  MaxSize: 1TB
+
+AdaptiveQueue:
+  MinHits: 1
+
+Library:
+  SQLite: /storage/library/data
+  Videos: /storage/library/videos
+  MaxSize: 0GB
+
+Queue:
+  DSN: postgres://postgres:odyseeteam@db
+
+Tower:
+  WorkDir: /storage/tower
+
+
+EnabledChannels:
+  - "@specialoperationstest#3"
+
+PriorityChannels: []
+DisabledChannels: []

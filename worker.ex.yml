@@ -1,0 +1,6 @@
+S3:
+  Endpoint: http://s3:9000
+  Bucket: transcoded
+  Key: ody
+  Secret: odyseetes3
+  MaxSize: 1TB
