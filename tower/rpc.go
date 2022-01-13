@@ -144,7 +144,7 @@ func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency
 }
 
 func (s *towerRPC) declareQueues() error {
-	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue, backupSuccessQueue}
+	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue}
 	for _, q := range queues {
 		if _, err := s.backCh.QueueDeclare(q, true, false, false, false, amqp.Table{}); err != nil {
 			return err

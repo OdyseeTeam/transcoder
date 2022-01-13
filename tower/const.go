@@ -12,7 +12,6 @@ const (
 	workerHandshakeQueue  = "worker-handshake"
 	workRequestsQueue     = "work-requests"
 	taskStatusQueue       = "task-status"
-	backupSuccessQueue    = "backup-success"
 
 	workersExchange = "workers"
 
