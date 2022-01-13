@@ -37,7 +37,11 @@ var CLI struct {
 	GenerateManifests struct {
 		VideoDir string `help:"Directory containing videos"`
 		DBPath   string `help:"Path to the SQLite DB file"`
-		URL      string `name:"url" help:"LBRY URL"`
+	} `cmd help:"Generate manifest files for videos"`
+	Retire struct {
+		VideoDir string `help:"Directory containing videos"`
+		DBPath   string `help:"Path to the SQLite DB file"`
+		MaxSize  int    `help:"Max size of videos to keep in gigabytes"`
 	} `cmd help:"Generate manifest files for videos"`
 	Transcode struct {
 		URL string `arg:"" help:"LBRY URL"`
@@ -90,6 +94,17 @@ func main() {
 			count++
 		}
 		log.Info("manifests written", "count", count)
+	case "retire":
+		vdb := db.OpenDB(CLI.Retire.DBPath)
+		libCfg := video.Configure().
+			LocalStorage(storage.Local(CLI.Retire.VideoDir)).
+			DB(vdb)
+		lib := video.NewLibrary(libCfg)
+		ts, fs, err := video.RetireVideosLocal(lib, uint64(CLI.Retire.MaxSize)*uint64(1000_000_000))
+		if err != nil {
+			panic(err)
+		}
+		log.Info("retired videos", "total_size", ts, "retired_size", fs)
 	case "transcode <url>":
 		var inPath, outPath string
 		var m storage.Manifest
