@@ -14,6 +14,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
+	"github.com/lbryio/transcoder/video"
 	"github.com/prometheus/client_golang/prometheus"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -262,6 +263,8 @@ func (s *Server) startHttpServer() error {
 	router := router.New()
 
 	metrics.RegisterTowerMetrics()
+	video.RegisterMetrics()
+
 	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
 
 	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)

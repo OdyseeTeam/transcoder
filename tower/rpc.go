@@ -11,12 +11,10 @@ import (
 
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
 )
@@ -298,48 +296,6 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 		return nil, err
 	}
 
-	err = s.consumer.StartConsuming(
-		func(d rabbitmq.Delivery) rabbitmq.Action {
-			wid, _ := d.Headers[headerWorkerID].(string)
-			if err != nil {
-				s.log.Error("cannot parse meta", "err", err)
-				return rabbitmq.NackDiscard
-			}
-			msg := &MsgWorkerSuccess{}
-			err = json.Unmarshal(d.Body, msg)
-			if err != nil {
-				s.log.Error("cannot parse backup message", "err", err)
-				return rabbitmq.NackDiscard
-			}
-			labels := prometheus.Labels{metrics.LabelWorkerName: wid}
-			m := msg.RemoteStream.Manifest
-			if m == nil {
-				s.log.Error("remote stream missing manifest", "msg", msg)
-				metrics.TranscodingRequestsErrors.With(labels).Inc()
-				return rabbitmq.NackDiscard
-			}
-			if s.videoManager == nil {
-				s.log.Info("hacked-in videomanager missing")
-				return rabbitmq.Ack
-			}
-			if _, err := s.videoManager.Library().AddRemoteStream(*msg.RemoteStream); err != nil {
-				s.log.Error("error adding remote stream", "err", err)
-				metrics.TranscodingRequestsErrors.With(labels).Inc()
-				return rabbitmq.Ack
-			}
-			s.log.Info("added remote stream", "manifest", msg.RemoteStream.Manifest)
-			metrics.TranscodingRequestsBackupDone.With(labels).Inc()
-			return rabbitmq.Ack
-		},
-		backupSuccessQueue,
-		[]string{backupSuccessQueue},
-		rabbitmq.WithConsumeOptionsConcurrency(1),
-		rabbitmq.WithConsumeOptionsQueueDurable,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	err = s.startConsuming(workerHandshakeQueue, func(d rabbitmq.Delivery) rabbitmq.Action {
 		s.log.Info("got worker handshake", "reply-to", d.ReplyTo)
 		mwh := MsgWorkerHandshake{}
@@ -611,10 +567,6 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 						err = s.sendTaskStatus(taskStatusQueue, mtt.TaskID, mTypeSuccess, &MsgWorkerSuccess{RemoteStream: r.remoteStream})
 						if err != nil {
 							s.log.Error("error publishing task result", "err", err)
-						}
-						err = s.sendTaskStatus(backupSuccessQueue, mtt.TaskID, mTypeSuccess, &MsgWorkerSuccess{RemoteStream: r.remoteStream})
-						if err != nil {
-							s.log.Error("error publishing backup task result", "err", err)
 						}
 						return
 					case <-s.stopChan:

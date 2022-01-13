@@ -35,10 +35,6 @@ var (
 		Name: "transcoding_requests_done",
 	}, []string{LabelWorkerName})
 
-	TranscodingRequestsBackupDone = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "transcoding_requests_backup_done",
-	}, []string{LabelWorkerName})
-
 	TranscodingRequestsRetries = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoding_requests_retries",
 	}, []string{LabelWorkerName})
@@ -51,7 +47,7 @@ func RegisterTowerMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
 			WorkersSpentSeconds,
-			TranscodingRequestsRunning, TranscodingRequestsRetries, TranscodingRequestsErrors, TranscodingRequestsDone, TranscodingRequestsBackupDone,
+			TranscodingRequestsRunning, TranscodingRequestsRetries, TranscodingRequestsErrors, TranscodingRequestsDone,
 		)
 	})
 }
