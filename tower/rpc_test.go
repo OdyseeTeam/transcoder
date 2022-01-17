@@ -251,6 +251,11 @@ func (s *rpcSuite) TestWorkerGoingAway() {
 
 	wg.Wait()
 	w.Stop()
+	time.Sleep(3 * time.Second)
+
+	dbt, err := s.tower.tasks.q.GetAllTasks(context.Background())
+	s.Require().NoError(err)
+	fmt.Printf("%+v", dbt[0])
 
 	w, err = newWorkerRPC("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
 	s.Require().NoError(err)
@@ -368,6 +373,6 @@ taskWatch:
 	t, err := s.tower.tasks.q.GetTask(context.Background(), retriedTask.id)
 	s.Require().NoError(err)
 	s.Equal("cannot proceed at all", t.Error.String)
-	s.True(t.Fatal.Bool)
+	s.Equal(queue.StatusFailed, t.Status)
 	s.EqualValues(20, t.StageProgress.Int32)
 }

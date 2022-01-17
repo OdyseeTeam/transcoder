@@ -6,26 +6,33 @@ INSERT INTO tasks (
 )
 RETURNING *;
 
+-- name: GetAllTasks :many
+SELECT * FROM tasks;
+
 -- name: GetTask :one
 SELECT * FROM tasks
 WHERE ulid = $1 LIMIT 1;
 
+-- name: GetTaskBySDHash :one
+SELECT * FROM tasks
+WHERE sd_hash = $1 LIMIT 1;
+
 -- name: GetRunnableTaskByPayload :one
 SELECT * FROM tasks
-WHERE status != 'done' AND NOT (status = 'errored' AND fatal = 'true')
+WHERE status NOT IN ('done', 'failed')
 AND url = $1 AND sd_hash = $2 LIMIT 1;
 
 -- name: GetActiveTasks :many
 SELECT * FROM tasks
-WHERE status IN ('new', 'processing', 'retrying');
+WHERE status IN ('new', 'processing', 'retrying', 'errored');
 
 -- name: GetActiveTasksForWorker :many
 SELECT * FROM tasks
-WHERE status IN ('new', 'processing', 'retrying') AND worker = $1;
+WHERE status IN ('new', 'processing', 'retrying', 'errored') AND worker = $1;
 
 -- name: GetRetriableTasks :many
 SELECT * FROM tasks
-WHERE status = 'errored' AND (fatal IS FALSE OR retries < 10);
+WHERE status = 'errored' AND retries < 10;
 
 -- name: SetStageProgress :one
 UPDATE tasks
@@ -39,12 +46,17 @@ RETURNING *;
 
 -- name: SetError :one
 UPDATE tasks
-SET status = 'errored', error = $2, fatal = $3, updated_at = NOW() WHERE ulid = $1
+SET status = 'errored', error = $2, updated_at = NOW() WHERE ulid = $1
 RETURNING *;
 
 -- name: MarkRetrying :one
 UPDATE tasks
 SET status = 'retrying', retries = retries + 1, updated_at = NOW() WHERE ulid = $1
+RETURNING *;
+
+-- name: MarkFailed :one
+UPDATE tasks
+SET status = 'failed', error = $2, updated_at = NOW() WHERE ulid = $1
 RETURNING *;
 
 -- name: MarkDone :one

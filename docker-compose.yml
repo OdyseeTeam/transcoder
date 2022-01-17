@@ -41,8 +41,9 @@ services:
       - --work-dir=/storage
       - --debug
       - --workers=1
-      - --threads=4
+      - --threads=1
       - --worker-id=worker1
+      - --http-bind=:8080
     # build:
     #   context: .
     #   dockerfile: Dockerfile-worker
@@ -84,40 +85,6 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile-tower
-  transcoder:
-    image: lbryio/transcoder:latest
-    container_name: transcoder
-    restart: always
-    ports:
-      - "18081:18081"
-    volumes:
-      - /home/lbry/videos:/app/videos
-    labels:
-      - traefik.http.routers.ghost.rule=Host(`na-wo.net`)
-      - traefik.http.routers.ghost.tls=true
-      - traefik.http.routers.ghost.tls.certresolver=myresolver
-  traefik:
-    image: traefik:v2.4
-    container_name: traefik
-    command: |
-      --api.insecure=true
-      --providers.docker
-      --entrypoints.web.address=:80
-      --entrypoints.web.http.redirections.entryPoint.to=websecure
-      --entrypoints.web.http.redirections.entryPoint.scheme=https
-      --entrypoints.web.http.redirections.entrypoint.permanent=true
-      --entrypoints.websecure.address=:443
-      --certificatesresolvers.myresolver.acme.tlschallenge=true
-      --certificatesresolvers.myresolver.acme.email=a@tideland.net
-      --certificatesresolvers.myresolver.acme.storage=acme.json
-    ports:
-      - "443:443"
-      - "80:80"
-      # The Web UI (enabled by --api.insecure=true)
-      - "8080:8080"
-    volumes:
-      # So that Traefik can listen to the Docker events
-      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   tower-data: {}

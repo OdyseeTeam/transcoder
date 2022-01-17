@@ -2,17 +2,26 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
+const (
+	WorkerStatusAvailable = "available"
+	WorkerStatusCapacity  = "capacity"
+)
+
 var (
-	WorkersCapacity = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "workers_capacity",
-	})
+	WorkerCapability = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "worker_capability",
+	}, []string{"status"})
 
 	TranscodedSeconds = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "transcoded_seconds",
 	})
-	EncodingSpentSeconds = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "encoding_spent_seconds",
-	})
+
+	PipelineSpentSeconds = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "pipeline_spent_seconds",
+	}, []string{LabelStage})
+	PipelineStagesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "pipeline_stages_running",
+	}, []string{LabelStage})
 
 	InputBytes = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "input_bytes",
@@ -22,25 +31,21 @@ var (
 	})
 
 	TranscodedStreamsCount = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "transcoded_streams_count",
+		Name: "done_streams_count",
 	})
-
-	TranscodingErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "transcoding_error_count",
-	}, []string{LabelStage})
-
-	PipelineStagesRunning = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "transcoding_pipeline_stages_running",
+	TranscodingErrorsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "errors_count",
 	}, []string{LabelStage})
 )
 
 func RegisterWorkerMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
-			WorkersCapacity, PipelineStagesRunning,
-			EncodingSpentSeconds, TranscodedSeconds,
+			WorkerCapability,
+			TranscodedSeconds,
+			PipelineStagesRunning, PipelineSpentSeconds,
 			InputBytes, OutputBytes,
-			TranscodedStreamsCount, TranscodingErrors,
+			TranscodedStreamsCount, TranscodingErrorsCount,
 		)
 	})
 }

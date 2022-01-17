@@ -11,6 +11,8 @@ RUN chmod a+x ffmpeg ffprobe
 
 FROM alpine:3.15 AS build
 
+EXPOSE 8080
+
 RUN apk add --no-cache libc6-compat
 COPY --from=gather /build/ffmpeg /build/ffprobe /usr/local/bin/
 

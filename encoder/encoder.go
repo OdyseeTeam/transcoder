@@ -3,6 +3,7 @@ package encoder
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -39,7 +40,29 @@ type Configuration struct {
 	log                                             logging.KVLogger
 }
 
+// Configure will attempt to lookup paths to ffmpeg and ffprobe.
+// Call FfmpegPath and FfprobePath if you need to set it manually.
+func Configure() *Configuration {
+	ffmpegPath, _ := exec.LookPath("ffmpeg")
+	ffprobePath, _ := exec.LookPath("ffprobe")
+	tgPath, _ := exec.LookPath("generator")
+
+	return &Configuration{
+		ffmpegPath:             ffmpegPath,
+		ffprobePath:            ffprobePath,
+		thumbnailGeneratorPath: tgPath,
+		log:                    logging.NoopKVLogger{},
+	}
+}
+
 func NewEncoder(cfg *Configuration) (Encoder, error) {
+	if cfg.ffmpegPath == "" {
+		return nil, errors.New("ffmpeg binary path not set")
+	}
+	if cfg.ffprobePath == "" {
+		return nil, errors.New("ffprobe binary path not set")
+	}
+
 	var cmd *exec.Cmd
 	cmd = exec.Command(cfg.ffmpegPath, "-h")
 	if err := cmd.Run(); err != nil {
@@ -62,21 +85,6 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 
 	e.log.Info("encoder configured", "ffmpeg", e.ffmpegPath, "ffprobe", e.ffprobePath, "generator", e.thumbnailGeneratorPath)
 	return &e, nil
-}
-
-// Configure will attempt to lookup paths to ffmpeg and ffprobe.
-// Call FfmpegPath and FfprobePath if you need to set it manually.
-func Configure() *Configuration {
-	ffmpegPath, _ := exec.LookPath("ffmpeg")
-	ffprobePath, _ := exec.LookPath("ffprobe")
-	tgPath, _ := exec.LookPath("generator")
-
-	return &Configuration{
-		ffmpegPath:             ffmpegPath,
-		ffprobePath:            ffprobePath,
-		thumbnailGeneratorPath: tgPath,
-		log:                    logging.NoopKVLogger{},
-	}
 }
 
 func (c *Configuration) FfmpegPath(p string) *Configuration {

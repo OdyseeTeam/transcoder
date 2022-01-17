@@ -22,6 +22,7 @@ var CLI struct {
 	Start struct {
 		WorkerID   string `help:"Worker ID"`
 		RMQAddr    string `optional:"" help:"RabbitMQ server address" default:"amqp://guest:guest@localhost/"`
+		HttpBind   string `optional:"" help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
 		Workers    int    `optional:"" help:"Encoding workers to spawn" default:"16"`
 		Threads    int    `optional:"" help:"Encoding threads per encoding worker" default:"2"`
 		WorkDir    string `optional:"" help:"Directory for storing downloaded and transcoded files" default:"./"`
@@ -73,6 +74,7 @@ func main() {
 			PoolSize(CLI.Start.Workers).
 			WorkDir(CLI.Start.WorkDir).
 			RMQAddr(CLI.Start.RMQAddr).
+			HttpServerBind(CLI.Start.HttpBind).
 			S3Driver(s3driver),
 		)
 		if err != nil {

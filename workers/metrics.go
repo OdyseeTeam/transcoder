@@ -34,7 +34,7 @@ var (
 		Name: "transcoded_count",
 	})
 
-	TranscodingErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+	TranscodingErrorsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "transcoding_error_count",
 	}, []string{"stage"})
 )
@@ -43,7 +43,7 @@ func RegisterMetrics() {
 	once.Do(func() {
 		prometheus.MustRegister(
 			TranscodingRunning, TranscodingSpentSeconds,
-			TranscodedSeconds, TranscodedSizeMB, TranscodedCount, TranscodingErrors,
+			TranscodedSeconds, TranscodedSizeMB, TranscodedCount, TranscodingErrorsCount,
 		)
 	})
 

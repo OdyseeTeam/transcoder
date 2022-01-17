@@ -230,9 +230,6 @@ func (s *Server) manageTask(at *activeTask) {
 		select {
 		case p := <-at.progress:
 			ll.Info("progress received", "progress", p.Percent, "stage", p.Stage)
-		// case <-ctx.Done():
-		// 	s.log.Error("active task timed out")
-		// 	return
 		case e := <-at.errors:
 			ll.Error("task errored", "err", e)
 			metrics.TranscodingRequestsErrors.With(labels).Inc()

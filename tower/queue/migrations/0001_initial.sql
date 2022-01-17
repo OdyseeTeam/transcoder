@@ -4,6 +4,7 @@ CREATE TYPE status AS ENUM (
   'processing',
   'retrying',
   'errored',
+  'failed',
   'done'
 );
 
@@ -19,7 +20,6 @@ CREATE TABLE tasks (
     stage text,
     stage_progress integer,
     error text,
-    fatal boolean,
     worker text NOT NULL,
 
     url text NOT NULL,

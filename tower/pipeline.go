@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"time"
 
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -115,10 +116,12 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 
 	go func() {
 		var origFile, encodedPath string
-		errMtr := metrics.TranscodingErrors
+		errMtr := metrics.TranscodingErrorsCount
 
 		{
+			timer := time.Now()
 			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageDownloading))
+			spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageDownloading))
 
 			task.progress <- taskProgress{Stage: StageDownloading}
 
@@ -126,12 +129,15 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
-				task.errors <- taskError{err: err, fatal: false}
-				runMtr.Dec()
 				errMtr.WithLabelValues(string(StageDownloading)).Inc()
+				spentMtr.Add(time.Since(timer).Seconds())
+				runMtr.Dec()
+				task.errors <- taskError{err: err, fatal: false}
 				return
 			}
+			metrics.InputBytes.Add(float64(res.Size))
 			runMtr.Dec()
+			spentMtr.Add(time.Since(timer).Seconds())
 			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
 			origFile = res.File.Name()
 			defer os.RemoveAll(origFile)
@@ -139,22 +145,28 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 		}
 
 		{
+			timer := time.Now()
 			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageEncoding))
+			spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageEncoding))
+
 			task.progress <- taskProgress{Stage: StageEncoding}
+
+			runMtr.Inc()
 			res, err := c.encoder.Encode(origFile, encodedPath)
 			if err != nil {
 				log.Error("encoder failed", "err", err)
-				task.errors <- taskError{err: errors.Wrap(err, "encoder failed"), fatal: true}
-				runMtr.Dec()
+				spentMtr.Add(time.Since(timer).Seconds())
 				errMtr.WithLabelValues(string(StageEncoding)).Inc()
+				runMtr.Dec()
+				task.errors <- taskError{err: errors.Wrap(err, "encoder failed"), fatal: true}
 				return
 			}
 
-			runMtr.Inc()
 			seen := map[int]bool{}
 			for p := range res.Progress {
 				pg := int(math.Ceil(p.GetProgress()))
-				if pg%10 == 0 && !seen[pg] {
+				if pg%5 == 0 && !seen[pg] {
+					seen[pg] = true
 					task.progress <- taskProgress{Percent: float32(pg), Stage: StageEncoding}
 				}
 			}
@@ -167,28 +179,35 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {
 				log.Error("stream object initialization failed", "err", err)
-				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
 				runMtr.Dec()
+				spentMtr.Add(time.Since(timer).Seconds())
 				errMtr.WithLabelValues(string(StageUploading)).Inc()
+				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
 				return
 			}
-			runMtr.Dec()
 
 			err = ls.FillManifest()
 			if err != nil {
 				log.Error("failed to fill manifest", "err", err)
-				task.errors <- taskError{err: errors.Wrap(err, "failed to fill manifest"), fatal: true}
 				runMtr.Dec()
+				spentMtr.Add(time.Since(timer).Seconds())
 				errMtr.WithLabelValues(string(StageMetadataFill)).Inc()
+				task.errors <- taskError{err: errors.Wrap(err, "failed to fill manifest"), fatal: true}
 				return
 			}
+			metrics.OutputBytes.Add(float64(ls.Size()))
+			spentMtr.Add(time.Since(timer).Seconds())
+			runMtr.Dec()
 
 			log.Info("encoding done", "stream", ls)
 			defer os.RemoveAll(ls.Path)
 		}
 
 		{
-			runMtr := metrics.PipelineStagesRunning.WithLabelValues(c.workerID, string(StageUploading))
+			timer := time.Now()
+			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageUploading))
+			spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageUploading))
+
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
 			runMtr.Inc()
 			rs, err := c.s3.PutWithContext(context.Background(), ls, true)
@@ -197,11 +216,13 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				if errors.Is(err, storage.ErrStreamExists) {
 					e.fatal = true
 				}
-				task.errors <- e
-				runMtr.Dec()
 				errMtr.WithLabelValues(string(StageUploading)).Inc()
+				spentMtr.Add(time.Since(timer).Seconds())
+				runMtr.Dec()
+				task.errors <- e
 				return
 			}
+			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
 			task.result <- taskResult{remoteStream: rs}

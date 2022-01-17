@@ -152,15 +152,27 @@ func (at *activeTask) RecordProgress(m MsgWorkerProgress) (queue.Task, error) {
 }
 
 func (at *activeTask) SetError(m MsgWorkerError) (queue.Task, error) {
-	t, err := at.tl.q.SetError(context.Background(), queue.SetErrorParams{
-		ULID:  at.id,
-		Error: sql.NullString{String: m.Error, Valid: true},
-		Fatal: sql.NullBool{Bool: m.Fatal, Valid: true},
-	})
-	select {
-	case at.errors <- m:
-	default:
+	var t queue.Task
+	var err error
+	if m.Fatal {
+		t, err = at.tl.q.MarkFailed(context.Background(), queue.MarkFailedParams{
+			ULID:  at.id,
+			Error: sql.NullString{String: m.Error, Valid: true},
+		})
+	} else {
+		t, err = at.tl.q.SetError(context.Background(), queue.SetErrorParams{
+			ULID:  at.id,
+			Error: sql.NullString{String: m.Error, Valid: true},
+		})
 	}
+	if err != nil {
+		return t, err
+	}
+	at.errors <- m
+	// select {
+	// case at.errors <- m:
+	// default:
+	// }
 	return t, err
 }
 

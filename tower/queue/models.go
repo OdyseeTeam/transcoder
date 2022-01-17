@@ -15,6 +15,7 @@ const (
 	StatusProcessing Status = "processing"
 	StatusRetrying   Status = "retrying"
 	StatusErrored    Status = "errored"
+	StatusFailed     Status = "failed"
 	StatusDone       Status = "done"
 )
 
@@ -40,7 +41,6 @@ type Task struct {
 	Stage         sql.NullString
 	StageProgress sql.NullInt32
 	Error         sql.NullString
-	Fatal         sql.NullBool
 	Worker        string
 	URL           string
 	SDHash        string

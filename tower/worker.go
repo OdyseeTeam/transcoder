@@ -5,19 +5,25 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fasthttp/router"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/storage"
+	"github.com/lbryio/transcoder/tower/metrics"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 type WorkerConfig struct {
-	id       string
-	rmqAddr  string
-	poolSize int
-	workDir  string
-	log      logging.KVLogger
-	timings  map[string]time.Duration
-	s3       *storage.S3Driver
+	id             string
+	rmqAddr        string
+	poolSize       int
+	workDir        string
+	httpServerBind string
+	log            logging.KVLogger
+	timings        map[string]time.Duration
+	s3             *storage.S3Driver
 }
 
 type Worker struct {
@@ -25,11 +31,10 @@ type Worker struct {
 	rpc                 *workerRPC
 	processor           Processor
 	stopChan            chan struct{}
-	workers             chan struct{}
 	activePipelines     map[string]struct{}
 	activePipelinesLock sync.Mutex
-	requestHandler      requestHandler
 	bgTasks             *sync.WaitGroup
+	httpServer          *fasthttp.Server
 }
 
 type Processor interface {
@@ -82,6 +87,11 @@ func NewWorker(config *WorkerConfig) (*Worker, error) {
 	w.processor = p
 
 	w.log.Info("worker configured", "id", w.id)
+	if w.httpServerBind != "" {
+		if err := w.startHttpServer(); err != nil {
+			return nil, err
+		}
+	}
 	return &w, nil
 }
 
@@ -122,32 +132,47 @@ func (c *WorkerConfig) WorkerID(id string) *WorkerConfig {
 	return c
 }
 
+func (c *WorkerConfig) HttpServerBind(bind string) *WorkerConfig {
+	c.httpServerBind = bind
+	return c
+}
+
 func (c *Worker) handleRequest(wt workerTask) {
 	mtt := wt.payload
 	log := logging.AddLogRef(c.log, mtt.SDHash).With("url", mtt.URL)
 
 	log.Info("task received, starting", "msg", mtt)
 	c.processor.Process(c.stopChan, wt)
-	// for {
-	// 	select {
-	// 	case <-c.stopChan:
-	// 		task.cleanup()
-	// 		return
-	// 	case <-tc.TaskDone:
-	// 		err := <-tc.Errc
-	// 		if err != nil {
-	// 			log.Error("processor failed", "err", err)
-	// 			wt.errors <- err
-	// 		} else {
-	// 			wt.done
-	// 		}
-	// 		task.cleanup()
-	// 		return
-	// 	case p := <-tc.Progress:
-	// 		log.Debug("processor progress received", "progress", p)
-	// 		wt.progress <- p
-	// 	}
-	// }
+}
+
+func (c *Worker) startHttpServer() error {
+	router := router.New()
+
+	metrics.RegisterWorkerMetrics()
+	router.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
+
+	c.log.Info("starting worker http server", "addr", c.httpServerBind)
+	httpServer := &fasthttp.Server{
+		Handler:          router.Handler,
+		Name:             "worker",
+		DisableKeepalive: true,
+	}
+
+	c.httpServer = httpServer
+	go func() {
+		err := httpServer.ListenAndServe(c.httpServerBind)
+		if err != nil {
+			c.log.Error("http server error", "err", err)
+			close(c.stopChan)
+		}
+	}()
+	go func() {
+		<-c.stopChan
+		c.log.Info("shutting down worker http server", "addr", c.httpServerBind)
+		httpServer.Shutdown()
+	}()
+
+	return nil
 }
 
 func (c *Worker) StartWorkers() error {
@@ -155,6 +180,7 @@ func (c *Worker) StartWorkers() error {
 	if err != nil {
 		return err
 	}
+	metrics.WorkerCapability.WithLabelValues(metrics.WorkerStatusCapacity).Set(float64(c.poolSize))
 	go func() {
 		for {
 			select {

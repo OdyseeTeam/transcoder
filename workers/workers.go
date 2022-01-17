@@ -48,13 +48,13 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 			r.Release()
 			ll.Errorw("transcoding request released", "reason", "download failed", "err", err)
 		}
-		TranscodingErrors.WithLabelValues("download").Inc()
+		TranscodingErrorsCount.WithLabelValues("download").Inc()
 		return err
 	}
 
 	if err := streamFH.Close(); err != nil {
 		r.Release()
-		TranscodingErrors.WithLabelValues("fs").Inc()
+		TranscodingErrorsCount.WithLabelValues("fs").Inc()
 		ll.Errorw("transcoding request released", "reason", "closing downloaded file failed", "err", err)
 		return err
 	}
@@ -72,7 +72,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	res, err := w.encoder.Encode(streamFH.Name(), streamPath)
 	if err != nil {
 		r.Reject()
-		TranscodingErrors.WithLabelValues("encode").Inc()
+		TranscodingErrorsCount.WithLabelValues("encode").Inc()
 		cleanupLocalStream()
 		return err
 	}
@@ -100,7 +100,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	time.Sleep(2 * time.Second)
 	ls, err := storage.OpenLocalStream(streamPath)
 	if err != nil {
-		TranscodingErrors.WithLabelValues("encode").Inc()
+		TranscodingErrorsCount.WithLabelValues("encode").Inc()
 		cleanupLocalStream()
 		return errors.Wrap(err, "error opening stream")
 	}
@@ -116,7 +116,7 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	})
 
 	if err != nil {
-		TranscodingErrors.WithLabelValues("db").Inc()
+		TranscodingErrorsCount.WithLabelValues("db").Inc()
 		cleanupLocalStream()
 		return errors.Wrap(err, "adding to video library failed")
 	}
