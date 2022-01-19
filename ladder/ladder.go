@@ -1,195 +1,80 @@
 package ladder
 
 import (
-	"fmt"
-	"regexp"
+	"math"
 	"strconv"
 
-	"github.com/floostack/transcoder"
-	"github.com/floostack/transcoder/ffmpeg"
-	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
-const (
-	TypeHLS   = "hls"
-	TypeDASH  = "dash"
-	TypeRange = "range"
+type Definition string
 
-	FPS30 = 30
-	FPS60 = 60
-)
-
-type Format struct {
-	Resolution Resolution
-	Bitrate    Bitrate
+type Ladder struct {
+	Args  map[string]string
+	Tiers []Tier `yaml:",flow"`
 }
 
-type Codec []Format
-
-type Resolution struct {
-	Width, Height int
+type Tier struct {
+	Definition    Definition
+	Height        int
+	Width         int
+	VideoBitrate  int    `yaml:"bitrate"`
+	AudioBitrate  string `yaml:"audio_bitrate"`
+	Framerate     int    `yaml:",omitempty"`
+	BitrateCutoff int    `yaml:"bitrate_cutoff"`
 }
 
-// Bitrate in kilobits
-type Bitrate struct {
-	FPS30, FPS60 int
+func Load(yamlLadder []byte) (Ladder, error) {
+	l := Ladder{}
+	err := yaml.Unmarshal(yamlLadder, &l)
+	return l, err
 }
 
-// Commonly defined resolutions
-var (
-	UHD4K  = Resolution{Height: 2160, Width: 3840}
-	QHD2K  = Resolution{Height: 1440, Width: 2560}
-	HD1080 = Resolution{Height: 1080, Width: 1920}
-	HD720  = Resolution{Height: 720, Width: 1280}
-	SD360  = Resolution{Height: 360, Width: 640}
-	SD240  = Resolution{Height: 240, Width: 320}
-	SD144  = Resolution{Height: 144, Width: 256}
-)
-
-var Resolutions = []Resolution{
-	UHD4K, QHD2K, HD1080, HD720, SD360, SD240, SD144,
-}
-
-// H264 codec with its suggested bitrates
-var H264 = Codec{
-	Format{UHD4K, Bitrate{FPS30: 18000}},
-	Format{QHD2K, Bitrate{FPS30: 10000}},
-	Format{HD1080, Bitrate{FPS30: 3300}},
-	Format{HD720, Bitrate{FPS30: 2200}},
-	// Format{SD480, Bitrate{FPS30: 900, FPS60: 1700}},
-	Format{SD360, Bitrate{FPS30: 500}},
-	Format{SD144, Bitrate{FPS30: 100}},
-}
-
-// brResolutionFactor is a quality factor for non-standard resolution videos. The higher it is
-var brResolutionFactor = .11
-var fpsPattern = regexp.MustCompile(`^(\d+)?.+`)
-
-func (f Format) GetBitrateForFPS(fps int) int {
-	if fps == FPS60 {
-		return f.Bitrate.FPS60
+// Tweak modifies existing ladder according to supplied video metadata
+func (l Ladder) Tweak(m *Metadata) (Ladder, error) {
+	logger.Debugw("m.VideoStream.GetBitRate()", "rate", m.VideoStream.GetBitRate())
+	vrate, _ := strconv.Atoi(m.VideoStream.GetBitRate())
+	var vert, origResSeen bool
+	w := m.VideoStream.GetWidth()
+	h := m.VideoStream.GetHeight()
+	if h > w {
+		vert = true
 	}
-	return f.Bitrate.FPS30
-}
-
-func TargetFormats(codec Codec, meta *ffmpeg.Metadata) ([]Format, error) {
-	var (
-		origFPS, origBitrate int
-		err                  error
-	)
-
-	vs := GetVideoStream(meta)
-	if vs == nil {
-		return nil, errors.New("no video stream detected")
-	}
-	w, h := vs.GetWidth(), vs.GetHeight()
-
-	origFPS, err = DetectFPS(meta)
-	if err != nil {
-		return nil, err
-	}
-
-	origRes := Resolution{Height: h}
-	for _, r := range Resolutions {
-		if h == r.Height {
-			origRes = r
-		}
-	}
-
-	origBitrate, err = strconv.Atoi(meta.GetFormat().GetBitRate())
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot determine bitrate")
-	}
-	origBitrate = origBitrate / 1000
-
-	// Adding all resolutions that are equal or lower in height than the original media.
-	formats := []Format{}
-	for _, f := range codec {
-		if origRes.Height >= f.Resolution.Height {
-			formats = append(formats, f)
-		}
-	}
-
-	// Excluding all target resolutions that have bitrate higher than the original media.
-	formatsFinal := []Format{}
-	for _, f := range formats {
-		// Do not remove original resolution
-		if f.Resolution.Height == origRes.Height {
-			formatsFinal = append(formatsFinal, f)
+	tweakedTiers := []Tier{}
+	for _, t := range l.Tiers {
+		if t.BitrateCutoff >= vrate {
+			logger.Debugw("video bitrate lower than the cut-off", "bitrate", vrate, "cutoff", t.BitrateCutoff)
+			if t.Height == h {
+				origResSeen = true
+			}
 			continue
 		}
-		targetBitrate := f.GetBitrateForFPS(origFPS)
-		cutoffBitrate := targetBitrate + int(float32(targetBitrate)*.4)
-		if origBitrate > cutoffBitrate {
-			formatsFinal = append(formatsFinal, f)
-		} else {
-			logger.Debugw(
-				"extraneous format",
-				"format", f,
-				"orig_bitrate", origBitrate,
-				"target_bitrate", targetBitrate,
-				"cutoff_bitrate", cutoffBitrate,
-			)
+		if vert {
+			t.Width, t.Height = t.Height, t.Width
 		}
+		if t.Height > h {
+			logger.Debugw("tier definition higher than stream", "tier", t.Height, "height", h)
+			continue
+		}
+		if t.Height == h {
+			origResSeen = true
+		}
+		tweakedTiers = append(tweakedTiers, t)
 	}
 
-	hasSelf := false
-	for _, f := range formatsFinal {
-		if f.Resolution == origRes {
-			hasSelf = true
-			break
-		}
-	}
-	if !hasSelf {
-		formatsFinal = append(formatsFinal, codec.CustomFormat(Resolution{Width: w, Height: h}))
+	if !origResSeen && l.Tiers[0].Height >= h {
+		tweakedTiers = append([]Tier{{
+			Height:       h,
+			Width:        w,
+			VideoBitrate: nsRate(w, h),
+			AudioBitrate: "128k",
+		}}, tweakedTiers...)
 	}
 
-	return formatsFinal, nil
+	l.Tiers = tweakedTiers
+	return l, nil
 }
 
-// CustomFormat generates a Format for non-standard resolutions, calculating optimal bitrates (note: it should be calculated better).
-func (c Codec) CustomFormat(r Resolution) Format {
-	for _, f := range c {
-		if f.Resolution == r {
-			return f
-		}
-	}
-	br := Bitrate{
-		FPS30: int(float64(r.Width*r.Height) * brResolutionFactor / 100),
-		FPS60: int(float64(float64(r.Width)*float64(r.Height)*1.56) * brResolutionFactor / 100),
-	}
-	return Format{Resolution: r, Bitrate: br}
-}
-
-func DetectFPS(meta *ffmpeg.Metadata) (int, error) {
-	var (
-		err error
-		fps int
-	)
-	vs := GetVideoStream(meta)
-	fpsMatch := fpsPattern.FindStringSubmatch(vs.GetAvgFrameRate())
-	if len(fpsMatch) > 0 {
-		fps, err = strconv.Atoi(fpsMatch[1])
-		if err != nil {
-			return fps, errors.Wrap(err, "cannot determine FPS")
-		}
-
-		if fps > 40 {
-			fps = FPS60
-		} else {
-			fps = FPS30
-		}
-	} else {
-		return fps, fmt.Errorf("cannot determine FPS from `%v`", vs.GetAvgFrameRate())
-	}
-	return fps, nil
-}
-
-func GetVideoStream(meta *ffmpeg.Metadata) transcoder.Streams {
-	for _, s := range meta.GetStreams() {
-		if s.GetCodecType() == "video" {
-			return s
-		}
-	}
-	return nil
+func nsRate(w, h int) int {
+	return int(math.Ceil(float64(800*600) / nsRateFactor))
 }
