@@ -1,14 +1,23 @@
-# Transcoder Server for LBRY network
+# Transcoder Server/Worker for Odysee
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/odyseeteam/transcoder)](https://goreportcard.com/report/github.com/odyseeteam/transcoder)
+![Test Status](https://github.com/OdyseeTeam/transcoder/workflows/Test/badge.svg)
 
 ## Building
 
-To build an x86-64 Linux binary:
+To build an x86-64 Linux binaries for tower (server part) and worker:
 
 ```
-make transcoder
+make tower worker
 ```
 
-#### Building on MacOS
+#### Building docker images
+
+```
+make tower_image_latest worker_image_latest
+```
+
+#### Prerequisites on MacOS
 
 To build for Linux on macos, you need to have musl toolchain installed. Using homebrew:
 
@@ -23,29 +32,11 @@ brew install richard-vd/musl-cross/musl-cross
 brew install zstd
 ```
 
-## Running
-
-On most systems, if you have golang v1.16 installed, you can just `go run .`.
-
-## Configuring
-
-Configuration is done via a file named transcoder.yml file (an [example](./transcoder.ex.yml)).
-
-Some settings are available via command line options, for example:
-
-```
-go run . serve --debug --video-path=/tmp/transcoder --bind=:18081
-```
-
-Run `go run . serve --help` for a list of options.
-
 ## Versioning
 
 This project is using [SemVer](https://semver.org) YY.MM.MINOR[.MICRO].
 
 ## Contributing
-
-Contributions to this project are welcome, encouraged, and compensated. For more details, see [lbry.io/faq/contributing](https://lbry.io/faq/contributing).
 
 Please ensure that your code builds and automated tests run successfully before pushing your branch. You must `go fmt` your code before you commit it, or the build will fail.
 
@@ -57,11 +48,10 @@ This project is MIT licensed. For the full license, see [LICENSE](LICENSE).
 
 ## Security
 
-We take security seriously. Please contact security@lbry.io regarding any issues you may encounter.
-Our PGP key is [here](https://keybase.io/lbry/key.asc) if you need it.
+We take security seriously. Please contact security@odysee.com regarding any issues you may encounter.
 
 
 ## Contact
 
-The primary contact for this project is [@andybeletsky](https://github.com/andybeletsky) (andrey@lbry.com).
+The primary contact for this project is [@andybeletsky](https://github.com/andybeletsky) (andrey.beletsky@odysee.com).
 
