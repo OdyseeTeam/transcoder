@@ -10,6 +10,7 @@ import (
 
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -44,7 +45,7 @@ func (s *encoderSuite) TearDownSuite() {
 
 func (s *encoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure())
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
 	s.Require().NoError(err)
 
 	res, err := e.Encode(absPath, s.out)
@@ -61,41 +62,38 @@ func (s *encoderSuite) TestEncode() {
 
 	s.Require().GreaterOrEqual(progress, 99.5)
 
-	s.Equal(ladder.HD1080, res.Formats[0].Resolution)
-	s.Equal(ladder.HD720, res.Formats[1].Resolution)
-	s.Equal(ladder.SD360, res.Formats[2].Resolution)
-	s.Equal(ladder.SD144, res.Formats[3].Resolution)
+	s.Equal(1080, res.Ladder.Tiers[0].Height)
+	s.Equal(720, res.Ladder.Tiers[1].Height)
+	s.Equal(360, res.Ladder.Tiers[2].Height)
+	s.Equal(144, res.Ladder.Tiers[3].Height)
 
 	outFiles := map[string]string{
 		"master.m3u8": `
 #EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=3660800,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
-stream_0.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
+var_0.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=2340800,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
-stream_1.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=176000,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
+var_1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=756800,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
-stream_2.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=140800,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
+var_2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
-stream_3.m3u8`,
-		"stream_0.m3u8":   "seg_0_000000.ts",
-		"stream_1.m3u8":   "seg_1_000000.ts",
-		"stream_2.m3u8":   "seg_2_000000.ts",
-		"stream_3.m3u8":   "seg_3_000000.ts",
-		"seg_0_000000.ts": "",
-		"seg_1_000000.ts": "",
-		"seg_2_000000.ts": "",
-		"seg_3_000000.ts": "",
+#EXT-X-STREAM-INF:BANDWIDTH=140800,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+var_3.m3u8`,
+		"var_0.m3u8":          "var_0/seg_000000.ts",
+		"var_1.m3u8":          "var_1/seg_000000.ts",
+		"var_2.m3u8":          "var_2/seg_000000.ts",
+		"var_3.m3u8":          "var_3/seg_000000.ts",
+		"var_0/seg_000000.ts": "",
+		"var_1/seg_000000.ts": "",
+		"var_2/seg_000000.ts": "",
+		"var_3/seg_000000.ts": "",
 	}
 	for f, str := range outFiles {
 		cont, err := ioutil.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
-		// m, err := regexp.MatchString(strings.TrimSpace(str), string(cont))
-		// s.NoError(err)
-		// s.True(m, fmt.Sprintf("%v doesn't match %v", string(cont), str))
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
 }

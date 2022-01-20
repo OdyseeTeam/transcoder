@@ -59,12 +59,13 @@ func NewArguments(out string, ladder Ladder, meta *ffmpeg.Metadata) (*ArgumentSe
 	return a, nil
 }
 
-// Render serializes ffmpeg arguments in a format sutable for cmd.Start.
-func (a *ArgumentSet) Render() []string {
+// GetStrArguments serializes ffmpeg arguments in a format sutable for ffmpeg.Transcoder.Start.
+func (a *ArgumentSet) GetStrArguments() []string {
 	strArgs := []string{}
 
 	args := a.Arguments
 	ladArgs := []string{}
+	args[argVarStreamMap] = ""
 
 	for k, v := range a.Ladder.Args {
 		args[k] = v
@@ -77,23 +78,22 @@ func (a *ArgumentSet) Render() []string {
 		ladArgs = append(ladArgs,
 			"-map", "v:0",
 			"-filter:v:"+s, "scale=-2:"+strconv.Itoa(tier.Height),
-			"-maxrate:v:"+s, strconv.Itoa(tier.VideoBitrate),
-			"-bufsize:v:"+s, strconv.Itoa(tier.VideoBitrate),
+			"-maxrate:"+s, strconv.Itoa(tier.VideoBitrate),
+			"-bufsize:"+s, strconv.Itoa(tier.VideoBitrate),
 		)
 
 		if tier.Framerate != 0 {
-			ladArgs = append(ladArgs, "-r:v:"+s, strconv.Itoa(tier.Framerate), "-g:v:"+s, strconv.Itoa(tier.Framerate*2))
+			ladArgs = append(ladArgs, "-r:"+s, strconv.Itoa(tier.Framerate), "-g:"+s, strconv.Itoa(tier.Framerate*2))
 		} else {
-			ladArgs = append(ladArgs, "-g:v:"+s, strconv.Itoa(a.Meta.IntFPS*2))
+			ladArgs = append(ladArgs, "-g:"+s, strconv.Itoa(a.Meta.IntFPS*2))
 		}
 
-		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
+		ladArgs = append(ladArgs, "-map", "a:0", "-b:"+s, tier.AudioBitrate)
 	}
 
 	for k, v := range args {
 		strArgs = append(strArgs, fmt.Sprintf("-%v", k), v)
 	}
 	strArgs = append(strArgs, ladArgs...)
-
 	return strArgs
 }

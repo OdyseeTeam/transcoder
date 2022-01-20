@@ -19,8 +19,18 @@ import (
 	"github.com/floostack/transcoder/ffmpeg"
 )
 
+const MasterPlaylist = "master.m3u8"
+
 type Encoder interface {
 	Encode(in, out string) (*Result, error)
+}
+
+type Configuration struct {
+	ffmpegPath, ffprobePath,
+	thumbnailGeneratorPath string
+
+	ladder ladder.Ladder
+	log    logging.KVLogger
 }
 
 type encoder struct {
@@ -31,13 +41,8 @@ type encoder struct {
 type Result struct {
 	Input, Output string
 	Meta          *ffmpeg.Metadata
-	Formats       []ladder.Format
+	Ladder        ladder.Ladder
 	Progress      <-chan ffmpegt.Progress
-}
-
-type Configuration struct {
-	ffmpegPath, ffprobePath, thumbnailGeneratorPath string
-	log                                             logging.KVLogger
 }
 
 // Configure will attempt to lookup paths to ffmpeg and ffprobe.
@@ -51,6 +56,7 @@ func Configure() *Configuration {
 		ffmpegPath:             ffmpegPath,
 		ffprobePath:            ffprobePath,
 		thumbnailGeneratorPath: tgPath,
+		ladder:                 ladder.Default,
 		log:                    logging.NoopKVLogger{},
 	}
 }
@@ -61,6 +67,9 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 	}
 	if cfg.ffprobePath == "" {
 		return nil, errors.New("ffprobe binary path not set")
+	}
+	if len(cfg.ladder.Tiers) == 0 {
+		return nil, errors.New("encoding ladder not configured")
 	}
 
 	var cmd *exec.Cmd
@@ -108,6 +117,12 @@ func (c *Configuration) Log(l logging.KVLogger) *Configuration {
 	return c
 }
 
+// Ladder configures encoding ladder.
+func (c *Configuration) Ladder(l ladder.Ladder) *Configuration {
+	c.ladder = l
+	return c
+}
+
 // Encode does transcoding of specified video file into a series of HLS streams.
 func (e encoder) Encode(input, output string) (*Result, error) {
 	meta, err := e.getMetadata(input)
@@ -119,11 +134,11 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	targetFormats, err := ladder.TargetFormats(ladder.H264, meta)
+	targetLadder, err := e.ladder.Tweak(meta)
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Input: input, Output: output, Meta: meta, Formats: targetFormats}
+	res := &Result{Input: input, Output: output, Meta: meta, Ladder: targetLadder}
 
 	if e.tg != nil {
 		err := e.tg.Generate(input, path.Join(output, "thumbnails10k.png"))
@@ -132,12 +147,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}
 	}
 
-	fps, err := ladder.DetectFPS(meta)
-	if err != nil {
-		return nil, err
-	}
-
-	args, err := NewArguments(output, targetFormats, fps)
+	a, err := ladder.NewArguments(output, e.ladder, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +155,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	vs := ladder.GetVideoStream(meta)
 	e.log.Info(
 		"starting transcoding",
-		"args", strings.Join(args.GetStrArguments(), " "),
+		"args", strings.Join(a.GetStrArguments(), " "),
 		"media_duration", meta.GetFormat().GetDuration(),
 		"media_bitrate", meta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
@@ -163,12 +173,12 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 			FfmpegBinPath:   e.ffmpegPath,
 			FfprobeBinPath:  e.ffprobePath,
 			ProgressEnabled: true,
-			Verbose:         false,
+			Verbose:         false, // Set this to false if ffmpeg is failing to launch to see the reason
 			OutputDir:       output,
 		}).
 		Input(input).
-		Output("stream_%v.m3u8").
-		Start(args)
+		Output("var_%v.m3u8").
+		Start(a)
 	if err != nil {
 		return nil, err
 	}

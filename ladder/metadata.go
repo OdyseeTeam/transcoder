@@ -48,12 +48,7 @@ func WrapMeta(origin *ffmpeg.Metadata) (*Metadata, error) {
 }
 
 func (m *Metadata) videoStream() transcoder.Streams {
-	for _, s := range m.orig.GetStreams() {
-		if s.GetCodecType() == "video" {
-			return s
-		}
-	}
-	return nil
+	return GetVideoStream(m.orig)
 }
 
 func (m *Metadata) audioStream() transcoder.Streams {
@@ -82,4 +77,13 @@ func (m *Metadata) detectFPS() (float64, error) {
 		return 0, errors.New("divisor cannot be zero")
 	}
 	return float64(fpsdd) / float64(fpsds), nil
+}
+
+func GetVideoStream(meta *ffmpeg.Metadata) transcoder.Streams {
+	for _, s := range meta.GetStreams() {
+		if s.GetCodecType() == "video" {
+			return s
+		}
+	}
+	return nil
 }

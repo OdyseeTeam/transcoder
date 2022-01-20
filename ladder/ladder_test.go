@@ -2,6 +2,7 @@ package ladder
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/floostack/transcoder/ffmpeg"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestLoadLadderConfig(t *testing.T) {
-	ladder, err := Load(yamlConfig)
+	ladder, err := Load(defaultLadderYaml)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3500_000, ladder.Tiers[0].VideoBitrate)
@@ -19,7 +20,7 @@ func TestLoadLadderConfig(t *testing.T) {
 }
 
 func TestTweak(t *testing.T) {
-	ladder, err := Load(yamlConfig)
+	ladder, err := Load(defaultLadderYaml)
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -59,6 +60,27 @@ func TestTweak(t *testing.T) {
 				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
 			},
 		},
+		{
+			generateMeta(3840, 2160, 20000, FPS30),
+			[]Tier{
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+			},
+		},
+		{
+			generateMeta(100, 50, 110, FPS30),
+			[]Tier{},
+		},
+		{
+			generateMeta(1080, 1920, 3000, FPS30),
+			[]Tier{
+				{Width: 720, Height: 1280, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
+				{Width: 360, Height: 640, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
+				{Width: 144, Height: 256, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -71,10 +93,10 @@ func TestTweak(t *testing.T) {
 			meta.GetFormat().GetBitRate(),
 		)
 		t.Run(testName, func(t *testing.T) {
-			m, err := WrapMeta(&tc.meta)
 			assert.NoError(t, err)
-			l, err := ladder.Tweak(m)
+			l, err := ladder.Tweak(&tc.meta)
 			assert.NoError(t, err)
+			assert.Equal(t, len(tc.expectedTiers), len(l.Tiers), l.Tiers)
 			for i, tier := range l.Tiers {
 				assert.Equal(t, tc.expectedTiers[i].Width, tier.Width, tier)
 				assert.Equal(t, tc.expectedTiers[i].Height, tier.Height, tier)
@@ -87,37 +109,10 @@ func TestTweak(t *testing.T) {
 	}
 }
 
-var yamlConfig = []byte(`
-args:
-  sws_flags: bilinear
-  profile:v: main
-  crf: 23
-  refs: 1
-  preset: veryfast
-  force_key_frames: "expr:gte(t,n_forced*2)"
-  hls_time: 6
-
-tiers:
-  - definition: 1080p
-    bitrate: 3500_000
-    bitrate_cutoff: 6000_000
-    audio_bitrate: 160k
-    width: 1920
-    height: 1080
-  - definition: 720p
-    bitrate: 2500_000
-    audio_bitrate: 128k
-    width: 1280
-    height: 720
-  - definition: 360p
-    bitrate: 500_000
-    audio_bitrate: 96k
-    width: 640
-    height: 360
-  - definition: 144p
-    width: 256
-    height: 144
-    bitrate: 100_000
-    audio_bitrate: 64k
-    framerate: 15
-`)
+func generateMeta(w, h, br, fr int) ffmpeg.Metadata {
+	meta := ffmpeg.Metadata{
+		Format:  ffmpeg.Format{BitRate: strconv.Itoa(br * 1000)},
+		Streams: []ffmpeg.Streams{{CodecType: "audio"}, {CodecType: "video", BitRate: strconv.Itoa(br * 1000), Index: 0, Width: w, Height: h, AvgFrameRate: fmt.Sprintf("%v/1", fr)}},
+	}
+	return meta
+}

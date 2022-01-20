@@ -4,6 +4,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/floostack/transcoder/ffmpeg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,7 +32,11 @@ func Load(yamlLadder []byte) (Ladder, error) {
 }
 
 // Tweak modifies existing ladder according to supplied video metadata
-func (l Ladder) Tweak(m *Metadata) (Ladder, error) {
+func (l Ladder) Tweak(meta *ffmpeg.Metadata) (Ladder, error) {
+	m, err := WrapMeta(meta)
+	if err != nil {
+		return l, err
+	}
 	logger.Debugw("m.VideoStream.GetBitRate()", "rate", m.VideoStream.GetBitRate())
 	vrate, _ := strconv.Atoi(m.VideoStream.GetBitRate())
 	var vert, origResSeen bool
@@ -62,7 +67,7 @@ func (l Ladder) Tweak(m *Metadata) (Ladder, error) {
 		tweakedTiers = append(tweakedTiers, t)
 	}
 
-	if !origResSeen && l.Tiers[0].Height >= h {
+	if !origResSeen && l.Tiers[0].Height >= h && len(tweakedTiers) > 0 {
 		tweakedTiers = append([]Tier{{
 			Height:       h,
 			Width:        w,
