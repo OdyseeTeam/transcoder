@@ -172,9 +172,9 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			}
 
 			m := storage.Manifest{
-				URL:     task.payload.URL,
-				SDHash:  task.payload.SDHash,
-				Formats: res.Formats,
+				URL:    task.payload.URL,
+				SDHash: task.payload.SDHash,
+				Ladder: res.Ladder,
 			}
 			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {

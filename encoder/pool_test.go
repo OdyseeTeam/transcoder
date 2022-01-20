@@ -71,24 +71,24 @@ func (s *poolSuite) TestEncode() {
 #EXTM3U
 #EXT-X-VERSION:6
 #EXT-X-STREAM-INF:BANDWIDTH=316800,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
-var_0.m3u8
+v0.m3u8
 
 #EXT-X-STREAM-INF:BANDWIDTH=176000,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
-var_1.m3u8
+v1.m3u8
 
 #EXT-X-STREAM-INF:BANDWIDTH=140800,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
-var_2.m3u8
+v2.m3u8
 
 #EXT-X-STREAM-INF:BANDWIDTH=140800,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
-var_3.m3u8`,
-		"var_0.m3u8":          "var_0/seg_000000.ts",
-		"var_1.m3u8":          "var_1/seg_000000.ts",
-		"var_2.m3u8":          "var_2/seg_000000.ts",
-		"var_3.m3u8":          "var_3/seg_000000.ts",
-		"var_0/seg_000000.ts": "",
-		"var_1/seg_000000.ts": "",
-		"var_2/seg_000000.ts": "",
-		"var_3/seg_000000.ts": "",
+v3.m3u8`,
+		"v0.m3u8":       "v0_s000000.ts",
+		"v1.m3u8":       "v1_s000000.ts",
+		"v2.m3u8":       "v2_s000000.ts",
+		"v3.m3u8":       "v3_s000000.ts",
+		"v0_s000000.ts": "",
+		"v1_s000000.ts": "",
+		"v2_s000000.ts": "",
+		"v3_s000000.ts": "",
 	}
 	for f, str := range outFiles {
 		cont, err := ioutil.ReadFile(path.Join(s.out, f))

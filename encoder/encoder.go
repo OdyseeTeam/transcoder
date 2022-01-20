@@ -173,11 +173,11 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 			FfmpegBinPath:   e.ffmpegPath,
 			FfprobeBinPath:  e.ffprobePath,
 			ProgressEnabled: true,
-			Verbose:         false, // Set this to false if ffmpeg is failing to launch to see the reason
+			Verbose:         false, // Set this to true if ffmpeg is failing to launch to see the reason
 			OutputDir:       output,
 		}).
 		Input(input).
-		Output("var_%v.m3u8").
+		Output("v%v.m3u8").
 		Start(a)
 	if err != nil {
 		return nil, err

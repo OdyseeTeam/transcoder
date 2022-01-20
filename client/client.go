@@ -104,10 +104,10 @@ func Configure() *Configuration {
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
-			Timeout: 1200 * time.Second,
+			Timeout: 120 * time.Second,
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
-					Timeout:   15 * time.Second,
+					Timeout:   10 * time.Second,
 					KeepAlive: 120 * time.Second,
 				}).Dial,
 				TLSHandshakeTimeout:   30 * time.Second,
@@ -390,6 +390,10 @@ func (c Client) fetchFragment(url, sdHash, name string) (int64, error) {
 		default:
 			ret = ErrNotOK
 		}
+		c.logger.Debugw(
+			"unexpected http response",
+			"code", r.StatusCode,
+		)
 		return 0, ret
 	}
 

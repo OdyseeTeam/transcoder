@@ -54,7 +54,7 @@ type Manifest struct {
 	Size       int64  `yaml:",omitempty"`
 	Checksum   string `yaml:",omitempty"`
 
-	Formats []ladder.Format `yaml:",omitempty,flow"`
+	Ladder ladder.Ladder `yaml:",omitempty,flow"`
 }
 
 type StreamFileLoader func(rootPath ...string) ([]byte, error)

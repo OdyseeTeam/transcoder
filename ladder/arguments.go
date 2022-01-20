@@ -41,7 +41,7 @@ var hlsDefaultArguments = map[string]string{
 	"hls_flags":            "independent_segments",
 	"master_pl_name":       MasterPlaylist,
 	"strftime_mkdir":       "1",
-	"hls_segment_filename": "var_%v/seg_%06d.ts",
+	"hls_segment_filename": "v%v_s%06d.ts",
 }
 
 func NewArguments(out string, ladder Ladder, meta *ffmpeg.Metadata) (*ArgumentSet, error) {

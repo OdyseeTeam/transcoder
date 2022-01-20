@@ -145,7 +145,7 @@ func main() {
 			fmt.Printf("%.2f ", p.GetProgress())
 		}
 		fmt.Printf("done in %.2f seconds\n", time.Since(t).Seconds())
-		m.Formats = r.Formats
+		m.Ladder = r.Ladder
 		ls, err := storage.OpenLocalStream(outPath, m)
 		if err != nil {
 			panic(err)
