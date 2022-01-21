@@ -13,18 +13,19 @@ import (
 )
 
 type Metadata struct {
-	orig        *ffmpeg.Metadata
+	FMeta       *ffmpeg.Metadata
 	FPS         float64
 	IntFPS      int
+	FastStart   bool
 	VideoStream transcoder.Streams
 	AudioStream transcoder.Streams
 }
 
 var fpsPattern = regexp.MustCompile(`^(\d+)/(\d+)$`)
 
-func WrapMeta(origin *ffmpeg.Metadata) (*Metadata, error) {
+func WrapMeta(fmeta *ffmpeg.Metadata) (*Metadata, error) {
 	m := &Metadata{
-		orig: origin,
+		FMeta: fmeta,
 	}
 	vs := m.videoStream()
 	if vs == nil {
@@ -48,11 +49,11 @@ func WrapMeta(origin *ffmpeg.Metadata) (*Metadata, error) {
 }
 
 func (m *Metadata) videoStream() transcoder.Streams {
-	return GetVideoStream(m.orig)
+	return GetVideoStream(m.FMeta)
 }
 
 func (m *Metadata) audioStream() transcoder.Streams {
-	for _, s := range m.orig.GetStreams() {
+	for _, s := range m.FMeta.GetStreams() {
 		if s.GetCodecType() == "audio" {
 			return s
 		}

@@ -4,7 +4,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/floostack/transcoder/ffmpeg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,16 +31,11 @@ func Load(yamlLadder []byte) (Ladder, error) {
 }
 
 // Tweak modifies existing ladder according to supplied video metadata
-func (l Ladder) Tweak(meta *ffmpeg.Metadata) (Ladder, error) {
-	m, err := WrapMeta(meta)
-	if err != nil {
-		return l, err
-	}
-	logger.Debugw("m.VideoStream.GetBitRate()", "rate", m.VideoStream.GetBitRate())
-	vrate, _ := strconv.Atoi(m.VideoStream.GetBitRate())
+func (l Ladder) Tweak(meta *Metadata) (Ladder, error) {
+	vrate, _ := strconv.Atoi(meta.VideoStream.GetBitRate())
 	var vert, origResSeen bool
-	w := m.VideoStream.GetWidth()
-	h := m.VideoStream.GetHeight()
+	w := meta.VideoStream.GetWidth()
+	h := meta.VideoStream.GetHeight()
 	if h > w {
 		vert = true
 	}

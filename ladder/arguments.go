@@ -3,8 +3,6 @@ package ladder
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/floostack/transcoder/ffmpeg"
 )
 
 const (
@@ -44,16 +42,12 @@ var hlsDefaultArguments = map[string]string{
 	"hls_segment_filename": "v%v_s%06d.ts",
 }
 
-func NewArguments(out string, ladder Ladder, meta *ffmpeg.Metadata) (*ArgumentSet, error) {
-	m, err := WrapMeta(meta)
-	if err != nil {
-		return nil, err
-	}
+func NewArguments(out string, ladder Ladder, meta *Metadata) (*ArgumentSet, error) {
 	a := &ArgumentSet{
 		Output:    out,
 		Arguments: hlsDefaultArguments,
 		Ladder:    ladder,
-		Meta:      m,
+		Meta:      meta,
 	}
 
 	return a, nil

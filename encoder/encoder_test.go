@@ -43,6 +43,15 @@ func (s *encoderSuite) TearDownSuite() {
 	os.RemoveAll(s.out)
 }
 
+func (s *encoderSuite) TestCheckFastStart() {
+	absPath, _ := filepath.Abs(s.file.Name())
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	s.Require().NoError(err)
+	m, err := e.GetMetadata(absPath)
+	s.Require().NoError(err)
+	s.True(m.FastStart)
+}
+
 func (s *encoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
 	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
@@ -51,7 +60,7 @@ func (s *encoderSuite) TestEncode() {
 	res, err := e.Encode(absPath, s.out)
 	s.Require().NoError(err)
 
-	vs := ladder.GetVideoStream(res.Meta)
+	vs := res.OrigMeta.VideoStream
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
 

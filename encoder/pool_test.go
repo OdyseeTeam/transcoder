@@ -50,7 +50,7 @@ func (s *poolSuite) TestEncode() {
 
 	res := (<-p.Encode(absPath, s.out).Value()).(*Result)
 
-	vs := ladder.GetVideoStream(res.Meta)
+	vs := res.OrigMeta.VideoStream
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
 

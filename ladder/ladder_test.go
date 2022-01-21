@@ -94,7 +94,9 @@ func TestTweak(t *testing.T) {
 		)
 		t.Run(testName, func(t *testing.T) {
 			assert.NoError(t, err)
-			l, err := ladder.Tweak(&tc.meta)
+			m, err := WrapMeta(&tc.meta)
+			assert.NoError(t, err)
+			l, err := ladder.Tweak(m)
 			assert.NoError(t, err)
 			assert.Equal(t, len(tc.expectedTiers), len(l.Tiers), l.Tiers)
 			for i, tier := range l.Tiers {

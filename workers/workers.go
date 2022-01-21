@@ -86,14 +86,14 @@ func (w encoderWorker) Work(t dispatcher.Task) error {
 	TranscodingRunning.Dec()
 	TranscodingSpentSeconds.Add(tmr.Duration())
 
-	md, _ := strconv.ParseFloat(res.Meta.Format.Duration, 64)
+	md, _ := strconv.ParseFloat(res.OrigMeta.FMeta.Format.Duration, 64)
 	TranscodedSeconds.Add(md)
 	ll.Infow(
 		"encoding complete",
 		"out", streamPath,
 		"seconds_spent", tmr.String(),
-		"duration", res.Meta.Format.Duration,
-		"bitrate", res.Meta.Format.GetBitRate(),
+		"duration", res.OrigMeta.FMeta.Format.Duration,
+		"bitrate", res.OrigMeta.FMeta.Format.GetBitRate(),
 		"channel", r.ChannelURI,
 	)
 

@@ -3,7 +3,6 @@ package encoder
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,12 +16,14 @@ import (
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/pkg/errors"
 )
 
 const MasterPlaylist = "master.m3u8"
 
 type Encoder interface {
 	Encode(in, out string) (*Result, error)
+	GetMetadata(input string) (*ladder.Metadata, error)
 }
 
 type Configuration struct {
@@ -40,7 +41,7 @@ type encoder struct {
 
 type Result struct {
 	Input, Output string
-	Meta          *ffmpeg.Metadata
+	OrigMeta      *ladder.Metadata
 	Ladder        ladder.Ladder
 	Progress      <-chan ffmpegt.Progress
 }
@@ -125,7 +126,7 @@ func (c *Configuration) Ladder(l ladder.Ladder) *Configuration {
 
 // Encode does transcoding of specified video file into a series of HLS streams.
 func (e encoder) Encode(input, output string) (*Result, error) {
-	meta, err := e.getMetadata(input)
+	meta, err := e.GetMetadata(input)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	res := &Result{Input: input, Output: output, Meta: meta, Ladder: targetLadder}
+	res := &Result{Input: input, Output: output, OrigMeta: meta, Ladder: targetLadder}
 
 	if e.tg != nil {
 		err := e.tg.Generate(input, path.Join(output, "thumbnails10k.png"))
@@ -152,19 +153,19 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		return nil, err
 	}
 
-	vs := ladder.GetVideoStream(meta)
+	vs := meta.VideoStream
 	e.log.Info(
 		"starting transcoding",
 		"args", strings.Join(a.GetStrArguments(), " "),
-		"media_duration", meta.GetFormat().GetDuration(),
-		"media_bitrate", meta.GetFormat().GetBitRate(),
+		"media_duration", meta.FMeta.GetFormat().GetDuration(),
+		"media_bitrate", meta.FMeta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
 		"input", input, "output", output,
 	)
 
-	dur, _ := strconv.ParseFloat(meta.GetFormat().GetDuration(), 64)
-	btr, _ := strconv.ParseFloat(meta.GetFormat().GetBitRate(), 64)
+	dur, _ := strconv.ParseFloat(meta.FMeta.GetFormat().GetDuration(), 64)
+	btr, _ := strconv.ParseFloat(meta.FMeta.GetFormat().GetBitRate(), 64)
 	metrics.EncodedDurationSeconds.Add(dur)
 	metrics.EncodedBitrateMbit.WithLabelValues(fmt.Sprintf("%v", vs.GetHeight())).Observe(btr / 1024 / 1024)
 
@@ -188,7 +189,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 }
 
 // getMetadata uses ffprobe to parse video file metadata.
-func (e encoder) getMetadata(input string) (*ffmpeg.Metadata, error) {
+func (e encoder) GetMetadata(input string) (*ladder.Metadata, error) {
 	meta := &ffmpeg.Metadata{}
 
 	var outb, errb bytes.Buffer
@@ -210,5 +211,29 @@ func (e encoder) getMetadata(input string) (*ffmpeg.Metadata, error) {
 		return nil, err
 	}
 
-	return meta, nil
+	lm, err := ladder.WrapMeta(meta)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to wrap with ladder.Metadata")
+	}
+	lm.FastStart, err = e.checkFastStart(input)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to check for faststart")
+	}
+	return lm, nil
+}
+
+func (e encoder) checkFastStart(input string) (bool, error) {
+	cmd := exec.Command(e.ffmpegPath, "-v", "trace", "-i", input)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	cmd.Run()
+	result := strings.Fields(out.String())
+	var seenMdat bool
+	for _, l := range result {
+		if strings.Contains(l, "moov") && !seenMdat {
+			return true, nil
+		}
+	}
+	return false, nil
 }
