@@ -1,6 +1,7 @@
 package tower
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -198,11 +199,21 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 				if at.restored {
 					ll.Info("restored task received")
 				} else {
-					trReq := <-requests
-					mtt := &MsgTranscodingTask{
-						URL:    trReq.URI,
-						SDHash: trReq.SDHash,
+					var mtt *MsgTranscodingTask
+					for {
+						trReq := <-requests
+						mtt = &MsgTranscodingTask{
+							URL:    trReq.URI,
+							SDHash: trReq.SDHash,
+						}
+						_, err = s.rpc.tasks.q.GetTaskBySDHash(context.Background(), mtt.SDHash)
+						if err != nil {
+							break
+						}
+						ll.Info("task already exists", "payload", mtt)
+						trReq.Reject()
 					}
+
 					ll.Info("new task received, sending payload", "payload", mtt)
 					at.SendPayload(mtt)
 				}
