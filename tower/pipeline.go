@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/retriever"
 	"github.com/lbryio/transcoder/storage"
@@ -118,6 +119,8 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 		var origFile, encodedPath string
 		errMtr := metrics.TranscodingErrorsCount
 
+		var resolved *manager.TranscodingRequest
+
 		{
 			timer := time.Now()
 			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageDownloading))
@@ -126,7 +129,7 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 			task.progress <- taskProgress{Stage: StageDownloading}
 
 			runMtr.Inc()
-			res, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
+			dl, err := retriever.Retrieve(task.payload.URL, c.workDirs[dirStreams])
 			if err != nil {
 				log.Error("download failed", "err", err)
 				errMtr.WithLabelValues(string(StageDownloading)).Inc()
@@ -135,13 +138,14 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				task.errors <- taskError{err: err, fatal: false}
 				return
 			}
-			metrics.InputBytes.Add(float64(res.Size))
+			metrics.InputBytes.Add(float64(dl.Size))
 			runMtr.Dec()
 			spentMtr.Add(time.Since(timer).Seconds())
-			encodedPath = path.Join(c.workDirs[dirTranscoded], res.Resolved.SDHash)
-			origFile = res.File.Name()
+			encodedPath = path.Join(c.workDirs[dirTranscoded], dl.Resolved.SDHash)
+			origFile = dl.File.Name()
 			defer os.RemoveAll(origFile)
 			defer os.RemoveAll(encodedPath)
+			resolved = dl.Resolved
 		}
 
 		{
@@ -171,11 +175,9 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				}
 			}
 
-			m := storage.Manifest{
-				URL:    task.payload.URL,
-				SDHash: task.payload.SDHash,
-				Ladder: res.Ladder,
-			}
+			m := storage.NewManifest(task.payload.URL, resolved.ChannelURI, task.payload.SDHash)
+			m.Ladder = res.Ladder
+
 			ls, err = storage.OpenLocalStream(encodedPath, m)
 			if err != nil {
 				log.Error("stream object initialization failed", "err", err)

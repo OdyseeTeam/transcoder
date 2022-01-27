@@ -15,10 +15,7 @@ func TestOpenLocalStream(t *testing.T) {
 	dir := t.TempDir()
 	sdHash := randomdata.Alphanumeric(96)
 	PopulateHLSPlaylist(t, dir, sdHash)
-	m := Manifest{
-		URL:    "lbry://what",
-		SDHash: sdHash,
-	}
+	m := NewManifest(randomdata.SillyName(), randomdata.SillyName(), sdHash)
 	ls, err := OpenLocalStream(path.Join(dir, sdHash), m)
 	require.NoError(t, err)
 

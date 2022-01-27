@@ -50,7 +50,7 @@ func (s *s3suite) TestPutDelete() {
 	)
 	s.Require().NoError(err)
 
-	ls, err := OpenLocalStream(path.Join(s.streamsPath, s.sdHash), Manifest{SDHash: s.sdHash})
+	ls, err := OpenLocalStream(path.Join(s.streamsPath, s.sdHash), &Manifest{SDHash: s.sdHash})
 	s.Require().NoError(err)
 	err = ls.FillManifest()
 	s.Require().NoError(err)

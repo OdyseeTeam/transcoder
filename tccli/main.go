@@ -80,7 +80,7 @@ func main() {
 				log.Info("cannot retrieve video", "sd_hash", dir, "err", err)
 				continue
 			}
-			ls, err := storage.OpenLocalStream(path.Join(CLI.GenerateManifests.VideoDir, dir), storage.Manifest{URL: v.URL, SDHash: v.SDHash})
+			ls, err := storage.OpenLocalStream(path.Join(CLI.GenerateManifests.VideoDir, dir), storage.NewManifest(v.URL, v.Channel, v.SDHash))
 			if err != nil {
 				log.Info("cannot open local stream", "sd_hash", dir, "err", err)
 				continue
@@ -107,7 +107,7 @@ func main() {
 		log.Info("retired videos", "total_size", ts, "retired_size", fs)
 	case "transcode <url>":
 		var inPath, outPath string
-		var m storage.Manifest
+		var m *storage.Manifest
 
 		if strings.HasPrefix(CLI.Transcode.URL, "file://") {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
@@ -128,7 +128,7 @@ func main() {
 			f.Close()
 			inPath, _ = filepath.Abs(f.Name())
 			outPath = url.PathEscape(rr.URI)
-			m = storage.Manifest{URL: rr.URI, ChannelURL: rr.ChannelURI, SDHash: rr.SDHash}
+			m = storage.NewManifest(rr.URI, rr.ChannelURI, rr.SDHash)
 			defer os.RemoveAll(tmpDir)
 		}
 

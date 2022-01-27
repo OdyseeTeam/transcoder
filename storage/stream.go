@@ -62,14 +62,18 @@ type StreamFileProcessor func(data []byte, name string) error
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
 
+func NewManifest(url, channel, sdHash string) *Manifest {
+	return &Manifest{URL: url, ChannelURL: channel, SDHash: sdHash}
+}
+
 func GetStreamHasher() hash.Hash {
 	return sha512.New512_224()
 }
 
-func OpenLocalStream(dir string, manifest ...Manifest) (*LocalStream, error) {
+func OpenLocalStream(dir string, manifest ...*Manifest) (*LocalStream, error) {
 	s := LocalStream{Path: dir}
 	if len(manifest) > 0 {
-		s.Manifest = &manifest[0]
+		s.Manifest = manifest[0]
 	} else if _, err := os.Stat(path.Join(dir, ManifestName)); !os.IsNotExist(err) {
 		s.ReadManifest()
 	}

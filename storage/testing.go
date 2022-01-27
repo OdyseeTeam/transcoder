@@ -52,7 +52,7 @@ func PopulateHLSPlaylist(t *testing.T, dstPath, sdHash string) {
 
 	srcPath, err := filepath.Abs("./testdata")
 	require.NoError(t, err)
-	dummyls, err := OpenLocalStream(path.Join(srcPath, "dummy-stream"), Manifest{Checksum: SkipChecksum})
+	dummyls, err := OpenLocalStream(path.Join(srcPath, "dummy-stream"), &Manifest{Checksum: SkipChecksum})
 	require.NoError(t, err)
 	err = dummyls.WalkPlaylists(
 		func(rootPath ...string) ([]byte, error) {
