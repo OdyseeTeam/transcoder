@@ -71,7 +71,17 @@ func (l Ladder) Tweak(meta *Metadata) (Ladder, error) {
 	}
 
 	l.Tiers = tweakedTiers
+	logger.Debugw("ladder built", "tiers", l.Tiers)
 	return l, nil
+}
+
+func (l Ladder) ArgumentSet(out string, meta *Metadata) *ArgumentSet {
+	return &ArgumentSet{
+		Output:    out,
+		Arguments: hlsDefaultArguments,
+		Ladder:    l,
+		Meta:      meta,
+	}
 }
 
 func nsRate(w, h int) int {

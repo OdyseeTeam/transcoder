@@ -148,15 +148,11 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}
 	}
 
-	a, err := ladder.NewArguments(output, e.ladder, meta)
-	if err != nil {
-		return nil, err
-	}
-
+	args := targetLadder.ArgumentSet(output, meta)
 	vs := meta.VideoStream
 	e.log.Info(
 		"starting transcoding",
-		"args", strings.Join(a.GetStrArguments(), " "),
+		"args", strings.Join(args.GetStrArguments(), " "),
 		"media_duration", meta.FMeta.GetFormat().GetDuration(),
 		"media_bitrate", meta.FMeta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
@@ -179,7 +175,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}).
 		Input(input).
 		Output("v%v.m3u8").
-		Start(a)
+		Start(args)
 	if err != nil {
 		return nil, err
 	}

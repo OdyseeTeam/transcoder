@@ -28,6 +28,13 @@ func TestTweak(t *testing.T) {
 		expectedTiers []Tier
 	}{
 		{
+			generateMeta(640, 360, 5000, FPS30),
+			[]Tier{
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+			},
+		},
+		{
 			generateMeta(720, 480, 5000, FPS30),
 			[]Tier{
 				{Width: 720, Height: 480, VideoBitrate: nsRate(720, 480), AudioBitrate: "128k", Framerate: 0},

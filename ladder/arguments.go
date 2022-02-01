@@ -42,17 +42,6 @@ var hlsDefaultArguments = map[string]string{
 	"hls_segment_filename": "v%v_s%06d.ts",
 }
 
-func NewArguments(out string, ladder Ladder, meta *Metadata) (*ArgumentSet, error) {
-	a := &ArgumentSet{
-		Output:    out,
-		Arguments: hlsDefaultArguments,
-		Ladder:    ladder,
-		Meta:      meta,
-	}
-
-	return a, nil
-}
-
 // GetStrArguments serializes ffmpeg arguments in a format sutable for ffmpeg.Transcoder.Start.
 func (a *ArgumentSet) GetStrArguments() []string {
 	strArgs := []string{}
