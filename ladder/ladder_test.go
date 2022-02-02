@@ -52,6 +52,15 @@ func TestTweak(t *testing.T) {
 			},
 		},
 		{
+			generateMeta(1920, 1080, 5000, FPS30),
+			[]Tier{
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+			},
+		},
+		{
 			generateMeta(800, 600, 3000, FPS30),
 			[]Tier{
 				{Width: 800, Height: 600, VideoBitrate: nsRate(800, 600), AudioBitrate: "128k", Framerate: 0},
@@ -62,6 +71,7 @@ func TestTweak(t *testing.T) {
 		{
 			generateMeta(1920, 1080, 3000, FPS30),
 			[]Tier{
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
 				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
@@ -83,6 +93,7 @@ func TestTweak(t *testing.T) {
 		{
 			generateMeta(1080, 1920, 3000, FPS30),
 			[]Tier{
+				{Width: 1080, Height: 1920, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 720, Height: 1280, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 360, Height: 640, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
 				{Width: 144, Height: 256, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
@@ -105,7 +116,7 @@ func TestTweak(t *testing.T) {
 			assert.NoError(t, err)
 			l, err := ladder.Tweak(m)
 			assert.NoError(t, err)
-			assert.Equal(t, len(tc.expectedTiers), len(l.Tiers), l.Tiers)
+			require.Equal(t, len(tc.expectedTiers), len(l.Tiers), l.Tiers)
 			for i, tier := range l.Tiers {
 				assert.Equal(t, tc.expectedTiers[i].Width, tier.Width, tier)
 				assert.Equal(t, tc.expectedTiers[i].Height, tier.Height, tier)

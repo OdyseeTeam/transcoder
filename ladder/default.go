@@ -13,7 +13,7 @@ args:
 tiers:
   - definition: 1080p
     bitrate: 3500_000
-    bitrate_cutoff: 6000_000
+    # bitrate_cutoff: 6000_000
     audio_bitrate: 160k
     width: 1920
     height: 1080
