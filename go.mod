@@ -52,9 +52,9 @@ require (
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-// replace github.com/wagslane/go-rabbitmq => github.com/andybeletsky/go-rabbitmq v0.6.3-0.20211123182934-cb9bb85124a5
+replace github.com/wagslane/go-rabbitmq => github.com/andybeletsky/go-rabbitmq v0.6.3-0.20211123182934-cb9bb85124a5
 
-replace github.com/wagslane/go-rabbitmq => /Users/silence/Documents/LBRY/External/go-rabbitmq
+// replace github.com/wagslane/go-rabbitmq => /Users/silence/Documents/LBRY/External/go-rabbitmq
 
 // replace github.com/nikooo777/lbry-blobs-downloader => /Users/silence/Documents/LBRY/Repos/lbry-blobs-downloader
 
