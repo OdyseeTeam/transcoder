@@ -10,15 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/client"
-	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/video"
 
 	"github.com/alecthomas/kong"
 )
@@ -54,60 +51,18 @@ func main() {
 
 	switch ctx.Command() {
 	case "get-fragment-url":
-		c := client.New(
+		client.New(
 			client.Configure().VideoPath(path.Join("./transcoder-client", "")).
 				Server("http://" + CLI.GetFragmentUrl.Server).
 				LogLevel(client.Dev),
 		)
 
-		fmt.Println(c.BuildURL(c.GetPlaybackPath(CLI.GetFragmentUrl.URL, CLI.GetFragmentUrl.SDHash)))
+		// fmt.Println(c.BuildURL(c.GetPlaybackPath(CLI.GetFragmentUrl.URL, CLI.GetFragmentUrl.SDHash)))
 	case "get-video-url":
 		fmt.Printf("http://%s/api/v2/video/%s\n", CLI.GetVideoUrl.Server, url.PathEscape(strings.TrimSpace(CLI.GetVideoUrl.URL)))
-	case "generate-manifests":
-		var count int64
-		vdb := db.OpenDB(CLI.GenerateManifests.DBPath)
-		libCfg := video.Configure().
-			LocalStorage(storage.Local(CLI.GenerateManifests.VideoDir)).
-			DB(vdb)
-		lib := video.NewLibrary(libCfg)
-		dirs, err := godirwalk.ReadDirnames(CLI.GenerateManifests.VideoDir, nil)
-		if err != nil {
-			panic(err)
-		}
-		for _, dir := range dirs {
-			v, err := lib.Get(dir)
-			if err != nil {
-				log.Info("cannot retrieve video", "sd_hash", dir, "err", err)
-				continue
-			}
-			ls, err := storage.OpenLocalStream(path.Join(CLI.GenerateManifests.VideoDir, dir), storage.NewManifest(v.URL, v.Channel, v.SDHash))
-			if err != nil {
-				log.Info("cannot open local stream", "sd_hash", dir, "err", err)
-				continue
-			}
-			err = ls.FillManifest()
-			if err != nil {
-				log.Info("cannot fill manifest", "sd_hash", dir, "err", err)
-				continue
-			}
-			log.Info("processed stream", "dir", dir)
-			count++
-		}
-		log.Info("manifests written", "count", count)
-	case "retire":
-		vdb := db.OpenDB(CLI.Retire.DBPath)
-		libCfg := video.Configure().
-			LocalStorage(storage.Local(CLI.Retire.VideoDir)).
-			DB(vdb)
-		lib := video.NewLibrary(libCfg)
-		ts, fs, err := video.RetireVideosLocal(lib, uint64(CLI.Retire.MaxSize)*uint64(1000_000_000))
-		if err != nil {
-			panic(err)
-		}
-		log.Info("retired videos", "total_size", ts, "retired_size", fs)
 	case "transcode <url>":
 		var inPath, outPath string
-		var m *storage.Manifest
+		var rr *resolve.ResolvedStream
 
 		if strings.HasPrefix(CLI.Transcode.URL, "file://") {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
@@ -117,7 +72,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			rr, err := resolve.ResolveStream(CLI.Transcode.URL)
+			rr, err = resolve.ResolveStream(CLI.Transcode.URL)
 			if err != nil {
 				panic(err)
 			}
@@ -128,7 +83,6 @@ func main() {
 			f.Close()
 			inPath, _ = filepath.Abs(f.Name())
 			outPath = url.PathEscape(rr.URI)
-			m = storage.NewManifest(rr.URI, rr.ChannelURI, rr.SDHash)
 			defer os.RemoveAll(tmpDir)
 		}
 
@@ -145,12 +99,11 @@ func main() {
 			fmt.Printf("%.2f ", p.GetProgress())
 		}
 		fmt.Printf("done in %.2f seconds\n", time.Since(t).Seconds())
-		m.Ladder = r.Ladder
-		ls, err := storage.OpenLocalStream(outPath, m)
+		ls := library.InitStream(outPath, "")
 		if err != nil {
 			panic(err)
 		}
-		err = ls.FillManifest()
+		err = ls.GenerateManifest(rr.URI, rr.ChannelURI, rr.SDHash)
 		if err != nil {
 			panic(err)
 		}

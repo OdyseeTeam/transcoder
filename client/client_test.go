@@ -236,17 +236,29 @@ func (s *clientSuite) TestLocalURL() {
 	)
 }
 
+func (s *clientSuite) TestGetPlaybackPath() {
+	url := "morgan"
+	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
+	cl := dummyRedirectClient(fmt.Sprintf("remote://storage1/%v/master.m3u8", sdhash))
+	c := New(Configure().HTTPClient(cl))
+	u := c.GetPlaybackPath("morgan", sdhash)
+	s.Equal(
+		fmt.Sprintf("%s/%s/%s", url, sdhash, "master.m3u8"),
+		u,
+	)
+}
+
 func (s *clientSuite) Test_getFragmentURL() {
-	cl := dummyRedirectClient("http://t0.lbry.tv:18081/streams/bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a/master.m3u8")
+	cl := dummyRedirectClient("remote://storage1/sdhash/")
 	dstPath := s.T().TempDir()
 	c := New(Configure().HTTPClient(cl).VideoPath(dstPath).LogLevel(Dev))
 
 	u, err := c.getFragmentURL(
 		"vanquish-trailer-(2021)-morgan-freeman,#b7b150d1bbca4650ad4ab921dd8d424bf77c1141",
-		"bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a",
+		"sdhash",
 		"master.m3u8")
 	s.Require().NoError(err)
-	s.Equal("http://t0.lbry.tv:18081/streams/bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a/master.m3u8", u)
+	s.Equal("https://cache.transcoder.odysee.com/t-na/sdhash/master.m3u8?origin=storage1", u)
 }
 
 func randomString(n int) string {

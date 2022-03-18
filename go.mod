@@ -10,24 +10,23 @@ require (
 	github.com/aws/aws-sdk-go v1.36.29
 	github.com/brk0v/directio v0.0.0-20190225130936-69406e757cf7
 	github.com/c2h5oh/datasize v0.0.0-20200825124411-48ed595a09d2
+	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/draganm/miniotest v0.1.0
 	github.com/fasthttp/router v1.3.3
 	github.com/floostack/transcoder v1.2.0
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/go-redis/redis/v8 v8.11.4
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grafov/m3u8 v0.11.1
-	github.com/hibiken/asynq v0.21.0
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/karrick/godirwalk v1.16.1
-	github.com/lbryio/lbry.go/v2 v2.7.2-0.20210416195322-6516df1418e3
+	github.com/lbryio/lbry.go/v2 v2.7.2-0.20220208210038-a0391bec7915
 	github.com/lib/pq v1.10.4
 	github.com/mattn/go-sqlite3 v1.14.6
-	github.com/nikooo777/lbry-blobs-downloader v1.0.8
+	github.com/nikooo777/lbry-blobs-downloader v1.0.9
 	github.com/oklog/ulid/v2 v2.0.2
-	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
+	github.com/onsi/gomega v1.16.0 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/profile v1.5.0
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rabbitmq/amqp091-go v0.0.0-20210823000215-c428a6150891
 	github.com/rubenv/sql-migrate v0.0.0-20211023115951-9f02b1e13857
@@ -45,6 +44,7 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
 	golang.org/x/tools v0.1.6-0.20210908190839-cf92b39a962c // indirect
+	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	honnef.co/go/tools v0.2.0 // indirect
 	logur.dev/logur v0.17.0
@@ -56,6 +56,6 @@ replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1
 
 replace github.com/wagslane/go-rabbitmq => /Users/silence/Documents/LBRY/External/go-rabbitmq
 
-replace github.com/nikooo777/lbry-blobs-downloader => /Users/silence/Documents/LBRY/Repos/lbry-blobs-downloader
+// replace github.com/nikooo777/lbry-blobs-downloader => /Users/silence/Documents/LBRY/Repos/lbry-blobs-downloader
 
 //  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/External/transcoder

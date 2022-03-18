@@ -262,7 +262,7 @@ func (c Client) tmpDir() string {
 }
 
 func (c Client) BuildURL(loc streamLocation, filename string) string {
-	return fmt.Sprintf("%s%s?origin=%s", c.remoteServer, loc.path, loc.origin)
+	return fmt.Sprintf("%s%s%s?origin=%s", c.remoteServer, loc.path, filename, loc.origin)
 }
 
 // GetPlaybackPath returns a root HLS playlist path.
