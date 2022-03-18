@@ -36,7 +36,7 @@ require (
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0
 	github.com/valyala/fasthttp v1.17.0
-	github.com/wagslane/go-rabbitmq v0.6.3-0.20211109224958-69f0597bf76a
+	github.com/wagslane/go-rabbitmq v0.7.1
 	go.uber.org/goleak v1.1.10
 	go.uber.org/zap v1.16.0
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
@@ -52,7 +52,7 @@ require (
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-replace github.com/wagslane/go-rabbitmq => github.com/andybeletsky/go-rabbitmq v0.6.3-0.20211123182934-cb9bb85124a5
+replace github.com/wagslane/go-rabbitmq => github.com/andybeletsky/go-rabbitmq v0.6.3-0.20220318172029-6b36934a7885
 
 // replace github.com/wagslane/go-rabbitmq => /Users/silence/Documents/LBRY/External/go-rabbitmq
 
