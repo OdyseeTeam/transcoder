@@ -14,9 +14,9 @@ import (
 	"github.com/lbryio/transcoder/client"
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/video"
 
@@ -60,7 +60,7 @@ func main() {
 				LogLevel(client.Dev),
 		)
 
-		fmt.Println(c.BuildUrl(c.GetPlaybackPath(CLI.GetFragmentUrl.URL, CLI.GetFragmentUrl.SDHash)))
+		fmt.Println(c.BuildURL(c.GetPlaybackPath(CLI.GetFragmentUrl.URL, CLI.GetFragmentUrl.SDHash)))
 	case "get-video-url":
 		fmt.Printf("http://%s/api/v2/video/%s\n", CLI.GetVideoUrl.Server, url.PathEscape(strings.TrimSpace(CLI.GetVideoUrl.URL)))
 	case "generate-manifests":
@@ -117,7 +117,7 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-			rr, err := manager.ResolveRequest(CLI.Transcode.URL)
+			rr, err := resolve.ResolveStream(CLI.Transcode.URL)
 			if err != nil {
 				panic(err)
 			}

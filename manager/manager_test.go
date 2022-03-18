@@ -5,15 +5,19 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/Pallinder/go-randomdata"
+	"github.com/lbryio/transcoder/library"
+	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/video"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/stretchr/testify/suite"
 )
 
 type managerSuite struct {
 	suite.Suite
+	library.LibraryTestHelper
 }
 
 func isLevel5(key string) bool {
@@ -28,53 +32,29 @@ func TestManagerSuite(t *testing.T) {
 	suite.Run(t, new(managerSuite))
 }
 
-type vlib struct {
-	ret *video.Video
-}
-
-func (l *vlib) Get(h string) (*video.Video, error) {
-	return l.ret, nil
-}
-
-func (l *vlib) Add(_ video.AddParams) (*video.Video, error) {
-	return nil, nil
-}
-
-func (l *vlib) New(_ string) *storage.LocalStream {
-	return &storage.LocalStream{}
-}
-
-func (l *vlib) Path() string {
-	return ""
-}
-
-func (l *vlib) AddLocalStream(_, _ string, _ storage.LocalStream) (*video.Video, error) {
-	return nil, nil
-}
-
-func (l *vlib) AddRemoteStream(storage.RemoteStream) (*video.Video, error) {
-	return nil, nil
-}
-
 func (s *managerSuite) SetupSuite() {
 	logger = logging.Create("manager", logging.Dev)
+	s.Require().NoError(s.SetupLibraryDB())
+}
+
+func (s *managerSuite) TearDownSuite() {
+	s.Require().NoError(s.TearDownLibraryDB())
 }
 
 func (s *managerSuite) TestVideo() {
-	mgr := NewManager(&vlib{ret: nil}, 0)
+	var err error
+	lib := library.New(library.Config{DB: s.DB, Log: zapadapter.NewKV(nil)})
 
-	LoadConfiguredChannels(
-		[]string{
-			"@BretWeinstein:f",
-		},
-		[]string{
-			"@davidpakman#7",
-			"@specialoperationstest#3",
-		},
-		[]string{
-			"@TheVoiceofReason#a",
-		},
-	)
+	_, err = lib.AddChannel("@BretWeinstein#f", db.ChannelPriorityHigh)
+	s.Require().NoError(err)
+	_, err = lib.AddChannel("@davidpakman#7", "")
+	s.Require().NoError(err)
+	_, err = lib.AddChannel("@specialoperationstest#3", "")
+	s.Require().NoError(err)
+	_, err = lib.AddChannel("@TheVoiceofReason#a", db.ChannelPriorityDisabled)
+	s.Require().NoError(err)
+
+	mgr := NewManager(lib, 0)
 
 	urlsPriority := []string{
 		"@BretWeinstein#f/EvoLens87#1",
@@ -96,51 +76,50 @@ func (s *managerSuite) TestVideo() {
 		"lbry://@TheVoiceofReason#a/PaypalSucks#5",
 	}
 	urlsNotFound := []string{
-		randomString(96),
-		randomString(24) + "#" + randomString(12),
-		randomString(500),
+		randomdata.SillyName() + "#" + randomdata.SillyName(),
+		randomdata.Alphanumeric(96),
 	}
 
 	for _, u := range urlsPriority {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrTranscodingQueued, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrTranscodingQueued, err)
 	}
 
 	for _, u := range urlsEnabled {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrTranscodingQueued, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrTranscodingQueued, err)
 	}
 
 	for _, u := range urlsLevel5 {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrTranscodingQueued, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrTranscodingQueued, err)
 	}
 
 	for _, u := range urlsNotEnabled {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrTranscodingForbidden, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrTranscodingForbidden, err)
 	}
 
 	for _, u := range urlsDisabled {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrChannelNotEnabled, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrTranscodingForbidden, err)
 	}
 
 	for _, u := range urlsNoChannel {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrNoSigningChannel, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrNoSigningChannel, err)
 	}
 
 	for _, u := range urlsNotFound {
 		v, err := mgr.Video(u)
-		s.Nil(v)
-		s.Equal(ErrStreamNotFound, err)
+		s.Empty(v)
+		s.Equal(resolve.ErrClaimNotFound, err)
 	}
 
 	expectedUrls := []string{urlsPriority[0], urlsEnabled[0], urlsLevel5[0], urlsNotEnabled[0], urlsEnabled[1]}
@@ -161,15 +140,9 @@ func (s *managerSuite) TestVideo() {
 func (s *managerSuite) TestRequests() {
 	var r1, r2 *TranscodingRequest
 
-	LoadConfiguredChannels(
-		[]string{},
-		[]string{
-			"@specialoperationstest#3",
-		},
-		[]string{},
-	)
+	lib := library.New(library.Config{DB: s.DB, Log: zapadapter.NewKV(nil)})
+	mgr := NewManager(lib, 0)
 
-	mgr := NewManager(&vlib{ret: nil}, 0)
 	mgr.Video("@specialoperationstest#3/fear-of-death-inspirational#a")
 	out := mgr.Requests()
 	r1 = <-out
@@ -182,17 +155,4 @@ func (s *managerSuite) TestRequests() {
 	}
 
 	s.NotNil(r1)
-}
-
-func TestValidateIncomingVideo(t *testing.T) {
-}
-
-func randomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
-	}
-	return string(b)
 }

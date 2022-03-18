@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -15,7 +13,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
-	"github.com/lbryio/transcoder/video"
 	"github.com/prometheus/client_golang/prometheus"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -38,18 +35,16 @@ type ServerConfig struct {
 	db                      *sql.DB
 	workDir, workDirUploads string
 	httpServerBind          string
-	httpServerURL           string
+	HttpServerURL           string
 	log                     logging.KVLogger
 	videoManager            *manager.VideoManager
 	timings                 map[string]time.Duration
-	state                   *State
 	devMode                 bool
 }
 
 type Server struct {
 	*ServerConfig
 	rpc      *towerRPC
-	registry *workerRegistry
 	stopChan chan struct{}
 
 	httpServer *fasthttp.Server
@@ -62,13 +57,6 @@ type worker struct {
 	capacity  int
 	available int
 	lastSeen  time.Time
-}
-
-type workerRegistry struct {
-	sync.RWMutex
-	workers   map[string]*worker
-	capacity  int
-	available int
 }
 
 type Timings map[string]time.Duration
@@ -97,10 +85,7 @@ func (c *ServerConfig) Timings(t Timings) *ServerConfig {
 
 func (c *ServerConfig) HttpServer(bind, url string) *ServerConfig {
 	c.httpServerBind = bind
-	if !strings.HasSuffix(url, "/") {
-		url += "/"
-	}
-	c.httpServerURL = url
+	c.HttpServerURL = url
 	return c
 }
 
@@ -111,11 +96,6 @@ func (c *ServerConfig) VideoManager(manager *manager.VideoManager) *ServerConfig
 
 func (c *ServerConfig) WorkDir(workDir string) *ServerConfig {
 	c.workDir = workDir
-	return c
-}
-
-func (c *ServerConfig) State(state *State) *ServerConfig {
-	c.state = state
 	return c
 }
 
@@ -139,7 +119,6 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 	s := Server{
 		ServerConfig: config,
-		registry:     &workerRegistry{workers: map[string]*worker{}},
 		stopChan:     make(chan struct{}),
 	}
 
@@ -156,7 +135,6 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.rpc.videoManager = s.videoManager
 
 	return &s, nil
 }
@@ -168,7 +146,6 @@ func (s *Server) StartAll() error {
 
 	s.rpc.declareQueues()
 
-	// go s.startWatchingWorkerStatus()
 	if err := s.startForwardingRequests(s.videoManager.Requests()); err != nil {
 		return err
 	}
@@ -253,12 +230,12 @@ func (s *Server) manageTask(at *activeTask) {
 				return
 			}
 			metrics.TranscodingRequestsRunning.With(prometheus.Labels{metrics.LabelWorkerName: at.workerID}).Dec()
-			if _, err := s.videoManager.Library().AddRemoteStream(*d.RemoteStream); err != nil {
+			if err := s.videoManager.Library().AddRemoteStream(*d.RemoteStream); err != nil {
 				ll.Info("error adding remote stream", "err", err)
 				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
-			ll.Info("added remote stream", "url", d.RemoteStream.URL)
+			ll.Info("added remote stream", "url", d.RemoteStream.URL())
 			metrics.TranscodingRequestsDone.With(labels).Inc()
 			return
 		case <-s.stopChan:
@@ -271,13 +248,12 @@ func (s *Server) startHttpServer() error {
 	router := router.New()
 
 	metrics.RegisterTowerMetrics()
-	video.RegisterMetrics()
 
-	manager.AttachVideoHandler(router, "", s.videoManager.Library().Path(), s.videoManager, s.log)
+	manager.AttachVideoHandler(router, "", s.videoManager, s.log)
 
 	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)
 
-	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
+	s.log.Info("starting tower http server", "addr", s.httpServerBind, "url", s.HttpServerURL)
 	// TODO: Cleanup middleware attachment.
 	httpServer := &fasthttp.Server{
 		Handler:          manager.MetricsMiddleware(manager.CORSMiddleware(router.Handler)),
@@ -296,7 +272,7 @@ func (s *Server) startHttpServer() error {
 	}()
 	go func() {
 		<-s.stopChan
-		s.log.Info("shutting down tower http server", "addr", s.httpServerBind, "url", s.httpServerURL)
+		s.log.Info("shutting down tower http server", "addr", s.httpServerBind, "url", s.HttpServerURL)
 		httpServer.Shutdown()
 	}()
 

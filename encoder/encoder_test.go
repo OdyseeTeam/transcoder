@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/lbryio/transcoder/ladder"
-	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -29,7 +29,7 @@ func (s *encoderSuite) SetupSuite() {
 	s.in = path.Join(os.TempDir(), "encoderSuite_in")
 
 	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := manager.ResolveRequest(url)
+	c, err := resolve.ResolveStream(url)
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +57,7 @@ func (s *encoderSuite) TestLadder() {
 	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
 	s.Require().NoError(err)
 
-	c, err := manager.ResolveRequest(url)
+	c, err := resolve.ResolveStream(url)
 	s.Require().NoError(err)
 	file, _, err := c.Download(s.T().TempDir())
 	s.Require().NoError(err)

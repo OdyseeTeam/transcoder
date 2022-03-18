@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/storage"
 
@@ -56,11 +57,10 @@ func (s *pipelineSuite) TestProcessSuccess() {
 	s.Require().NoError(err)
 	c, err := newPipeline(s.workDir, "", s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
-	stop := make(chan struct{})
 
 	wt := createWorkerTask(MsgTranscodingTask{URL: url, SDHash: sdh})
 
-	c.Process(stop, wt)
+	c.Process(wt)
 	var r taskResult
 loop:
 	for {
@@ -76,7 +76,7 @@ loop:
 		}
 	}
 
-	sf, err := s.s3drv.GetFragment(r.remoteStream.URL, storage.MasterPlaylistName)
+	sf, err := s.s3drv.GetFragment(r.remoteStream.TID(), library.MasterPlaylistName)
 	s.Require().NoError(err)
 	s.Require().NotNil(sf)
 }
@@ -88,10 +88,9 @@ func (s *pipelineSuite) TestProcessFailure() {
 	s.Require().NoError(err)
 	c, err := newPipeline(s.workDir, "", s.s3drv, enc, zapadapter.NewKV(nil))
 	s.Require().NoError(err)
-	stop := make(chan struct{})
 
 	wt := createWorkerTask(MsgTranscodingTask{URL: url, SDHash: sdh})
-	c.Process(stop, wt)
+	c.Process(wt)
 
 loop:
 	for {

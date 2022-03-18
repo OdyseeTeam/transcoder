@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/encoder"
-	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/pkg/retriever"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower/metrics"
 
-	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
 )
 
@@ -69,63 +69,20 @@ func newPipeline(workDir, workerID string, s3 *storage.S3Driver, encoder encoder
 	return &p, nil
 }
 
-func (p *pipeline) UploadLeftovers(stop chan struct{}) (<-chan streamUploadResult, error) {
-	// Upload left over streams
-	// tc.sendStatus(taskProgress{Stage: StageUploading, Percent: 0})
-	streams, err := godirwalk.ReadDirnames(p.workDirs[dirTranscoded], nil)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "cannot get streams list")
-	}
-
-	results := make(chan streamUploadResult)
-
-	go func() {
-		defer close(results)
-		for _, sdHash := range streams {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			// Skip non-sdHashes
-			if len(sdHash) != 96 {
-				continue
-			}
-			res := streamUploadResult{url: sdHash}
-			ls, err := storage.OpenLocalStream(path.Join(p.workDirs[dirTranscoded], sdHash))
-			if err != nil {
-				res.err = errors.Wrap(err, "cannot open stream")
-				results <- res
-				return
-			}
-			_, err = p.s3.Put(ls, true)
-			if err != nil {
-				res.err = errors.Wrap(err, "cannot upload stream")
-				results <- res
-				return
-			}
-			results <- res
-		}
-	}()
-	return results, nil
-}
-
-func (c *pipeline) Process(stop chan struct{}, task workerTask) {
-	var ls *storage.LocalStream
+func (c *pipeline) Process(task workerTask) {
+	var stream *library.Stream
 	log := logging.AddLogRef(c.log, task.payload.SDHash)
 
 	go func() {
 		var origFile, encodedPath string
 		errMtr := metrics.TranscodingErrorsCount
 
-		var resolved *manager.TranscodingRequest
+		var resolved *resolve.ResolvedStream
 
 		{
 			timer := time.Now()
 			runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageDownloading))
 			spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageDownloading))
-
 			task.progress <- taskProgress{Stage: StageDownloading}
 
 			runMtr.Inc()
@@ -175,20 +132,8 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				}
 			}
 
-			m := storage.NewManifest(task.payload.URL, resolved.ChannelURI, task.payload.SDHash)
-			m.Ladder = res.Ladder
-
-			ls, err = storage.OpenLocalStream(encodedPath, m)
-			if err != nil {
-				log.Error("stream object initialization failed", "err", err)
-				runMtr.Dec()
-				spentMtr.Add(time.Since(timer).Seconds())
-				errMtr.WithLabelValues(string(StageUploading)).Inc()
-				task.errors <- taskError{err: errors.Wrap(err, "stream object initialization failed"), fatal: true}
-				return
-			}
-
-			err = ls.FillManifest()
+			stream = library.InitStream(encodedPath, c.s3.Name())
+			err = stream.GenerateManifest(task.payload.URL, resolved.ChannelURI, task.payload.SDHash)
 			if err != nil {
 				log.Error("failed to fill manifest", "err", err)
 				runMtr.Dec()
@@ -197,12 +142,13 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				task.errors <- taskError{err: errors.Wrap(err, "failed to fill manifest"), fatal: true}
 				return
 			}
-			metrics.OutputBytes.Add(float64(ls.Size()))
+			stream.Manifest.Ladder = res.Ladder
+			metrics.OutputBytes.Add(float64(stream.Size()))
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 
-			log.Info("encoding done", "stream", ls)
-			defer os.RemoveAll(ls.Path)
+			log.Info("encoding done", "stream", stream)
+			defer os.RemoveAll(stream.LocalPath)
 		}
 
 		{
@@ -212,7 +158,7 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 0}
 			runMtr.Inc()
-			rs, err := c.s3.PutWithContext(context.Background(), ls, true)
+			err := c.s3.PutWithContext(context.Background(), stream, true)
 			if err != nil {
 				e := taskError{err: errors.Wrap(err, "stream upload failed")}
 				if errors.Is(err, storage.ErrStreamExists) {
@@ -221,13 +167,14 @@ func (c *pipeline) Process(stop chan struct{}, task workerTask) {
 				errMtr.WithLabelValues(string(StageUploading)).Inc()
 				spentMtr.Add(time.Since(timer).Seconds())
 				runMtr.Dec()
+
 				task.errors <- e
 				return
 			}
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 			task.progress <- taskProgress{Stage: StageUploading, Percent: 100}
-			task.result <- taskResult{remoteStream: rs}
+			task.result <- taskResult{remoteStream: stream}
 		}
 	}()
 }

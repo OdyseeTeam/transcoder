@@ -3,8 +3,8 @@ package retriever
 import (
 	"os"
 
-	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
+	"github.com/lbryio/transcoder/pkg/resolve"
 )
 
 type downloadTask struct {
@@ -14,7 +14,7 @@ type downloadTask struct {
 type DownloadResult struct {
 	File     *os.File
 	Size     int64
-	Resolved *manager.TranscodingRequest
+	Resolved *resolve.ResolvedStream
 }
 
 type pool struct {
@@ -24,7 +24,7 @@ type pool struct {
 type worker struct{}
 
 func Retrieve(url, out string) (*DownloadResult, error) {
-	r, err := manager.ResolveRequest(url)
+	r, err := resolve.ResolveStream(url)
 	if err != nil {
 		return nil, err
 	}

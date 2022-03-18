@@ -7,7 +7,7 @@ import (
 )
 
 //go:embed migrations/*.sql
-var migrationsFS embed.FS
+var MigrationsFS embed.FS
 
 type DBConfig struct {
 	dsn, dbName, connOpts string
@@ -54,7 +54,7 @@ func ConnectDB(config *DBConfig) (*sql.DB, error) {
 		return nil, err
 	}
 	if config.migrate {
-		_, err = NewMigrator(db, migrationsFS).MigrateUp()
+		_, err = NewMigrator(db, MigrationsFS).MigrateUp()
 		if err != nil {
 			return nil, err
 		}

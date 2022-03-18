@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/pkg/mfr"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -45,7 +46,9 @@ func (p *Pool) AddQueue(name string, minHits uint, k Gatekeeper) {
 // Queues are traversed in the same order they are added.
 // If gatekeeper returns an error, admission stops and the error is returned to the caller.
 func (p *Pool) Admit(key string, value interface{}) error {
+	ll := logger.With("key", key)
 	for i, level := range p.levels {
+		ll.Debugw("checking level", "level", level.name)
 		q := level.queue
 		_, s := level.queue.Get(key)
 
@@ -57,27 +60,28 @@ func (p *Pool) Admit(key string, value interface{}) error {
 				mql.Inc()
 				mqh.Inc()
 				if i == len(p.levels)-1 {
-					return ErrTranscodingForbidden
+					return resolve.ErrTranscodingForbidden
 				}
-				return ErrTranscodingQueued
+				return resolve.ErrTranscodingQueued
 			}
 		case mfr.StatusActive:
 			mqh.Inc()
 			q.Hit(key, value)
-			return ErrTranscodingUnderway
+			return resolve.ErrTranscodingUnderway
 		case mfr.StatusQueued:
 			mqh.Inc()
 			q.Hit(key, value)
-			return ErrTranscodingQueued
+			return resolve.ErrTranscodingQueued
 		case mfr.StatusDone:
 			mqh.Inc()
 			q.Hit(key, value)
 			// This is to prevent race conditions when the item has been transcoded already
 			// while the request is still in flight.
-			return ErrTranscodingUnderway
+			return resolve.ErrTranscodingUnderway
 		}
 	}
-	return nil
+	ll.Debug("suitable level not found")
+	return resolve.ErrChannelNotEnabled
 }
 
 // Start will launch the cycle of retrieving items out of queues. Should be called after at least one `AddQueue` call.

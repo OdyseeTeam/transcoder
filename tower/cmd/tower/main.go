@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"strconv"
 	"syscall"
@@ -11,15 +10,17 @@ import (
 	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/ladder"
+	"github.com/lbryio/transcoder/library"
+	ldb "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/mfr"
+	"github.com/lbryio/transcoder/pkg/migrator"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower"
 	"github.com/lbryio/transcoder/tower/queue"
-	"github.com/lbryio/transcoder/video"
 
 	"github.com/alecthomas/kong"
 	"github.com/spf13/viper"
@@ -63,7 +64,6 @@ func serve() {
 	if !CLI.Debug {
 		db.SetLogger(logging.Create("db", logging.Prod))
 		encoder.SetLogger(logging.Create("encoder", logging.Prod))
-		video.SetLogger(logging.Create("video", logging.Prod))
 		manager.SetLogger(logging.Create("claim", logging.Prod))
 		storage.SetLogger(logging.Create("storage", logging.Prod))
 		ladder.SetLogger(logging.Create("formats", logging.Prod))
@@ -82,66 +82,40 @@ func serve() {
 	towerCfg := cfg.GetStringMapString("tower")
 	libCfg := cfg.GetStringMapString("library")
 
-	err = os.MkdirAll(libCfg["sqlite"], os.ModePerm)
+	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]), ldb.MigrationsFS)
 	if err != nil {
-		log.Fatal(err)
-	}
-	err = os.MkdirAll(libCfg["videos"], os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = os.MkdirAll(towerCfg["workdir"], os.ModePerm)
-	if err != nil {
-		log.Fatal(err)
+		log.Fatal("library db initialization failed", err)
 	}
 
-	vdb := db.OpenDB(path.Join(libCfg["sqlite"], "videos.sqlite"))
-	err = vdb.MigrateUp(video.InitialMigration)
-	if err != nil {
-		log.Fatal(err)
-	}
-	libConfig := video.Configure().
-		LocalStorage(storage.Local(libCfg["videos"])).
-		MaxLocalSize(libCfg["maxsize"]).
-		MaxRemoteSize(s3cfg["maxsize"]).
-		DB(vdb)
-
-	if s3cfg["bucket"] != "" {
-		s3d, err := storage.InitS3Driver(
-			storage.S3Configure().
-				Endpoint(s3cfg["endpoint"]).
-				Credentials(s3cfg["key"], s3cfg["secret"]).
-				Bucket(s3cfg["bucket"]))
-		if err != nil {
-			log.Fatal("s3 driver initialization failed", err)
-		}
-		libConfig.RemoteStorage(s3d)
-		log.Infow("s3 storage configured", "bucket", s3cfg["bucket"])
-	}
-	lib := video.NewLibrary(libConfig)
-
-	var s3StopChan chan<- interface{}
-	// if s3cfg["bucket"] != "" {
-	// 	s3StopChan = video.SpawnS3uploader(lib)
-	// }
-
-	manager.LoadConfiguredChannels(
-		cfg.GetStringSlice("prioritychannels"),
-		cfg.GetStringSlice("enabledchannels"),
-		cfg.GetStringSlice("disabledchannels"),
+	s3storage, err := storage.InitS3Driver(
+		storage.S3Configure().
+			Endpoint(s3cfg["endpoint"]).
+			Credentials(s3cfg["key"], s3cfg["secret"]).
+			Bucket(s3cfg["bucket"]).
+			Name(s3cfg["name"]),
 	)
+	if err != nil {
+		log.Fatal("s3 driver initialization failed", err)
+	}
+	log.Infow("s3 storage configured", "bucket", s3cfg["bucket"])
 
-	cleanStopChan := video.SpawnRemoteLibraryCleaning(lib)
+	lib := library.New(library.Config{
+		DB:      libDB,
+		Storage: s3storage,
+		Log:     zapadapter.NewKV(nil),
+	})
+
+	cleanStopChan := library.SpawnLibraryCleaning(lib, s3storage.Name(), library.StringToSize(s3cfg["maxsize"]))
+
+	qCfg := cfg.GetStringMapString("queue")
+	queueDB, err := queue.ConnectDB(queue.DefaultDBConfig().DSN(qCfg["dsn"]))
+	if err != nil {
+		log.Fatal("queue db initialization failed", err)
+	}
 
 	adQueue := cfg.GetStringMapString("adaptivequeue")
 	minHits, _ := strconv.Atoi(adQueue["minhits"])
 	mgr := manager.NewManager(lib, minHits)
-
-	qCfg := cfg.GetStringMapString("queue")
-	qDB, err := queue.ConnectDB(queue.DefaultDBConfig().DSN(qCfg["dsn"]))
-	if err != nil {
-		log.Fatal("queue db initialization failed", err)
-	}
 
 	serverConfig := tower.DefaultServerConfig().
 		Logger(zapadapter.NewKV(logger)).
@@ -149,7 +123,7 @@ func serve() {
 		VideoManager(mgr).
 		WorkDir(towerCfg["workdir"]).
 		RMQAddr(CLI.Serve.RMQAddr).
-		DB(qDB)
+		DB(queueDB)
 
 	if CLI.Serve.DevMode {
 		serverConfig = serverConfig.DevMode()
@@ -172,15 +146,10 @@ func serve() {
 	log.Infof("caught an %v signal, shutting down...", sig)
 
 	close(cleanStopChan)
-	log.Infof("cleanup shut down")
+	log.Infof("storage cleanup shut down")
 
 	mgr.Pool().Stop()
 	log.Infof("manager shut down")
-
-	if s3StopChan != nil {
-		close(s3StopChan)
-		log.Infof("S3 uploader shut down")
-	}
 
 	server.StopAll()
 	log.Infof("tower server stopped")

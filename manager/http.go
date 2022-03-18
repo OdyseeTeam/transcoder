@@ -11,6 +11,7 @@ import (
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/pkg/timer"
 
 	"github.com/fasthttp/router"
@@ -51,7 +52,7 @@ func ConfigureHttpAPI() *HttpAPIConfiguration {
 func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
 	r := router.New()
 
-	AttachVideoHandler(r, "", cfg.videoPath, cfg.mgr, zapadapter.NewKV(logger.Named("http").Desugar()))
+	AttachVideoHandler(r, "", cfg.mgr, zapadapter.NewKV(logger.Named("http").Desugar()))
 
 	s := &HttpAPI{
 		HttpAPIConfiguration: cfg,
@@ -66,7 +67,7 @@ func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
 
 // NewRouter creates a set of HTTP entrypoints that will route requests into video library
 // and video transcoding queue.
-func AttachVideoHandler(r *router.Router, prefix, videoPath string, manager *VideoManager, log logging.KVLogger) {
+func AttachVideoHandler(r *router.Router, prefix string, manager *VideoManager, log logging.KVLogger) {
 	h := httpVideoHandler{
 		log:     log,
 		manager: manager,
@@ -77,10 +78,6 @@ func AttachVideoHandler(r *router.Router, prefix, videoPath string, manager *Vid
 	g.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
 	g.GET("/api/v2/video/{url}", h.handleVideo)
 	g.GET("/api/v3/video", h.handleVideo) // accepts URL as a query param
-	g.GET(httpVideoPath+"/{filepath:*}", func(ctx *fasthttp.RequestCtx) {
-		p, _ := ctx.UserValue("filepath").(string)
-		ctx.Redirect("remote://"+p, http.StatusSeeOther)
-	})
 
 	metrics.RegisterMetrics()
 	dispatcher.RegisterMetrics()
@@ -157,7 +154,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 		"path", path,
 	)
 
-	v, err := h.manager.Video(videoURL)
+	location, err := h.manager.Video(videoURL)
 
 	if err != nil {
 		var (
@@ -165,17 +162,17 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 			statusMessage string
 		)
 		switch err {
-		case ErrTranscodingForbidden:
+		case resolve.ErrTranscodingForbidden:
 			statusCode = http.StatusForbidden
-		case ErrChannelNotEnabled:
+		case resolve.ErrChannelNotEnabled:
 			statusCode = http.StatusForbidden
-		case ErrNoSigningChannel:
+		case resolve.ErrNoSigningChannel:
 			statusCode = http.StatusForbidden
-		case ErrTranscodingQueued:
+		case resolve.ErrTranscodingQueued:
 			statusCode = http.StatusAccepted
-		case ErrTranscodingUnderway:
+		case resolve.ErrTranscodingUnderway:
 			statusCode = http.StatusAccepted
-		case ErrStreamNotFound:
+		case resolve.ErrClaimNotFound:
 			statusCode = http.StatusNotFound
 		default:
 			statusCode = http.StatusInternalServerError
@@ -191,24 +188,24 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if err == ErrNoSigningChannel || err == ErrChannelNotEnabled {
+	if err == resolve.ErrNoSigningChannel || err == resolve.ErrChannelNotEnabled {
 		ctx.SetStatusCode(http.StatusForbidden)
 		ll.Debug("transcoding disabled")
 		return
-	} else if err == ErrTranscodingQueued {
+	} else if err == resolve.ErrTranscodingQueued {
 		ctx.SetStatusCode(http.StatusAccepted)
 		ll.Debug("trancoding queued")
 		return
-	} else if err == ErrTranscodingForbidden {
+	} else if err == resolve.ErrTranscodingForbidden {
 		ctx.SetStatusCode(http.StatusForbidden)
 		ctx.Response.SetBodyString(err.Error())
 		ll.Debug(err.Error())
 		return
-	} else if err == ErrTranscodingUnderway {
+	} else if err == resolve.ErrTranscodingUnderway {
 		ctx.SetStatusCode(http.StatusAccepted)
 		ll.Debug("trancoding underway")
 		return
-	} else if err == ErrStreamNotFound {
+	} else if err == resolve.ErrClaimNotFound {
 		ctx.SetStatusCode(http.StatusNotFound)
 		ll.Debug("stream not found")
 		return
@@ -220,13 +217,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 	}
 
 	ctx.Response.StatusCode()
-	location, remote := v.GetLocation()
-	if !remote {
-		metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageLocal).Inc()
-		location = fmt.Sprintf("%v/%v", httpVideoPath, location)
-	} else {
-		metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
-	}
+	metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
 	ll.Infow("stream found", "location", location)
 	ctx.Redirect(location, http.StatusSeeOther)
 }

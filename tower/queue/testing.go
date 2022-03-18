@@ -14,14 +14,14 @@ func CreateTestDB() (*sql.DB, TestDBCleanup, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	m := NewMigrator(db, migrationsFS)
+	m := NewMigrator(db, MigrationsFS)
 	m.CreateDB(tdbn)
 
 	tdb, err := ConnectDB(DefaultDBConfig().Name(tdbn))
 	if err != nil {
 		return nil, nil, err
 	}
-	tm := NewMigrator(tdb, migrationsFS)
+	tm := NewMigrator(tdb, MigrationsFS)
 	_, err = tm.MigrateUp()
 	if err != nil {
 		return nil, nil, err

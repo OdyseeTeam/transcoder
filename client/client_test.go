@@ -14,12 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/db"
+	"github.com/draganm/miniotest"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/video"
-	"github.com/lbryio/transcoder/workers"
+	"github.com/lbryio/transcoder/tower"
+
+	"github.com/karrick/godirwalk"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -39,8 +42,9 @@ func (c dummyRedirectClient) Do(req *http.Request) (*http.Response, error) {
 
 type clientSuite struct {
 	suite.Suite
-	assetsPath string
-	httpAPI    *manager.HttpAPI
+	library.LibraryTestHelper
+	tower   *tower.ServerLite
+	cleanup func() error
 }
 
 func TestClientSuite(t *testing.T) {
@@ -48,53 +52,45 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *clientSuite) SetupSuite() {
-	s.assetsPath = s.T().TempDir()
-	vPath := path.Join(s.assetsPath, "videos")
-	s.Require().NoError(os.MkdirAll(vPath, os.ModePerm))
+	s3addr, s3cleanup, err := miniotest.StartEmbedded()
+	s.Require().NoError(err)
+	s3drv, err := storage.InitS3Driver(
+		storage.S3Configure().
+			Name("tower-test").
+			Endpoint("http://"+s3addr).
+			Region("us-east-1").
+			Credentials("minioadmin", "minioadmin").
+			Bucket("storage-s3-test").
+			DisableSSL(),
+	)
+	s.Require().NoError(err)
 
-	vdb := db.OpenTestDB()
-	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
-
-	libCfg := video.Configure().
-		LocalStorage(storage.Local(vPath)).
-		DB(vdb)
-	lib := video.NewLibrary(libCfg)
-
-	vdb = db.OpenTestDB()
-	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
-
+	s.Require().NoError(s.SetupLibraryDB())
+	lib := library.New(library.Config{
+		DB:      s.DB,
+		Storage: s3drv,
+		Log:     zapadapter.NewKV(nil),
+	})
+	_, err = lib.AddChannel("@specialoperationstest#3", "")
+	s.Require().NoError(err)
 	mgr := manager.NewManager(lib, 0)
 
-	workers.SpawnEncoderWorkers(1, mgr)
-	s.httpAPI = manager.NewHttpAPI(
-		manager.ConfigureHttpAPI().
-			Debug(true).
-			Addr("127.0.0.1:50808").
-			VideoPath(vPath).
-			VideoManager(mgr),
-	)
-	go func() {
-		err := s.httpAPI.Start()
-		if err != nil {
-			s.FailNow(err.Error())
-		}
-	}()
+	tower, err := tower.NewTestTowerLite(s.T(), s3drv, mgr)
+	s.Require().NoError(err)
+	err = tower.StartAll()
+	s.Require().NoError(err)
 
-	manager.LoadConfiguredChannels(
-		[]string{
-			"@specialoperationstest#3",
-		},
-		[]string{},
-		[]string{},
-	)
+	s.tower = tower
+	s.cleanup = s3cleanup
 }
 
 func (s *clientSuite) TearDownSuite() {
-	go s.httpAPI.Shutdown()
+	s.Require().NoError(s.cleanup())
+	s.Require().NoError(s.TearDownLibraryDB())
 }
 
 func (s *clientSuite) TestPlayFragment() {
-	c := New(Configure().VideoPath(path.Join(s.assetsPath, "TestPlayFragment")).Server("http://" + s.httpAPI.Addr()).LogLevel(Dev))
+	c := New(Configure().VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).Server(s.tower.HttpServerURL).LogLevel(Dev))
 
 	// Request stream and wait until it's available.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -108,7 +104,7 @@ Waiting:
 			rr := httptest.NewRecorder()
 			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
 			if err != nil {
-				s.Require().ErrorIs(err, manager.ErrTranscodingUnderway)
+				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
 			} else {
 				break Waiting
 			}
@@ -122,14 +118,14 @@ Waiting:
 		size int64
 	}{
 		{"master.m3u8", 0},
-		{"stream_0.m3u8", 0},
-		{"stream_1.m3u8", 0},
-		{"stream_2.m3u8", 0},
-		{"stream_3.m3u8", 0},
-		{"s0_000000.ts", 2800000},
-		{"s1_000000.ts", 1800000},
-		{"s2_000000.ts", 600000},
-		{"s3_000000.ts", 240000},
+		{"v0.m3u8", 0},
+		{"v1.m3u8", 0},
+		{"v2.m3u8", 0},
+		{"v3.m3u8", 0},
+		{"v0_s000000.ts", 1800000},
+		{"v1_s000000.ts", 300000},
+		{"v2_s000000.ts", 300000},
+		{"v3_s000000.ts", 170000},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -179,14 +175,14 @@ Waiting:
 }
 
 func (s *clientSuite) TestRestoreCache() {
-	dstPath := path.Join(s.assetsPath, "TestRestoreCache")
+	dstPath := s.T().TempDir()
 
 	c := New(Configure().VideoPath(dstPath))
 
 	cvDirs := []string{}
 	for range [10]int{} {
 		sdHash := randomString(96)
-		s.populateHLSPlaylist(dstPath, sdHash)
+		library.PopulateHLSPlaylist(s.T(), dstPath, sdHash)
 		cvDirs = append(cvDirs, sdHash)
 	}
 
@@ -218,12 +214,12 @@ func (s *clientSuite) Test_sdHashRe() {
 
 func (s *clientSuite) TestRemoteURL() {
 	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
-	cl := dummyRedirectClient(fmt.Sprintf("remote://%v/master.m3u8", sdhash))
+	cl := dummyRedirectClient(fmt.Sprintf("remote://storage1/%v/master.m3u8", sdhash))
 	c := New(Configure().HTTPClient(cl))
-	u, err := c.fragmentURL("morgan", sdhash, "master.m3u8")
+	u, err := c.getFragmentURL("morgan", sdhash, "master.m3u8")
 	s.Require().NoError(err)
 	s.Equal(
-		fmt.Sprintf("%v/%v/%v", defaultRemoteServer, sdhash, "master.m3u8"),
+		fmt.Sprintf("%v/%v/%v", defaultRemoteServer, sdhash, "master.m3u8?origin=storage1"),
 		u,
 	)
 }
@@ -232,7 +228,7 @@ func (s *clientSuite) TestLocalURL() {
 	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
 	cl := dummyRedirectClient(fmt.Sprintf("http://transcoder.com/streams/%v/master.m3u8", sdhash))
 	c := New(Configure().HTTPClient(cl))
-	u, err := c.fragmentURL("morgan", sdhash, "master.m3u8")
+	u, err := c.getFragmentURL("morgan", sdhash, "master.m3u8")
 	s.Require().NoError(err)
 	s.Equal(
 		fmt.Sprintf("http://transcoder.com/streams/%v/%v", sdhash, "master.m3u8"),
@@ -240,27 +236,12 @@ func (s *clientSuite) TestLocalURL() {
 	)
 }
 
-func (s *clientSuite) Test_fragmentURL() {
+func (s *clientSuite) Test_getFragmentURL() {
 	cl := dummyRedirectClient("http://t0.lbry.tv:18081/streams/bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a/master.m3u8")
-	dstPath := path.Join(s.assetsPath, "Test_fragmentURL")
+	dstPath := s.T().TempDir()
 	c := New(Configure().HTTPClient(cl).VideoPath(dstPath).LogLevel(Dev))
 
-	u, err := c.fragmentURL("morgan", "0b8dfc049b2165fad5829aca24f2ddfae3acef8d73bc5e04ff8b932fce9fc463dc6cf3e638413f04536638d2e7218427", "master.m3u8")
-	s.Require().Error(err)
-	s.Regexp("remote sd hash mismatch", err.Error())
-	s.Equal("", u)
-
-	u, err = c.fragmentURL("morgan", "azazaz", "master.m3u8")
-	s.Require().Error(err)
-	s.Regexp("remote sd hash mismatch", err.Error())
-	s.Equal("", u)
-
-	u, err = c.fragmentURL("vanquish-trailer-(2021)-morgan-freeman,#b7b150d1bbca4650ad4ab921dd8d424bf77c1141", "azazaz", "master.m3u8")
-	s.Require().Error(err)
-	s.Regexp("remote sd hash mismatch", err.Error())
-	s.Equal("", u)
-
-	u, err = c.fragmentURL(
+	u, err := c.getFragmentURL(
 		"vanquish-trailer-(2021)-morgan-freeman,#b7b150d1bbca4650ad4ab921dd8d424bf77c1141",
 		"bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a",
 		"master.m3u8")
@@ -276,26 +257,4 @@ func randomString(n int) string {
 		b[i] = letter[rand.Intn(len(letter))]
 	}
 	return string(b)
-}
-
-// populateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.
-func (s *clientSuite) populateHLSPlaylist(dstPath, sdHash string) {
-	err := os.MkdirAll(path.Join(dstPath, sdHash), os.ModePerm)
-	s.Require().NoError(err)
-
-	srcPath, _ := filepath.Abs("./testdata")
-	ls, err := storage.OpenLocalStream(path.Join(srcPath, "dummystream"))
-	s.Require().NoError(err)
-	err = ls.WalkPlaylists(
-		func(rootPath ...string) ([]byte, error) {
-			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
-				return ioutil.ReadFile(path.Join(rootPath...))
-			}
-			return make([]byte, 10000), nil
-		},
-		func(data []byte, name string) error {
-			return ioutil.WriteFile(path.Join(dstPath, sdHash, name), data, os.ModePerm)
-		},
-	)
-	s.Require().NoError(err)
 }

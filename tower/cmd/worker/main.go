@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower"
 	"github.com/spf13/viper"
@@ -58,11 +58,13 @@ func main() {
 			log.Fatal(err)
 		}
 
-		s3driver, err := storage.InitS3Driver(
+		s3storage, err := storage.InitS3Driver(
 			storage.S3Configure().
 				Endpoint(s3cfg["endpoint"]).
 				Credentials(s3cfg["key"], s3cfg["secret"]).
-				Bucket(s3cfg["bucket"]))
+				Bucket(s3cfg["bucket"]).
+				Name(s3cfg["name"]),
+		)
 		if err != nil {
 			log.Fatal("s3 driver initialization failed", err)
 		}
@@ -75,7 +77,7 @@ func main() {
 			WorkDir(CLI.Start.WorkDir).
 			RMQAddr(CLI.Start.RMQAddr).
 			HttpServerBind(CLI.Start.HttpBind).
-			S3Driver(s3driver),
+			S3Driver(s3storage),
 		)
 		if err != nil {
 			log.Fatal(err)
@@ -83,7 +85,7 @@ func main() {
 
 		if CLI.Start.BlobServer != "" {
 			log.Infow("blob server set", "address", CLI.Start.BlobServer)
-			manager.SetBlobServer(CLI.Start.BlobServer)
+			resolve.SetBlobServer(CLI.Start.BlobServer)
 		}
 
 		log.Infow("starting tower worker", "tower_server", CLI.Start.RMQAddr)

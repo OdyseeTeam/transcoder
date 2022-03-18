@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
@@ -34,8 +33,6 @@ type towerRPC struct {
 	tasks      *taskList
 	retryTasks *retryTasks
 	randPool   sync.Pool
-
-	videoManager *manager.VideoManager
 }
 
 type workerRPC struct {
@@ -146,6 +143,7 @@ func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency
 func (s *towerRPC) declareQueues() error {
 	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue}
 	for _, q := range queues {
+		s.log.Debug("declaring queue", "name", q)
 		if _, err := s.backCh.QueueDeclare(q, true, false, false, false, amqp.Table{}); err != nil {
 			return err
 		}

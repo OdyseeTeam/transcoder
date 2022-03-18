@@ -1,15 +1,15 @@
 package manager
 
 import (
-	"database/sql"
 	"fmt"
 	"math"
 	"strings"
 	"time"
 
+	"github.com/lbryio/transcoder/library"
+	db "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/video"
+	"github.com/lbryio/transcoder/pkg/resolve"
 
 	"github.com/karlseguin/ccache/v2"
 )
@@ -21,92 +21,89 @@ const (
 )
 
 var (
-	priorityChannels = []string{}
-	enabledChannels  = []string{}
-	disabledChannels = []string{}
-	cacheSize        = int64(math.Pow(1024, 4))
+	cacheSize = int64(math.Pow(1024, 4))
 )
 
-type VideoLibrary interface {
-	Get(sdHash string) (*video.Video, error)
-	Add(params video.AddParams) (*video.Video, error)
-	AddLocalStream(url, channel string, ls storage.LocalStream) (*video.Video, error)
-	AddRemoteStream(storage.RemoteStream) (*video.Video, error)
-	Path() string
+type TranscodingRequest struct {
+	resolve.ResolvedStream
+	queue *mfr.Queue
 }
 
-func LoadConfiguredChannels(priority, enabled, disabled []string) {
-	tweakURL := func(e string) string {
-		return channelURIPrefix + strings.Replace(strings.ToLower(e), "#", ":", 1)
-	}
-	priorityChannels = apply(priority, tweakURL)
-	enabledChannels = apply(enabled, tweakURL)
-	disabledChannels = apply(disabled, tweakURL)
-	logger.Infof(
-		"%v priority channels, %v channels enabled, %v channels disabled",
-		len(priorityChannels),
-		len(enabledChannels),
-		len(disabledChannels),
-	)
+type VideoLibrary interface {
+	GetURL(sdHash string) (string, error)
+	GetAllChannels() ([]db.Channel, error)
+	// Add(params video.AddParams) (*video.Video, error)
+	// AddLocalStream(url, channel string, ls storage.LocalStream) (*video.Video, error)
+	// AddRemoteStream(storage.RemoteStream) (*video.Video, error)
 }
 
 type VideoManager struct {
-	library VideoLibrary
-	pool    *Pool
-	cache   *ccache.Cache
+	lib      *library.Library
+	pool     *Pool
+	cache    *ccache.Cache
+	channels *channelList
 }
 
 // NewManager creates a video library manager with a pool for future transcoding requests.
-func NewManager(l VideoLibrary, minHits int) *VideoManager {
+func NewManager(lib *library.Library, minHits int) *VideoManager {
 	m := &VideoManager{
-		library: l,
-		pool:    NewPool(),
+		lib:      lib,
+		pool:     NewPool(),
+		channels: newChannelList(),
 		cache: ccache.New(ccache.
 			Configure().
 			MaxSize(cacheSize)),
 	}
 
+	channels, err := lib.GetAllChannels()
+	if err != nil {
+		logger.Error("error loading channels", "err", err)
+	}
+	m.channels.Load(channels)
+	logger.Info("loaded channels", "count", len(channels))
+	go m.channels.StartLoadingChannels(lib)
+
 	m.pool.AddQueue("priority", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
-		for _, e := range priorityChannels {
-			if e == r.ChannelURI {
-				logger.Infow("accepted for 'priority' queue", "uri", r.URI)
-				r.queue = queue
-				queue.Hit(key, r)
-				return true
-			}
+		if m.channels.GetPriority(r) != db.ChannelPriorityHigh {
+			return false
 		}
-		return false
+		logger.Infow("accepted for 'priority' queue", "uri", r.URI)
+		r.queue = queue
+		queue.Hit(key, r)
+		return true
 	})
 
 	m.pool.AddQueue("enabled", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
-		for _, e := range enabledChannels {
-			if e == r.ChannelURI {
-				logger.Debugw("accepted for 'enabled' queue", "uri", r.URI)
-				r.queue = queue
-				queue.Hit(key, r)
-				return true
-			}
+		if m.channels.GetPriority(r) != db.ChannelPriorityNormal {
+			return false
 		}
-		return false
+		logger.Infow("accepted for 'priority' queue", "uri", r.URI)
+		r.queue = queue
+		queue.Hit(key, r)
+		return true
 	})
 
 	m.pool.AddQueue("level5", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
 		s := r.ChannelSupportAmount
-		r.ChannelSupportAmount = 0
-		if s >= level5SupportThreshold {
-			logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
-			r.queue = queue
-			queue.Hit(key, r)
-			return true
+		if level5SupportThreshold > s {
+			return false
 		}
-		return false
+		r.ChannelSupportAmount = 0
+		logger.Debugw("accepted for 'level5' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
+		r.queue = queue
+		queue.Hit(key, r)
+		return true
 	})
 
 	m.pool.AddQueue("common", uint(minHits), func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
+		if m.channels.GetPriority(r) == db.ChannelPriorityDisabled {
+			return false
+		}
+		logger.Debugw("accepted for 'common' queue", "uri", r.URI, "support_amount", r.ChannelSupportAmount)
 		r.queue = queue
 		queue.Hit(key, r)
 		return true
@@ -130,31 +127,29 @@ func (m *VideoManager) RequestStatus(sdHash string) int {
 	return mfr.StatusNone
 }
 
-func (m *VideoManager) Library() VideoLibrary {
-	return m.library
+func (m *VideoManager) Library() *library.Library {
+	return m.lib
 }
 
 // Video checks if video exists in the library or waiting in one of the queues.
 // If neither, it adds claim to the pool for later processing.
-func (m *VideoManager) Video(uri string) (*video.Video, error) {
+func (m *VideoManager) Video(uri string) (string, error) {
 	uri = strings.TrimPrefix(uri, "lbry://")
-	tr, err := m.resolveRequest(uri)
+	tr, err := m.ResolveStream(uri)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	for _, e := range disabledChannels {
-		if e == tr.ChannelURI {
-			return nil, ErrChannelNotEnabled
-		}
+	if m.channels.GetPriority(tr) == db.ChannelPriorityDisabled {
+		return "", resolve.ErrTranscodingForbidden
 	}
 
-	v, err := m.getVideo(tr.SDHash)
-	if v == nil || err == sql.ErrNoRows {
-		return nil, m.pool.Admit(tr.SDHash, tr)
+	vloc, err := m.lib.GetVideoURL(tr.SDHash)
+	if err != nil {
+		return "", m.pool.Admit(tr.SDHash, tr)
 	}
 
-	return v, nil
+	return vloc, nil
 }
 
 // Requests returns next transcoding request to be processed. It polls all queues in the pool evenly.
@@ -174,32 +169,37 @@ func (m *VideoManager) Requests() <-chan *TranscodingRequest {
 	return out
 }
 
-// getVideo helps to avoid hitting video SQLite database too hard.
-func (m *VideoManager) getVideo(h string) (*video.Video, error) {
-	var v *video.Video
-	item, err := m.cache.Fetch(fmt.Sprintf("video:%v", h), 30*time.Second, func() (interface{}, error) {
-		return m.library.Get(h)
-	})
-	if item != nil {
-		v = item.Value().(*video.Video)
-	}
-	return v, err
-}
-
-func (m *VideoManager) resolveRequest(uri string) (*TranscodingRequest, error) {
+func (m *VideoManager) ResolveStream(uri string) (*TranscodingRequest, error) {
 	item, err := m.cache.Fetch(fmt.Sprintf("claim:%v", uri), 300*time.Second, func() (interface{}, error) {
-		return ResolveRequest(uri)
+		return resolve.ResolveStream(uri)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return item.Value().(*TranscodingRequest), nil
+	rs := item.Value().(*resolve.ResolvedStream)
+	return &TranscodingRequest{ResolvedStream: *rs}, nil
 }
 
-func apply(s []string, f func(e string) string) []string {
-	r := []string{}
-	for _, e := range s {
-		r = append(r, f(e))
+func (r *TranscodingRequest) Release() {
+	if r.queue == nil {
+		return
 	}
-	return r
+	logger.Infow("transcoding request released", "lbry_url", r.URI)
+	r.queue.Release(r.URI)
+}
+
+func (r *TranscodingRequest) Reject() {
+	if r.queue == nil {
+		return
+	}
+	logger.Infow("transcoding request rejected", "lbry_url", r.URI)
+	r.queue.Done(r.URI)
+}
+
+func (r *TranscodingRequest) Complete() {
+	if r.queue == nil {
+		return
+	}
+	logger.Infow("transcoding request completed", "lbry_url", r.URI)
+	r.queue.Done(r.URI)
 }

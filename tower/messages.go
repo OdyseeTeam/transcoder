@@ -1,7 +1,7 @@
 package tower
 
 import (
-	"github.com/lbryio/transcoder/storage"
+	"github.com/lbryio/transcoder/library"
 )
 
 type Payload struct {
@@ -20,7 +20,7 @@ type taskProgress struct {
 }
 
 type taskResult struct {
-	remoteStream *storage.RemoteStream
+	remoteStream *library.Stream
 }
 
 type taskError struct {
@@ -63,5 +63,5 @@ type MsgWorkerError struct {
 }
 
 type MsgWorkerSuccess struct {
-	RemoteStream *storage.RemoteStream `json:"remote_stream"`
+	RemoteStream *library.Stream `json:"remote_stream"`
 }

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Pallinder/go-randomdata"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
-	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower/queue"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -34,7 +34,7 @@ func (s *rpcSuite) SetupTest() {
 	s.db = db
 	s.dbCleanup = dbCleanup
 
-	s.tower = CreateTestTowerRPC(s.T(), db)
+	s.tower = NewTestTowerRPC(s.T(), db)
 
 	s.Require().NoError(s.tower.deleteQueues())
 	s.Require().NoError(s.tower.declareQueues())
@@ -80,7 +80,7 @@ func (s *rpcSuite) TestWorkRequests() {
 					wt.progress <- taskProgress{Percent: float32(i * 10)}
 					time.Sleep(50 * time.Millisecond)
 				}
-				wt.result <- taskResult{remoteStream: &storage.RemoteStream{URL: randomdata.Alphanumeric(25), Manifest: &storage.Manifest{URL: randomdata.Alphanumeric(25)}}}
+				wt.result <- taskResult{remoteStream: library.GenerateDummyStream()}
 			}
 		}()
 	}
@@ -159,7 +159,7 @@ func (s *rpcSuite) TestWorkRequestReject() {
 }
 
 func (s *rpcSuite) TestServerGoingAway() {
-	tower := CreateTestTowerRPC(s.T(), s.db)
+	tower := NewTestTowerRPC(s.T(), s.db)
 	w, err := newWorkerRPC("amqp://guest:guest@localhost/", zapadapter.NewKV(nil))
 	s.Require().NoError(err)
 	w.id = "testworker-1"
@@ -177,7 +177,9 @@ func (s *rpcSuite) TestServerGoingAway() {
 		wg.Done()
 		time.Sleep(5 * time.Second)
 		task.progress <- taskProgress{Stage: StageDownloading, Percent: 10}
-		task.result <- taskResult{remoteStream: &storage.RemoteStream{URL: payload.SDHash}}
+		// task.result <- taskResult{remoteStream: &storage.RemoteStream{URL: payload.SDHash}}
+		task.result <- taskResult{remoteStream: library.GenerateDummyStream()}
+
 		// select {
 		// case e := <-at.errors:
 		// 	s.FailNow("worker unexpectedly errored", e.Error)
@@ -289,7 +291,8 @@ func (s *rpcSuite) TestRetry() {
 				taskRetry.progress <- taskProgress{Stage: StageDownloading, Percent: 20}
 				taskRetry.errors <- taskError{err: errors.New("cannot proceed at all"), fatal: true}
 			} else {
-				taskRetry.result <- taskResult{remoteStream: &storage.RemoteStream{URL: taskRetry.payload.SDHash}}
+				// taskRetry.result <- taskResult{remoteStream: &storage.RemoteStream{URL: taskRetry.payload.SDHash}}
+				taskRetry.result <- taskResult{remoteStream: library.GenerateDummyStream()}
 			}
 		}
 	}()

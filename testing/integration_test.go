@@ -12,18 +12,20 @@ import (
 	"time"
 
 	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/video"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/workers"
 	"github.com/stretchr/testify/suite"
 )
 
 type integSuite struct {
 	suite.Suite
+	library.LibraryTestHelper
 	db      *db.DB
-	lib     *video.Library
+	lib     *library.Library
 	mgr     *manager.VideoManager
 	httpAPI *manager.HttpAPI
 
@@ -34,16 +36,19 @@ func TestWorkersSuite(t *testing.T) {
 	suite.Run(t, new(integSuite))
 }
 
+func (s *integSuite) SetupTest() {
+
+	s.Require().NoError(s.SetupLibraryDB())
+}
+
+func (s *integSuite) TearDownTest() {
+	s.Require().NoError(s.TearDownLibraryDB())
+}
+
 func (s *integSuite) SetupSuite() {
 	assetsPath := path.Join(s.assetsPath, "videos")
-	s.db = db.OpenTestDB()
-	s.Require().NoError(s.db.MigrateUp(video.InitialMigration))
 
-	libCfg := video.Configure().
-		LocalStorage(storage.Local(assetsPath)).
-		DB(s.db)
-
-	s.lib = video.NewLibrary(libCfg)
+	s.lib = library.New(library.Config{DB: s.DB, Log: zapadapter.NewKV(nil)})
 	s.mgr = manager.NewManager(s.lib, 10)
 
 	workers.SpawnEncoderWorkers(3, s.mgr)
@@ -90,12 +95,12 @@ func (s *integSuite) TestStreamNotFound() {
 func (s *integSuite) TestStreamQueuedLevel5() {
 	lbryUrl := "@FreeMovies#a/the-jack-knife-man#f"
 	escUrl := url.PathEscape("@FreeMovies#a/the-jack-knife-man#f")
-	tr, err := manager.ResolveRequest(lbryUrl)
+	tr, err := resolve.ResolveStream(lbryUrl)
 	s.Require().NoError(err)
 
 	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), escUrl))
 	s.Require().NoError(err)
-	s.equalResponse(http.StatusAccepted, manager.ErrTranscodingQueued.Error(), resp)
+	s.equalResponse(http.StatusAccepted, resolve.ErrTranscodingQueued.Error(), resp)
 
 	time.Sleep(1 * time.Second)
 
@@ -106,7 +111,7 @@ func (s *integSuite) TestStreamQueuedLevel5() {
 	s.Equal(mfr.StatusActive, s.mgr.RequestStatus(tr.SDHash))
 
 	s.Require().NoError(err)
-	s.equalResponse(http.StatusAccepted, manager.ErrTranscodingUnderway.Error(), resp)
+	s.equalResponse(http.StatusAccepted, resolve.ErrTranscodingUnderway.Error(), resp)
 }
 
 // func (s *integSuite) TestStreamQueuedEnabled() {
@@ -121,12 +126,12 @@ func (s *integSuite) TestStreamQueuedLevel5() {
 func (s *integSuite) TestStreamQueuedCommon() {
 	lbryUrl := "@specialoperationstest#3/fear-of-death-inspirational#a"
 	escUrl := url.PathEscape("@specialoperationstest#3/fear-of-death-inspirational#a")
-	tr, err := manager.ResolveRequest(lbryUrl)
+	tr, err := resolve.ResolveStream(lbryUrl)
 	s.Require().NoError(err)
 
 	resp, err := http.Get(fmt.Sprintf("http://%v/api/v2/video/%v", s.httpAPI.Addr(), escUrl))
 	s.Require().NoError(err)
-	s.equalResponse(http.StatusForbidden, manager.ErrTranscodingForbidden.Error(), resp)
+	s.equalResponse(http.StatusForbidden, resolve.ErrTranscodingForbidden.Error(), resp)
 	s.Equal(mfr.StatusQueued, s.mgr.RequestStatus(tr.SDHash))
 }
 

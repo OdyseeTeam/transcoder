@@ -3,6 +3,12 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/odyseeteam/transcoder)](https://goreportcard.com/report/github.com/odyseeteam/transcoder)
 ![Test Status](https://github.com/OdyseeTeam/transcoder/workflows/Test/badge.svg)
 
+## Development
+
+```
+go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
+```
+
 ## Building
 
 To build an x86-64 Linux binaries for tower (server part) and worker:

@@ -8,25 +8,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/draganm/miniotest"
-	"github.com/lbryio/transcoder/db"
+	"github.com/lbryio/transcoder/library"
+	ldb "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/tower/queue"
-	"github.com/lbryio/transcoder/video"
 
+	"github.com/draganm/miniotest"
 	"github.com/stretchr/testify/suite"
 )
 
 type towerSuite struct {
 	suite.Suite
+	TowerTestHelper
+	library.LibraryTestHelper
+
 	tower     *towerRPC
 	s3addr    string
 	s3cleanup func() error
 	s3drv     *storage.S3Driver
-	db        *sql.DB
-	dbCleanup func() error
 }
 
 func TestTowerSuite(t *testing.T) {
@@ -34,14 +35,11 @@ func TestTowerSuite(t *testing.T) {
 }
 
 func (s *towerSuite) SetupTest() {
-	db, dbCleanup, err := queue.CreateTestDB()
-	s.Require().NoError(err)
-	s.db = db
-	s.dbCleanup = dbCleanup
-	s.Require().NoError(err)
-	s.tower = CreateTestTowerRPC(s.T(), db)
+	var err error
+	s.Require().NoError(s.SetupTowerDB())
+	s.Require().NoError(s.SetupLibraryDB())
 
-	s.Require().NoError(s.tower.deleteQueues())
+	s.tower = NewTestTowerRPC(s.T(), s.TowerDB)
 	s.Require().NoError(s.tower.declareQueues())
 
 	s.s3addr, s.s3cleanup, err = miniotest.StartEmbedded()
@@ -49,6 +47,7 @@ func (s *towerSuite) SetupTest() {
 
 	s.s3drv, err = storage.InitS3Driver(
 		storage.S3Configure().
+			Name("tower-test").
 			Endpoint(s.s3addr).
 			Region("us-east-1").
 			Credentials("minioadmin", "minioadmin").
@@ -59,10 +58,12 @@ func (s *towerSuite) SetupTest() {
 }
 
 func (s *towerSuite) TearDownTest() {
-	s.NoError(s.dbCleanup())
 	s.NoError(s.tower.deleteQueues())
 	s.tower.publisher.StopPublishing()
 	s.tower.consumer.StopConsuming("", true)
+
+	s.Require().NoError(s.TearDownTowerDB())
+	s.Require().NoError(s.TearDownLibraryDB())
 }
 
 func (s *towerSuite) TestSuccess() {
@@ -70,30 +71,26 @@ func (s *towerSuite) TestSuccess() {
 		s.T().Skip("skipping TestPipelineSuccess")
 	}
 
-	libPath := s.T().TempDir()
 	srvWorkDir := s.T().TempDir()
 	cltWorkDir := s.T().TempDir()
 	streamURL := "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
-	trReq, err := manager.ResolveRequest(streamURL)
+	trReq, err := resolve.ResolveStream(streamURL)
 	s.Require().NoError(err)
 
-	vdb := db.OpenTestDB()
-	s.Require().NoError(vdb.MigrateUp(video.InitialMigration))
-
-	libCfg := video.Configure().
-		LocalStorage(storage.Local(libPath)).
-		RemoteStorage(s.s3drv).
-		DB(vdb)
-
-	manager.LoadConfiguredChannels([]string{"@specialoperationstest#3"}, []string{}, []string{})
-	mgr := manager.NewManager(video.NewLibrary(libCfg), 0)
+	lib := library.New(library.Config{
+		DB:  s.DB,
+		Log: zapadapter.NewKV(nil),
+	})
+	_, err = lib.AddChannel("@specialoperationstest#3", ldb.ChannelPriorityNormal)
+	s.Require().NoError(err)
+	mgr := manager.NewManager(lib, 0)
 
 	srv, err := NewServer(
 		DefaultServerConfig().
 			Logger(zapadapter.NewKV(nil)).
 			HttpServer(":18080", "http://localhost:18080/").
 			VideoManager(mgr).
-			DB(s.db).
+			DB(s.TowerDB).
 			WorkDir(srvWorkDir).
 			DevMode(),
 	)
@@ -111,17 +108,21 @@ func (s *towerSuite) TestSuccess() {
 	s.Require().NoError(err)
 	wrk.StartWorkers()
 
-	httpURL := fmt.Sprintf("%vapi/v2/video/%v", srv.httpServerURL, url.PathEscape(streamURL))
+	httpURL := fmt.Sprintf("%v/api/v2/video/%v", srv.HttpServerURL, url.PathEscape(streamURL))
 	resp, err := http.Get(httpURL)
 	s.Require().NoError(err)
 	s.Require().EqualValues(http.StatusAccepted, resp.StatusCode)
 
-	var v *video.Video
-	for v == nil {
-		v, _ = srv.videoManager.Library().Get(trReq.SDHash)
+	var v ldb.Video
+	for v.ID == 0 {
+		v, err = srv.videoManager.Library().GetVideo(trReq.SDHash)
+		if err != nil {
+			s.Require().ErrorIs(err, sql.ErrNoRows)
+		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	s.Equal(trReq.SDHash, v.SDHash)
-	_, err = s.s3drv.GetFragment(v.RemotePath, storage.MasterPlaylistName)
-	s.NoError(err, "remote path does not exist: %s/%s", v.RemotePath, storage.MasterPlaylistName)
+	s.Equal(s.s3drv.Name(), v.Storage)
+	_, err = s.s3drv.GetFragment(v.TID, library.MasterPlaylistName)
+	s.NoError(err, "remote path does not exist: %s/%s", v.TID, library.MasterPlaylistName)
 }

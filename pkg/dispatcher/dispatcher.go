@@ -27,7 +27,7 @@ type Worker interface {
 // Each worker should accept it as an argument.
 // Example:
 //  func (w encoderWorker) Work(t dispatcher.Task) error {
-//		r := t.Payload.(*manager.TranscodingRequest)
+//		r := t.Payload.(*resolve.TranscodingRequest)
 //  ...
 type Task struct {
 	Payload    interface{}

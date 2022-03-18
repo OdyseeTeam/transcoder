@@ -179,7 +179,7 @@ func (at *activeTask) SetError(m MsgWorkerError) (queue.Task, error) {
 func (at *activeTask) MarkDone(m MsgWorkerSuccess) (queue.Task, error) {
 	t, err := at.tl.q.MarkDone(context.Background(), queue.MarkDoneParams{
 		ULID:   at.id,
-		Result: sql.NullString{String: m.RemoteStream.URL, Valid: true},
+		Result: sql.NullString{String: m.RemoteStream.URL(), Valid: true},
 	})
 	select {
 	case at.success <- m:

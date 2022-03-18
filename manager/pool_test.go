@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/mfr"
 
@@ -64,7 +65,7 @@ func (s *poolSuite) TestPool() {
 	s.Nil(pool.Next())
 
 	for range [20]int{} {
-		c := &element{randomString(96), randomString(25)}
+		c := &element{randomdata.Alphanumeric(96), randomdata.Alphanumeric(25)}
 		pool.Admit(c.url, c)
 	}
 
@@ -94,7 +95,7 @@ func (s *poolSuite) TestPoolMinHits() {
 	go pool.Start()
 	s.Nil(pool.Next())
 
-	c := &element{randomString(96), randomString(25)}
+	c := &element{randomdata.Alphanumeric(96), randomdata.Alphanumeric(25)}
 	pool.Admit(c.url, c)
 	s.Nil(pool.Next())
 

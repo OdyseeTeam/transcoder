@@ -38,10 +38,8 @@ type Worker struct {
 }
 
 type Processor interface {
-	Process(stop chan struct{}, t workerTask)
+	Process(t workerTask)
 }
-
-type requestHandler func(MsgTranscodingTask)
 
 func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
@@ -142,7 +140,7 @@ func (c *Worker) handleRequest(wt workerTask) {
 	log := logging.AddLogRef(c.log, mtt.SDHash).With("url", mtt.URL)
 
 	log.Info("task received, starting", "msg", mtt)
-	c.processor.Process(c.stopChan, wt)
+	c.processor.Process(wt)
 }
 
 func (c *Worker) startHttpServer() error {
