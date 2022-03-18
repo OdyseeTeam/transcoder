@@ -15,10 +15,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
+      - name: Set up containers
+        run: docker-compose up -d db rabbitmq
+
       - name: Set up Go 1.x
         uses: actions/setup-go@v2
         with:
-          go-version: '1.16.8'
+          go-version: '1.17'
         id: go
       - name: Install ffmpeg
         uses: FedericoCarboni/setup-ffmpeg@v1-beta

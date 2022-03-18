@@ -79,8 +79,8 @@ github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4/go.mod h1:ybxpYRF
 github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d/go.mod h1:rBZYJk541a8SKzHPHnH3zbiI+7dagKZ0cgpgrD7Fyho=
 github.com/andybalholm/brotli v1.0.0 h1:7UCwP93aiSfvWpapti8g88vVVGp2qqtGyePsSuDafo4=
 github.com/andybalholm/brotli v1.0.0/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
-github.com/andybeletsky/go-rabbitmq v0.6.3-0.20211123182934-cb9bb85124a5 h1:sYNy1QBvpTfiB0/QgTv4x6FIPW8/2taCwxDKTN1fXtc=
-github.com/andybeletsky/go-rabbitmq v0.6.3-0.20211123182934-cb9bb85124a5/go.mod h1:31ioXpWK5FVuCp7XTYa+kRxxX+RqYoXMJFRC59u35aA=
+github.com/andybeletsky/go-rabbitmq v0.6.3-0.20220318172029-6b36934a7885 h1:1Iveiwd6zXb+yh/UrV0jk0FTSY0zFoRGBd37dnuBFFQ=
+github.com/andybeletsky/go-rabbitmq v0.6.3-0.20220318172029-6b36934a7885/go.mod h1:31ioXpWK5FVuCp7XTYa+kRxxX+RqYoXMJFRC59u35aA=
 github.com/andybeletsky/transcoder v1.2.1 h1:0g7MoRYmCzooy/90PSwCNi6RnDLmWx5tmhAMktu+Y3g=
 github.com/andybeletsky/transcoder v1.2.1/go.mod h1:lT+f8NEGaHP6AVeYLicas0EI0+TforD+DRuLziJg6bY=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=
