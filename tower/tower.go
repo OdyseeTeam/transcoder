@@ -156,10 +156,13 @@ func (s *Server) StartAll() error {
 }
 
 func (s *Server) StopAll() {
+	s.log.Info("shutting down tower")
 	close(s.stopChan)
-	s.rpc.consumer.StopConsuming("", false)
-	s.rpc.consumer.Disconnect()
-	s.rpc.publisher.StopPublishing()
+	if s.rpc != nil {
+		s.rpc.consumer.StopConsuming("", false)
+		s.rpc.consumer.Disconnect()
+		s.rpc.publisher.StopPublishing()
+	}
 }
 
 func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingRequest) error {

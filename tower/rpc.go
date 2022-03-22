@@ -21,7 +21,7 @@ import (
 
 type rpc struct {
 	id        string
-	publisher rabbitmq.Publisher
+	publisher *rabbitmq.Publisher
 	consumer  rabbitmq.Consumer
 	backCh    *amqp.Channel
 	stopChan  chan struct{}
