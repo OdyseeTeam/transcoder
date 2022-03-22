@@ -45,6 +45,22 @@ type clientSuite struct {
 	library.LibraryTestHelper
 	tower   *tower.ServerLite
 	cleanup func() error
+	s3addr  string
+}
+
+var streamFragmentCases = []struct {
+	name string
+	size int64
+}{
+	{"master.m3u8", 0},
+	{"v0.m3u8", 0},
+	{"v1.m3u8", 0},
+	{"v2.m3u8", 0},
+	{"v3.m3u8", 0},
+	{"v0_s000000.ts", 1800000},
+	{"v1_s000000.ts", 300000},
+	{"v2_s000000.ts", 300000},
+	{"v3_s000000.ts", 170000},
 }
 
 func TestClientSuite(t *testing.T) {
@@ -82,6 +98,7 @@ func (s *clientSuite) SetupSuite() {
 
 	s.tower = tower
 	s.cleanup = s3cleanup
+	s.s3addr = s3addr
 }
 
 func (s *clientSuite) TearDownSuite() {
@@ -90,7 +107,13 @@ func (s *clientSuite) TearDownSuite() {
 }
 
 func (s *clientSuite) TestPlayFragment() {
-	c := New(Configure().VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).Server(s.tower.HttpServerURL).LogLevel(Dev))
+	c := New(
+		Configure().
+			VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).
+			Server(s.tower.HttpServerURL).
+			LogLevel(Dev).
+			RemoteServer("http://" + s.s3addr + "/storage-s3-test"),
+	)
 
 	// Request stream and wait until it's available.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -113,21 +136,8 @@ Waiting:
 	cancel()
 
 	// Compare stream playlists and fragments against known content or size.
-	cases := []struct {
-		name string
-		size int64
-	}{
-		{"master.m3u8", 0},
-		{"v0.m3u8", 0},
-		{"v1.m3u8", 0},
-		{"v2.m3u8", 0},
-		{"v3.m3u8", 0},
-		{"v0_s000000.ts", 1800000},
-		{"v1_s000000.ts", 300000},
-		{"v2_s000000.ts", 300000},
-		{"v3_s000000.ts", 170000},
-	}
-	for _, tc := range cases {
+
+	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
 			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -163,13 +173,74 @@ Waiting:
 			}
 		})
 	}
-	for _, tc := range cases {
+	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
 			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
 			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
+		})
+	}
+
+	s.tower.StopAll()
+
+	for _, tc := range streamFragmentCases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
+			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
+		})
+	}
+}
+
+func (s *clientSuite) TestPlayFragmentStorageDown() {
+	c := New(
+		Configure().
+			VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).
+			Server(s.tower.HttpServerURL).
+			LogLevel(Dev).
+			RemoteServer("http://" + s.s3addr + "/storage-s3-test"),
+	)
+
+	// Request stream and wait until it's available.
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	wait := time.NewTicker(500 * time.Millisecond)
+Waiting:
+	for {
+		select {
+		case <-ctx.Done():
+			s.FailNow("transcoding is taking too long")
+		case <-wait.C:
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			if err != nil {
+				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
+			} else {
+				break Waiting
+			}
+		}
+	}
+	cancel()
+
+	for _, tc := range streamFragmentCases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Require().NoError(err)
+		})
+	}
+
+	c.remoteServer = "http://localhost:63333"
+	c.cache.Clear()
+
+	for _, tc := range streamFragmentCases {
+		s.Run(tc.name, func() {
+			rr := httptest.NewRecorder()
+			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			s.Error(err)
 		})
 	}
 }

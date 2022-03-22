@@ -42,7 +42,7 @@ const (
 
 	fragmentRetrievalRetries = 3
 
-	defaultRemoteServer = "https://cache.transcoder.odysee.com/t-na"
+	defaultRemoteServer = "https://cache-us.transcoder.odysee.com"
 
 	fragmentCacheDuration  = time.Hour * 24 * 30
 	hlsURLTemplate         = "/api/v1/video/hls/%v"
@@ -376,7 +376,6 @@ func (c Client) fetchFragment(url, sdHash, name string) (int64, error) {
 	defer func() {
 		FetchDurationSeconds.WithLabelValues(src).Add(t.Duration())
 	}()
-	defer r.Body.Close()
 
 	if err != nil {
 		FetchFailureCount.WithLabelValues(src, failureTransport).Inc()
@@ -396,6 +395,7 @@ func (c Client) fetchFragment(url, sdHash, name string) (int64, error) {
 		)
 		return 0, ret
 	}
+	defer r.Body.Close()
 
 	if name == MasterPlaylistName {
 		b := []string{}
