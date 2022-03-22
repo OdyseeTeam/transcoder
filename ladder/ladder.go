@@ -7,6 +7,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	FPS30 = 30
+	FPS60 = 60
+)
+
 type Definition string
 
 type Ladder struct {

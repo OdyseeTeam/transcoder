@@ -57,12 +57,13 @@ func (a *ArgumentSet) GetStrArguments() []string {
 	for n, tier := range a.Ladder.Tiers {
 		s := strconv.Itoa(n)
 		args[argVarStreamMap] += fmt.Sprintf("v:%s,a:%s ", s, s)
-
+		vRate := strconv.Itoa(tier.VideoBitrate)
 		ladArgs = append(ladArgs,
 			"-map", "v:0",
 			"-filter:v:"+s, "scale=-2:"+strconv.Itoa(tier.Height),
-			"-maxrate:"+s, strconv.Itoa(tier.VideoBitrate),
-			"-bufsize:"+s, strconv.Itoa(tier.VideoBitrate),
+			"-b:"+s, vRate,
+			"-maxrate:"+s, vRate,
+			"-bufsize:"+s, vRate,
 		)
 
 		if tier.Framerate != 0 {
