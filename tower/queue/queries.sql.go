@@ -426,7 +426,8 @@ func (q *Queries) SetError(ctx context.Context, arg SetErrorParams) (Task, error
 
 const setStageProgress = `-- name: SetStageProgress :one
 UPDATE tasks
-SET stage = $2, stage_progress = $3, status = 'processing', updated_at = NOW() WHERE ulid = $1
+SET stage = $2, stage_progress = $3, status = 'processing', updated_at = NOW()
+WHERE ulid = $1 AND status != ('errored', 'failed')
 RETURNING id, created_at, updated_at, ulid, status, retries, stage, stage_progress, error, worker, url, sd_hash, result
 `
 

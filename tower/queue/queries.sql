@@ -36,7 +36,8 @@ WHERE status = 'errored' AND retries < 10;
 
 -- name: SetStageProgress :one
 UPDATE tasks
-SET stage = $2, stage_progress = $3, status = 'processing', updated_at = NOW() WHERE ulid = $1
+SET stage = $2, stage_progress = $3, status = 'processing', updated_at = NOW()
+WHERE ulid = $1 AND status != ('errored', 'failed')
 RETURNING *;
 
 -- name: SetStatus :one

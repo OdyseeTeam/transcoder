@@ -51,15 +51,15 @@ func (t *taskList) restore() (<-chan *activeTask, error) {
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
-	restored := []*activeTask{}
+	restoredTasks := []*activeTask{}
 	for _, dt := range dbt {
 		at := t.newActiveTask(dt.Worker, dt.ULID, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
 		at.restored = true
 		at.tl.insert(at)
-		restored = append(restored, at)
+		restoredTasks = append(restoredTasks, at)
 	}
 	go func() {
-		for _, at := range restored {
+		for _, at := range restoredTasks {
 			restoreChan <- at
 		}
 		close(restoreChan)
@@ -67,21 +67,22 @@ func (t *taskList) restore() (<-chan *activeTask, error) {
 	return restoreChan, nil
 }
 
-func (t *taskList) loadRetriable(taskChan chan<- *activeTask) error {
+func (t *taskList) loadRetriable() ([]*activeTask, error) {
+	atasks := []*activeTask{}
 	dbTasks, err := t.q.GetRetriableTasks(context.Background())
 	if err != nil && err != sql.ErrNoRows {
-		return err
+		return nil, err
 	}
 	for _, dt := range dbTasks {
 		at := t.newActiveTask(dt.Worker, dt.ULID, &MsgTranscodingTask{SDHash: dt.SDHash, URL: dt.URL})
 		at.retries = dt.Retries.Int32 + 1
 		at.tl.insert(at)
-		taskChan <- at
+		atasks = append(atasks, at)
 	}
 	for _, dt := range dbTasks {
 		t.q.MarkRetrying(context.Background(), dt.ULID)
 	}
-	return nil
+	return atasks, nil
 }
 
 func (t *taskList) newEmptyTask(wid, ulid string) *activeTask {

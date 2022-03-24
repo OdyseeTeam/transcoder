@@ -36,7 +36,8 @@ func (s *pipelineSuite) SetupSuite() {
 			Region("us-east-1").
 			Credentials("minioadmin", "minioadmin").
 			Bucket("storage-s3-test").
-			DisableSSL(),
+			DisableSSL().
+			Name("test"),
 	)
 	s.Require().NoError(err)
 }

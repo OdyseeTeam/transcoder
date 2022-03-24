@@ -176,8 +176,9 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 			select {
 			case at := <-activeTaskChan:
 				ll := s.log.With("tid", at.id, "wid", at.workerID)
-				if at.restored {
+				if at.restored && at.exPayload != nil {
 					ll.Info("restored task received")
+					at.SendPayload(at.exPayload)
 				} else {
 					var mtt *MsgTranscodingTask
 					for {

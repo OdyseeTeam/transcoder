@@ -215,6 +215,7 @@ func (s *towerRPC) handleTaskStatus(at *activeTask, msgi interface{}, meta *work
 
 func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 	activeTaskChan := make(chan *activeTask)
+	retryTaskChan := make(chan *activeTask)
 	// retryChan := make(chan *activeTask)
 
 	restoreChan, err := s.tasks.restore()
@@ -229,6 +230,29 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 			activeTaskChan <- at
 		}
 		s.log.Info("done restoring tasks")
+	}()
+
+	go func() {
+		t := time.NewTicker(1 * time.Second)
+		for {
+			select {
+			case <-t.C:
+				tasks, err := s.tasks.loadRetriable()
+				if err != nil {
+					s.log.Error("failed to load retriable tasks", "err", err)
+					continue
+				}
+				if len(tasks) == 0 {
+					continue
+				}
+				s.log.Info("loaded retriable tasks", "count", len(tasks))
+				for _, t := range tasks {
+					retryTaskChan <- t
+				}
+			case <-s.stopChan:
+				return
+			}
+		}
 	}()
 
 	// Start consuming task progress reports first
@@ -278,33 +302,34 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 			s.log.Warn("botched message received", "err", err)
 			return rabbitmq.NackDiscard
 		}
-		ll := s.log.With("wid", mwh.WorkerID)
 
-		s.retryTasks.Lock()
-		retryChan, ok := s.retryTasks.workers[mwh.WorkerID]
-		if !ok {
-			retryChan = make(chan *activeTask)
-			s.retryTasks.workers[mwh.WorkerID] = retryChan
-		}
-		s.retryTasks.Unlock()
-		ll.Info("retrieving running tasks")
+		// ll := s.log.With("wid", mwh.WorkerID)
 
-		runningTasks, err := s.tasks.q.GetActiveTasksForWorker(context.Background(), mwh.WorkerID)
-		if err != nil {
-			ll.Error("failed to retrieve running tasks", "err", err)
-		} else {
-			ll.Info("running tasks retrieved", "count", len(runningTasks))
-		}
-		for _, dbt := range runningTasks {
-			at, ok := s.tasks.get(dbt.ULID)
-			if !ok {
-				// All running tasks should've been restored at the beginning of this function,
-				// something's wrong if they weren't
-				ll.Error("no corresponding active task found", "db_tid", dbt.ULID, "err", err)
-				continue
-			}
-			retryChan <- at
-		}
+		// s.retryTasks.Lock()
+		// retryChan, ok := s.retryTasks.workers[mwh.WorkerID]
+		// if !ok {
+		// 	retryChan = make(chan *activeTask)
+		// 	s.retryTasks.workers[mwh.WorkerID] = retryChan
+		// }
+		// s.retryTasks.Unlock()
+		// ll.Info("retrieving running tasks")
+
+		// runningTasks, err := s.tasks.q.GetActiveTasksForWorker(context.Background(), mwh.WorkerID)
+		// if err != nil {
+		// 	ll.Error("failed to retrieve running tasks", "err", err)
+		// } else {
+		// 	ll.Info("running tasks retrieved", "count", len(runningTasks))
+		// }
+		// for _, dbt := range runningTasks {
+		// 	at, ok := s.tasks.get(dbt.ULID)
+		// 	if !ok {
+		// 		// All running tasks should've been restored at the beginning of this function,
+		// 		// something's wrong if they weren't
+		// 		ll.Error("no corresponding active task found", "db_tid", dbt.ULID, "err", err)
+		// 		continue
+		// 	}
+		// 	retryChan <- at
+		// }
 		return rabbitmq.Ack
 	}, 1, true)
 	if err != nil {
@@ -320,28 +345,33 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 			s.log.Warn("botched message received", "err", err)
 			return rabbitmq.NackDiscard
 		}
+		ll := s.log.With("wid", wr.WorkerID)
 
 		// Fetching an existing task that can be retried before dispatching work request to tower
-		s.retryTasks.RLock()
-		retryChan := s.retryTasks.workers[wr.WorkerID]
-		s.retryTasks.RUnlock()
+		// s.retryTasks.RLock()
+		// retryChan := s.retryTasks.workers[wr.WorkerID]
+		// s.retryTasks.RUnlock()
 
 		select {
-		case at := <-retryChan:
-			ll := s.log.With("wid", at.workerID, "tid", at.id)
-			if at.exPayload == nil {
-				ll.Error("empty payload for retried task", "err", err)
-				return rabbitmq.NackDiscard
-			}
-			mtt := at.exPayload
-			s.publishTask(d.ReplyTo, *mtt)
-			if err != nil {
-				ll.Error("failure publishing task", "err", err)
-				return rabbitmq.NackDiscard
-			}
-			ll.Info("re-published task", "payload", mtt)
+		// case at := <-retryChan:
+		// 	ll := s.log.With("wid", at.workerID, "tid", at.id)
+		// 	if at.exPayload == nil {
+		// 		ll.Error("empty payload for retried task", "err", err)
+		// 		return rabbitmq.NackDiscard
+		// 	}
+		// 	mtt := at.exPayload
+		// 	s.publishTask(d.ReplyTo, *mtt)
+		// 	if err != nil {
+		// 		ll.Error("failure publishing task", "err", err)
+		// 		return rabbitmq.NackDiscard
+		// 	}
+		// 	ll.Info("re-published task", "payload", mtt)
+		case at := <-retryTaskChan:
+			ll.Debug("got retried task", "tid", at.id)
+			s.dispatchActiveTask(d.ReplyTo, activeTaskChan, at)
 		default:
 			at := s.tasks.newEmptyTask(wr.WorkerID, s.generateULID())
+			ll.Debug("created a new task", "tid", at.id)
 			s.dispatchActiveTask(d.ReplyTo, activeTaskChan, at)
 		}
 
@@ -365,7 +395,7 @@ func (s *towerRPC) dispatchActiveTask(wrkQueue string, activeTaskChan chan *acti
 					URL:    mtt.URL,
 					SDHash: mtt.SDHash,
 				})
-				if err == nil {
+				if err == nil && dbt.Status != queue.StatusErrored {
 					s.log.Warn("payload already found running in the database", "db_task", dbt)
 					// s.dispatchActiveTask(wrkQueue, activeTaskChan, at)
 					s.publishTask(wrkQueue, mtt)
@@ -442,7 +472,7 @@ func (s *workerRPC) sendTaskStatus(queue, tid, mType string, message interface{}
 		rabbitmq.WithPublishOptionsPersistentDelivery,
 	}
 
-	ll.Debug("sending task status")
+	ll.Debug("sending task status", "tid", tid)
 	return s.publisher.Publish(
 		body,
 		[]string{queue},
@@ -510,7 +540,7 @@ func (s *workerRPC) startWorking(concurrency int) (<-chan workerTask, error) {
 				return rabbitmq.Ack
 			}
 			log := logging.AddLogRef(s.log, mtt.SDHash)
-			log.Info("work message received", "msg", mtt)
+			log.Info("task received", "msg", mtt)
 
 			go func() {
 				s.capacityChan <- -1

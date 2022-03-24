@@ -60,7 +60,7 @@ func NewManager(lib *library.Library, minHits int) *VideoManager {
 		logger.Error("error loading channels", "err", err)
 	}
 	m.channels.Load(channels)
-	logger.Info("loaded channels", "count", len(channels))
+	logger.Infow("loaded channels", "count", len(channels))
 	go m.channels.StartLoadingChannels(lib)
 
 	m.pool.AddQueue("priority", 0, func(key string, value interface{}, queue *mfr.Queue) bool {
