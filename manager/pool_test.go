@@ -25,6 +25,7 @@ func TestPoolSuite(t *testing.T) {
 }
 
 func (s *poolSuite) TestPool() {
+	sampleSize := 200
 	rand.Seed(time.Now().UnixNano())
 	mfr.SetLogger(logging.Create("mfr", logging.Prod))
 
@@ -64,7 +65,7 @@ func (s *poolSuite) TestPool() {
 
 	s.Nil(pool.Next())
 
-	for range [20]int{} {
+	for i := 0; i < sampleSize; i++ {
 		c := &element{randomdata.Alphanumeric(96), randomdata.Alphanumeric(25)}
 		pool.Admit(c.url, c)
 	}
@@ -77,11 +78,11 @@ func (s *poolSuite) TestPool() {
 	for e := range pool.Out() {
 		s.Require().NotNil(e, "pool is exhausted with %v hits", total)
 		total += int(e.Hits())
-		if total >= 20 {
+		if total >= sampleSize {
 			break
 		}
 	}
-	s.Equal(20, total)
+	s.Equal(sampleSize, total)
 }
 
 func (s *poolSuite) TestPoolMinHits() {
