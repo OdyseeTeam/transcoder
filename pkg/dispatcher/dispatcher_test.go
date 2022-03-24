@@ -68,7 +68,7 @@ func (s *DispatcherSuite) TestDispatcher() {
 		results = append(results, r)
 	}
 
-	// time.Sleep(100 * time.Millisecond)
+	time.Sleep(3000 * time.Millisecond)
 
 	for _, r := range results {
 		v := <-r.Value()
@@ -122,7 +122,7 @@ func (s *DispatcherSuite) TestDispatcherLeaks() {
 	for _, r := range results {
 		<-r.Value()
 	}
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(3000 * time.Millisecond)
 	s.Equal(grCount, runtime.NumGoroutine())
 
 	d.Stop()
