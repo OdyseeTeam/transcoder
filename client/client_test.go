@@ -182,18 +182,6 @@ Waiting:
 			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
 		})
 	}
-
-	s.tower.StopAll()
-
-	for _, tc := range streamFragmentCases {
-		s.Run(tc.name, func() {
-			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
-			s.Require().NoError(err)
-			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
-			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
-		})
-	}
 }
 
 func (s *clientSuite) TestPlayFragmentStorageDown() {
@@ -285,24 +273,12 @@ func (s *clientSuite) Test_sdHashRe() {
 
 func (s *clientSuite) TestRemoteURL() {
 	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
-	cl := dummyRedirectClient(fmt.Sprintf("remote://storage1/%v/master.m3u8", sdhash))
+	cl := dummyRedirectClient(fmt.Sprintf("remote://storage1/%v/", sdhash))
 	c := New(Configure().HTTPClient(cl))
 	u, err := c.getFragmentURL("morgan", sdhash, "master.m3u8")
 	s.Require().NoError(err)
 	s.Equal(
 		fmt.Sprintf("%v/%v/%v", defaultRemoteServer, sdhash, "master.m3u8?origin=storage1"),
-		u,
-	)
-}
-
-func (s *clientSuite) TestLocalURL() {
-	sdhash := "bec50ab288153ed03b0eb8dafd814daf19a187e07f8da4ad91cf778f5c39ac74d9d92ad6e3ebf2ddb6b7acea3cb8893a"
-	cl := dummyRedirectClient(fmt.Sprintf("http://transcoder.com/streams/%v/master.m3u8", sdhash))
-	c := New(Configure().HTTPClient(cl))
-	u, err := c.getFragmentURL("morgan", sdhash, "master.m3u8")
-	s.Require().NoError(err)
-	s.Equal(
-		fmt.Sprintf("http://transcoder.com/streams/%v/%v", sdhash, "master.m3u8"),
 		u,
 	)
 }
@@ -329,7 +305,7 @@ func (s *clientSuite) Test_getFragmentURL() {
 		"sdhash",
 		"master.m3u8")
 	s.Require().NoError(err)
-	s.Equal("https://cache.transcoder.odysee.com/t-na/sdhash/master.m3u8?origin=storage1", u)
+	s.Equal("https://cache-us.transcoder.odysee.com/sdhash/master.m3u8?origin=storage1", u)
 }
 
 func randomString(n int) string {
