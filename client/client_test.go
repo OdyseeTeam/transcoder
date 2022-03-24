@@ -57,10 +57,10 @@ var streamFragmentCases = []struct {
 	{"v1.m3u8", 0},
 	{"v2.m3u8", 0},
 	{"v3.m3u8", 0},
-	{"v0_s000000.ts", 1800000},
-	{"v1_s000000.ts", 300000},
-	{"v2_s000000.ts", 300000},
-	{"v3_s000000.ts", 170000},
+	{"v0_s000000.ts", 2_000_000},
+	{"v1_s000000.ts", 350_000},
+	{"v2_s000000.ts", 300_000},
+	{"v3_s000000.ts", 170_000},
 }
 
 func TestClientSuite(t *testing.T) {
@@ -147,7 +147,7 @@ Waiting:
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.1)
+				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.2)
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
