@@ -88,7 +88,7 @@ func (s *towerSuite) TestSuccess() {
 	srv, err := NewServer(
 		DefaultServerConfig().
 			Logger(zapadapter.NewKV(nil)).
-			HttpServer(":18080", "http://localhost:18080/").
+			HttpServer(":18080", "http://localhost:18080").
 			VideoManager(mgr).
 			DB(s.TowerDB).
 			WorkDir(srvWorkDir).
@@ -111,7 +111,7 @@ func (s *towerSuite) TestSuccess() {
 	httpURL := fmt.Sprintf("%v/api/v2/video/%v", srv.HttpServerURL, url.PathEscape(streamURL))
 	resp, err := http.Get(httpURL)
 	s.Require().NoError(err)
-	s.Require().EqualValues(http.StatusAccepted, resp.StatusCode)
+	s.Require().EqualValues(http.StatusAccepted, resp.StatusCode, httpURL)
 
 	var v ldb.Video
 	for v.ID == 0 {

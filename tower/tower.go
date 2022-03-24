@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -85,7 +86,7 @@ func (c *ServerConfig) Timings(t Timings) *ServerConfig {
 
 func (c *ServerConfig) HttpServer(bind, url string) *ServerConfig {
 	c.httpServerBind = bind
-	c.HttpServerURL = url
+	c.HttpServerURL = strings.TrimRight(url, "/")
 	return c
 }
 
