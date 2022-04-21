@@ -82,7 +82,7 @@ func serve() {
 	towerCfg := cfg.GetStringMapString("tower")
 	libCfg := cfg.GetStringMapString("library")
 
-	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]), ldb.MigrationsFS)
+	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
 	if err != nil {
 		log.Fatal("library db initialization failed", err)
 	}
@@ -108,7 +108,8 @@ func serve() {
 	cleanStopChan := library.SpawnLibraryCleaning(lib, s3storage.Name(), library.StringToSize(s3cfg["maxsize"]))
 
 	qCfg := cfg.GetStringMapString("queue")
-	queueDB, err := queue.ConnectDB(queue.DefaultDBConfig().DSN(qCfg["dsn"]))
+	// queueDB, err := queue.ConnectDB(queue.DefaultDBConfig().DSN(qCfg["dsn"]))
+	queueDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(qCfg["dsn"]).AppName("queue"), queue.MigrationsFS)
 	if err != nil {
 		log.Fatal("queue db initialization failed", err)
 	}

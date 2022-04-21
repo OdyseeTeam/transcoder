@@ -1,4 +1,5 @@
 S3:
+  Name: local
   Endpoint: http://s3:9000
   Bucket: transcoded
   Key: ody

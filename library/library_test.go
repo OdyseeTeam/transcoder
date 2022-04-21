@@ -3,6 +3,7 @@ package library
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
@@ -52,4 +53,9 @@ func (s *librarySuite) TestAddGetVideo() {
 	url, err = lib.GetVideoURL(stream.SDHash())
 	s.Require().NoError(err)
 	s.Equal(fmt.Sprintf("remote://%s/%s/", stream.RemoteStorage, stream.Manifest.TID), url)
+
+	v, err := lib.GetVideo(stream.SDHash())
+	s.Require().NoError(err)
+	s.EqualValues(1, v.AccessCount.Int32)
+	s.GreaterOrEqual(2, int(time.Since(v.AccessedAt.Time).Seconds()))
 }

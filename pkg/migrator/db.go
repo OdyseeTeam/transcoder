@@ -7,8 +7,8 @@ import (
 )
 
 type DBConfig struct {
-	dsn, dbName, connOpts string
-	migrate               bool
+	appName, dsn, dbName, connOpts string
+	migrate                        bool
 }
 
 func DefaultDBConfig() *DBConfig {
@@ -27,6 +27,11 @@ func (c *DBConfig) DSN(dsn string) *DBConfig {
 
 func (c *DBConfig) Name(dbName string) *DBConfig {
 	c.dbName = dbName
+	return c
+}
+
+func (c *DBConfig) AppName(appName string) *DBConfig {
+	c.appName = appName
 	return c
 }
 
@@ -51,10 +56,11 @@ func ConnectDB(config *DBConfig, migrationsFS embed.FS) (*sql.DB, error) {
 		return nil, err
 	}
 	if config.migrate {
-		_, err = NewMigrator(db, migrationsFS).MigrateUp()
+		n, err := NewMigrator(db, migrationsFS, config.appName).MigrateUp()
 		if err != nil {
 			return nil, err
 		}
+		logger.Infow("migrations applied", "count", n)
 	}
 
 	return db, nil

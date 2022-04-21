@@ -23,7 +23,7 @@ CREATE TABLE videos (
 
     storage text NOT NULL CHECK (storage <> ''),
     path text NOT NULL CHECK (path <> ''),
-    size integer NOT NULL CHECK (size > 0),
+    size bigint NOT NULL CHECK (size > 0),
 
     checksum text
 );

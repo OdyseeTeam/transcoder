@@ -1,4 +1,5 @@
 S3:
+  Name: local
   Endpoint: http://s3:9000
   Bucket: transcoded
   Key: ody
@@ -9,9 +10,7 @@ AdaptiveQueue:
   MinHits: 1
 
 Library:
-  SQLite: /storage/library/data
-  Videos: /storage/library/videos
-  MaxSize: 0GB
+  DSN: postgres://postgres:odyseeteam@db
 
 Queue:
   DSN: postgres://postgres:odyseeteam@db

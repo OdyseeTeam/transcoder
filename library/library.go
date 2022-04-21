@@ -71,7 +71,10 @@ func (lib *Library) GetVideoURL(sdHash string) (string, error) {
 		}
 		return "", err
 	}
-	lib.db.RecordVideoAccess(context.Background(), v.SDHash)
+	err = lib.db.RecordVideoAccess(context.Background(), v.SDHash)
+	if err != nil {
+		return "", err
+	}
 	url = fmt.Sprintf("%s://%s/%s/", SchemeRemote, v.Storage, v.Path)
 	return url, nil
 }

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -92,45 +90,6 @@ func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
 	s := &S3Driver{
 		S3Configuration: cfg,
 		session:         sess,
-	}
-
-	svc := s3.New(sess)
-	_, err = svc.CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(s.bucket),
-		ACL:    aws.String("public-read"),
-	})
-	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok {
-			if awsErr.Code() != "BucketAlreadyOwnedByYou" {
-				return nil, err
-			}
-		}
-	}
-
-	readOnlyAnonUserPolicy := map[string]interface{}{
-		"Version": "2012-10-17",
-		"Statement": []map[string]interface{}{
-			{
-				"Sid":       "AddPerm",
-				"Effect":    "Allow",
-				"Principal": "*",
-				"Action": []string{
-					"s3:GetObject",
-				},
-				"Resource": []string{
-					fmt.Sprintf("arn:aws:s3:::%s/*", s.bucket),
-				},
-			},
-		},
-	}
-	policy, _ := json.Marshal(readOnlyAnonUserPolicy)
-
-	_, err = svc.PutBucketPolicy(&s3.PutBucketPolicyInput{
-		Bucket: aws.String(s.bucket),
-		Policy: aws.String(string(policy)),
-	})
-	if err != nil {
-		return nil, err
 	}
 
 	return s, nil

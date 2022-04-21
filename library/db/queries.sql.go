@@ -258,7 +258,7 @@ func (q *Queries) GetVideo(ctx context.Context, sdHash string) (Video, error) {
 
 const recordVideoAccess = `-- name: RecordVideoAccess :exec
 UPDATE videos
-SET last_accessed = NOW(), access_count = access_count + 1
+SET accessed_at = NOW(), access_count = access_count + 1
 WHERE sd_hash = $1
 `
 

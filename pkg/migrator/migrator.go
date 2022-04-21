@@ -14,12 +14,14 @@ const dialect = "postgres"
 
 type Migrator struct {
 	db     *sql.DB
+	ms     migrate.MigrationSet
 	source *migrate.EmbedFileSystemMigrationSource
 }
 
-func NewMigrator(db *sql.DB, fs embed.FS) Migrator {
+func NewMigrator(db *sql.DB, fs embed.FS, migrTableName string) Migrator {
 	return Migrator{
 		db,
+		migrate.MigrationSet{TableName: migrTableName + "_gorp_migrations"},
 		&migrate.EmbedFileSystemMigrationSource{
 			FileSystem: fs,
 			Root:       "migrations",
@@ -29,12 +31,12 @@ func NewMigrator(db *sql.DB, fs embed.FS) Migrator {
 
 // MigrateUp executes forward migrations.
 func (m Migrator) MigrateUp() (int, error) {
-	return migrate.Exec(m.db, dialect, m.source, migrate.Up)
+	return m.ms.Exec(m.db, dialect, m.source, migrate.Up)
 }
 
 // MigrateDown undoes a specified number of migrations.
 func (m Migrator) MigrateDown(max int) (int, error) {
-	return migrate.ExecMax(m.db, dialect, m.source, migrate.Down, max)
+	return m.ms.ExecMax(m.db, dialect, m.source, migrate.Down, max)
 }
 
 // Truncate purges records from the requested tables.
