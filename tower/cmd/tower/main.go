@@ -124,7 +124,8 @@ func serve() {
 		VideoManager(mgr).
 		WorkDir(towerCfg["workdir"]).
 		RMQAddr(CLI.Serve.RMQAddr).
-		DB(queueDB)
+		DB(queueDB).
+		ManagerToken(libCfg["managertoken"])
 
 	if CLI.Serve.DevMode {
 		serverConfig = serverConfig.DevMode()
