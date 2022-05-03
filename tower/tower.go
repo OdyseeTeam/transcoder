@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fasthttp/router"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/lbryio/transcoder/tower/queue"
-	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/fasthttp/router"
+	"github.com/prometheus/client_golang/prometheus"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
@@ -39,6 +39,7 @@ type ServerConfig struct {
 	HttpServerURL           string
 	log                     logging.KVLogger
 	videoManager            *manager.VideoManager
+	managerToken            string
 	timings                 map[string]time.Duration
 	devMode                 bool
 }
@@ -92,6 +93,11 @@ func (c *ServerConfig) HttpServer(bind, url string) *ServerConfig {
 
 func (c *ServerConfig) VideoManager(manager *manager.VideoManager) *ServerConfig {
 	c.videoManager = manager
+	return c
+}
+
+func (c *ServerConfig) ManagerToken(token string) *ServerConfig {
+	c.managerToken = token
 	return c
 }
 
@@ -254,7 +260,12 @@ func (s *Server) startHttpServer() error {
 
 	metrics.RegisterTowerMetrics()
 
-	manager.AttachVideoHandler(router, "", s.videoManager, s.log)
+	if s.managerToken == "" {
+		return errors.New("manager token not set")
+	}
+	manager.CreateRoutes(router, s.videoManager, s.log, func(ctx *fasthttp.RequestCtx) bool {
+		return ctx.UserValue(manager.TokenCtxField).(string) == s.managerToken
+	})
 
 	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)
 

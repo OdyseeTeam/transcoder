@@ -93,7 +93,7 @@ func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	}
 
 	c, ok := (*resolved)[uri]
-	if !ok || c.CanonicalURL == "" {
+	if !ok {
 		return nil, ErrClaimNotFound
 	}
 	return &c, nil

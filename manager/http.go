@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
+	"strings"
 
 	"github.com/lbryio/transcoder/internal/metrics"
+	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/pkg/timer"
 
@@ -18,109 +17,40 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"go.uber.org/zap"
 )
 
-var httpVideoPath = "/streams"
+const (
+	TokenCtxField     = "token"
+	AuthHeader        = "Authorization"
+	AdminChannelField = "channel"
+)
 
-// HttpAPI ties HTTP API together and allows to start/shutdown the web server.
-type HttpAPI struct {
-	*HttpAPIConfiguration
-	logger     *zap.SugaredLogger
-	httpServer *fasthttp.Server
-}
+type AuthCallback func(*fasthttp.RequestCtx) bool
 
 type httpVideoHandler struct {
-	manager *VideoManager
-	log     logging.KVLogger
+	manager      *VideoManager
+	log          logging.KVLogger
+	authCallback AuthCallback
 }
 
-type HttpAPIConfiguration struct {
-	debug     bool
-	videoPath string
-	addr      string
-	mgr       *VideoManager
-}
-
-func ConfigureHttpAPI() *HttpAPIConfiguration {
-	return &HttpAPIConfiguration{
-		addr:      ":8080",
-		videoPath: path.Join(os.TempDir(), "transcoder"),
-	}
-}
-
-func NewHttpAPI(cfg *HttpAPIConfiguration) *HttpAPI {
-	r := router.New()
-
-	AttachVideoHandler(r, "", cfg.mgr, zapadapter.NewKV(logger.Named("http").Desugar()))
-
-	s := &HttpAPI{
-		HttpAPIConfiguration: cfg,
-		httpServer: &fasthttp.Server{
-			Handler: MetricsMiddleware(CORSMiddleware(r.Handler)),
-		},
-		logger: logger.Named("http"),
-	}
-
-	return s
-}
-
-// NewRouter creates a set of HTTP entrypoints that will route requests into video library
-// and video transcoding queue.
-func AttachVideoHandler(r *router.Router, prefix string, manager *VideoManager, log logging.KVLogger) {
+// CreateRoutes creates a set of HTTP entrypoints that will route requests into video library.
+func CreateRoutes(r *router.Router, manager *VideoManager, log logging.KVLogger, cb AuthCallback) {
 	h := httpVideoHandler{
-		log:     log,
-		manager: manager,
+		log:          log,
+		manager:      manager,
+		authCallback: cb,
 	}
-	g := r.Group(prefix)
 
-	// r.GET("/api/v1/video/{kind:hls}/{url}/{sdHash:[a-z0-9]{96}}", h.handleVideo)
-	g.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
-	g.GET("/api/v2/video/{url}", h.handleVideo)
-	g.GET("/api/v3/video", h.handleVideo) // accepts URL as a query param
+	r.GET("/api/v1/video/{kind:hls}/{url}", h.handleVideo)
+	r.GET("/api/v2/video/{url}", h.handleVideo)
+	r.GET("/api/v3/video", h.handleVideo) // accepts URL as a query param
+
+	r.POST("/api/v1/channel", h.handleChannel)
 
 	metrics.RegisterMetrics()
 	dispatcher.RegisterMetrics()
 	RegisterMetrics()
-	g.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
-}
-
-func (c *HttpAPIConfiguration) Debug(debug bool) *HttpAPIConfiguration {
-	c.debug = debug
-	return c
-}
-
-func (c *HttpAPIConfiguration) Addr(addr string) *HttpAPIConfiguration {
-	c.addr = addr
-	return c
-}
-
-func (c *HttpAPIConfiguration) VideoPath(videoPath string) *HttpAPIConfiguration {
-	c.videoPath = videoPath
-	return c
-}
-
-func (c *HttpAPIConfiguration) VideoManager(mgr *VideoManager) *HttpAPIConfiguration {
-	c.mgr = mgr
-	return c
-}
-
-func (s HttpAPI) Addr() string {
-	return s.addr
-}
-
-func (s HttpAPI) URL() string {
-	return "http://" + s.addr
-}
-
-func (s HttpAPI) Start() error {
-	s.logger.Infow("listening", "bind", s.addr, "video_path", s.videoPath, "debug", s.debug)
-	return s.httpServer.ListenAndServe(s.addr)
-}
-
-func (s HttpAPI) Shutdown() error {
-	s.logger.Info("shutting down...")
-	return s.httpServer.Shutdown()
+	r.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
 }
 
 func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
@@ -220,6 +150,41 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 	metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
 	ll.Infow("stream found", "location", location)
 	ctx.Redirect(location, http.StatusSeeOther)
+}
+
+func (h httpVideoHandler) handleChannel(ctx *fasthttp.RequestCtx) {
+	if h.authCallback == nil {
+		h.log.Error("management endpoint called but authenticator function not set")
+		ctx.SetStatusCode(http.StatusForbidden)
+		ctx.SetBodyString("authorization failed")
+		return
+	}
+	token := strings.Replace(string(ctx.Request.Header.Peek(AuthHeader)), "Bearer ", "", 1)
+	ctx.SetUserValue(TokenCtxField, token)
+
+	if !h.authCallback(ctx) {
+		h.log.Info("authorization failed")
+		ctx.SetStatusCode(http.StatusForbidden)
+		ctx.SetBodyString("authorization failed")
+		return
+	}
+
+	channel := string(ctx.FormValue(AdminChannelField))
+	if channel == "" {
+		ctx.SetStatusCode(http.StatusBadRequest)
+		fmt.Fprint(ctx, "channel missing")
+		return
+	}
+	var priority db.ChannelPriority
+	priority.Scan(ctx.FormValue("priority"))
+	c, err := h.manager.lib.AddChannel(channel, priority)
+	if err != nil {
+		ctx.SetStatusCode(http.StatusBadRequest)
+		fmt.Fprint(ctx, err.Error())
+		return
+	}
+	ctx.SetStatusCode(http.StatusCreated)
+	fmt.Fprintf(ctx, "channel %s (%s) added with priority %s", c.URL, c.ClaimID, c.Priority)
 }
 
 func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {

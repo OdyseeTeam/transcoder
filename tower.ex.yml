@@ -11,6 +11,7 @@ AdaptiveQueue:
 
 Library:
   DSN: postgres://postgres:odyseeteam@db
+  ManagerToken: managertoken123
 
 Queue:
   DSN: postgres://postgres:odyseeteam@db
