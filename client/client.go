@@ -387,7 +387,7 @@ func (c Client) fetchFragment(url, sdHash, name string) (int64, error) {
 		case http.StatusNotFound:
 			ret = ErrNotFound
 		default:
-			ret = ErrNotOK
+			ret = errors.Wrapf(ErrNotOK, "status: %s", r.Status)
 		}
 		c.logger.Debugw(
 			"unexpected http response",

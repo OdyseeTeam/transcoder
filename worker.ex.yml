@@ -1,7 +1,10 @@
 S3:
   Name: local
   Endpoint: http://s3:9000
-  Bucket: transcoded
+  Bucket: t-na
   Key: ody
   Secret: odyseetes3
   MaxSize: 1TB
+  CreateBucket: true
+
+SpritegenPath: /usr/src/spritegen/cli.js

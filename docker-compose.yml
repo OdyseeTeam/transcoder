@@ -25,6 +25,7 @@ services:
     container_name: s3
     ports:
       - "9000:9000"
+      - "38861:38861"
     volumes:
       - s3-data:/data
     environment:
