@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"strconv"
 	"strings"
 
+	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/internal/metrics"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -28,7 +28,7 @@ type Encoder interface {
 
 type Configuration struct {
 	ffmpegPath, ffprobePath,
-	thumbnailGeneratorPath string
+	spritegenPath string
 
 	ladder ladder.Ladder
 	log    logging.KVLogger
@@ -36,7 +36,7 @@ type Configuration struct {
 
 type encoder struct {
 	*Configuration
-	tg *ThumbnailGenerator
+	spriteGen *SpriteGenerator
 }
 
 type Result struct {
@@ -51,14 +51,14 @@ type Result struct {
 func Configure() *Configuration {
 	ffmpegPath, _ := exec.LookPath("ffmpeg")
 	ffprobePath, _ := exec.LookPath("ffprobe")
-	tgPath, _ := exec.LookPath("generator")
+	spritegenPath, _ := exec.LookPath("node")
 
 	return &Configuration{
-		ffmpegPath:             ffmpegPath,
-		ffprobePath:            ffprobePath,
-		thumbnailGeneratorPath: tgPath,
-		ladder:                 ladder.Default,
-		log:                    logging.NoopKVLogger{},
+		ffmpegPath:    ffmpegPath,
+		ffprobePath:   ffprobePath,
+		spritegenPath: spritegenPath,
+		ladder:        ladder.Default,
+		log:           logging.NoopKVLogger{},
 	}
 }
 
@@ -86,14 +86,14 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 
 	e := encoder{Configuration: cfg}
 
-	tg, err := NewThumbnailGenerator(e.thumbnailGeneratorPath)
+	spriteGen, err := NewSpriteGenerator(e.spritegenPath)
 	if err != nil {
-		e.log.Info("thumbnail generator was not configured", "err", err)
+		e.log.Info("sprite generator was not configured", "err", err)
 	} else {
-		e.tg = tg
+		e.spriteGen = spriteGen
 	}
 
-	e.log.Info("encoder configured", "ffmpeg", e.ffmpegPath, "ffprobe", e.ffprobePath, "generator", e.thumbnailGeneratorPath)
+	e.log.Info("encoder configured", "ffmpeg", e.ffmpegPath, "ffprobe", e.ffprobePath, "spritegen", e.spritegenPath)
 	return &e, nil
 }
 
@@ -107,8 +107,8 @@ func (c *Configuration) FfprobePath(p string) *Configuration {
 	return c
 }
 
-func (c *Configuration) ThumbnailGeneratorPath(p string) *Configuration {
-	c.thumbnailGeneratorPath = p
+func (c *Configuration) SpritegenPath(p string) *Configuration {
+	c.spritegenPath = p
 	return c
 }
 
@@ -130,6 +130,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	ll := e.log.With("input", input, "output", output)
 
 	if err := os.MkdirAll(output, os.ModePerm); err != nil {
 		return nil, err
@@ -141,23 +142,28 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	}
 	res := &Result{Input: input, Output: output, OrigMeta: meta, Ladder: targetLadder}
 
-	if e.tg != nil {
-		err := e.tg.Generate(input, path.Join(output, "thumbnails10k.png"))
+	if e.spriteGen != nil {
+		ll.Info("starting sprite generator")
+		err := e.spriteGen.Generate(input, output)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "could not start sprite generator")
 		}
+		outputFiles, err := godirwalk.ReadDirnames(output, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get a list of files")
+		}
+		e.log.Info("sprite generator done", "files", outputFiles)
 	}
 
 	args := targetLadder.ArgumentSet(output, meta)
 	vs := meta.VideoStream
-	e.log.Info(
+	ll.Info(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
 		"media_duration", meta.FMeta.GetFormat().GetDuration(),
 		"media_bitrate", meta.FMeta.GetFormat().GetBitRate(),
 		"media_width", vs.GetWidth(),
 		"media_height", vs.GetHeight(),
-		"input", input, "output", output,
 	)
 
 	dur, _ := strconv.ParseFloat(meta.FMeta.GetFormat().GetDuration(), 64)

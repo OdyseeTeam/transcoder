@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -28,40 +29,47 @@ func (discardAt) WriteAt(p []byte, off int64) (int, error) {
 type S3Configuration struct {
 	name, endpoint, region,
 	accessKey, secretKey, bucket string
-	disableSSL bool
+	disableSSL, createBucket bool
 }
 
 func S3Configure() *S3Configuration {
 	return &S3Configuration{region: "us-east-1"}
 }
 
-// Name ...
+// Name is storage type name (for internal use)
 func (c *S3Configuration) Name(n string) *S3Configuration {
 	c.name = n
 	return c
 }
 
-// Endpoint ...
+// Endpoint is S3 HTTP API server address.
 func (c *S3Configuration) Endpoint(e string) *S3Configuration {
 	c.endpoint = e
 	return c
 }
 
-// Region ...
+// Region is a bucked region setting.
 func (c *S3Configuration) Region(r string) *S3Configuration {
 	c.region = r
 	return c
 }
 
-// Bucket ...
+// Bucket is a bucket name for storing data.
 func (c *S3Configuration) Bucket(b string) *S3Configuration {
 	c.bucket = b
 	return c
 }
 
-// DisableSSL ...
+// DisableSSL will use plain HTTP for accessing S3.
 func (c *S3Configuration) DisableSSL() *S3Configuration {
 	c.disableSSL = true
+	return c
+}
+
+// CreateBucket will attempt to create a configured bucket at initialization.
+// Should be skipped for wasabi storage.
+func (c *S3Configuration) CreateBucket() *S3Configuration {
+	c.createBucket = true
 	return c
 }
 
@@ -90,6 +98,22 @@ func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
 	s := &S3Driver{
 		S3Configuration: cfg,
 		session:         sess,
+	}
+
+	if cfg.createBucket {
+		logger.Infow("creating s3 bucket", "name", cfg.bucket)
+		client := s3.New(sess)
+		_, err := client.CreateBucket(&s3.CreateBucketInput{
+			Bucket: aws.String(s.bucket),
+			ACL:    aws.String("public-read"),
+		})
+		if err != nil {
+			if awsErr, ok := err.(awserr.Error); ok {
+				if awsErr.Code() != "BucketAlreadyOwnedByYou" {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	return s, nil

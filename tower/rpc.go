@@ -140,7 +140,7 @@ func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency
 	return s.consumer.StartConsuming(handler, queue, routingKeys, opts...)
 }
 
-func (s *towerRPC) declareQueues() error {
+func (s *rpc) declareQueues() error {
 	queues := []string{workRequestsQueue, taskStatusQueue, workerHandshakeQueue}
 	for _, q := range queues {
 		s.log.Debug("declaring queue", "name", q)

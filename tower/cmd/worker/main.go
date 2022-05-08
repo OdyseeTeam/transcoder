@@ -51,34 +51,36 @@ func main() {
 			log.Fatal("unable to read config", err)
 		}
 
-		s3cfg := cfg.GetStringMapString("s3")
+		s3opts := cfg.GetStringMapString("s3")
 
 		err = os.MkdirAll(CLI.Start.WorkDir, os.ModePerm)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s3storage, err := storage.InitS3Driver(
-			storage.S3Configure().
-				Endpoint(s3cfg["endpoint"]).
-				Credentials(s3cfg["key"], s3cfg["secret"]).
-				Bucket(s3cfg["bucket"]).
-				Name(s3cfg["name"]),
-		)
+		s3cfg := storage.S3Configure().
+			Endpoint(s3opts["endpoint"]).
+			Credentials(s3opts["key"], s3opts["secret"]).
+			Bucket(s3opts["bucket"]).
+			Name(s3opts["name"])
+		if s3opts["createbucket"] == "true" {
+			s3cfg = s3cfg.CreateBucket()
+		}
+		s3storage, err := storage.InitS3Driver(s3cfg)
 		if err != nil {
 			log.Fatal("s3 driver initialization failed", err)
 		}
-		log.Infow("s3 storage configured", "endpoint", s3cfg["endpoint"])
+		log.Infow("s3 storage configured", "endpoint", s3opts["endpoint"])
 
-		c, err := tower.NewWorker(tower.DefaultWorkerConfig().
+		wrkCfg := tower.DefaultWorkerConfig().
 			WorkerID(CLI.Start.WorkerID).
 			Logger(zapadapter.NewKV(logger.Named("tower.worker"))).
 			PoolSize(CLI.Start.Workers).
 			WorkDir(CLI.Start.WorkDir).
 			RMQAddr(CLI.Start.RMQAddr).
 			HttpServerBind(CLI.Start.HttpBind).
-			S3Driver(s3storage),
-		)
+			S3Driver(s3storage)
+		c, err := tower.NewWorker(wrkCfg)
 		if err != nil {
 			log.Fatal(err)
 		}

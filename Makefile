@@ -37,11 +37,11 @@ else
 	CGO_ENABLED=1 go build -o $(BUILD_DIR)/tccli ./tccli
 endif
 
-tccli-mac:
+tccli_mac:
 	CGO_ENABLED=0 go build -o dist/arm64_darwin/tccli ./tccli
 
-tower_image_latest:
-	docker buildx build -f Dockerfile-tower -t odyseeteam/transcoder-tower:dev4 --platform linux/amd64 --push .
+tower_image: tower
+	docker buildx build -f Dockerfile-tower -t odyseeteam/transcoder-tower:dev4 --platform linux/amd64 .
 
-worker_image_latest:
-	docker buildx build -f Dockerfile-worker -t odyseeteam/transcoder-worker:dev4 --platform linux/amd64 --push .
+worker_image: worker
+	docker buildx build -f Dockerfile-worker -t odyseeteam/transcoder-worker:dev4 --platform linux/amd64 .

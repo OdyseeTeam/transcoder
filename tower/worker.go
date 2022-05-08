@@ -174,6 +174,7 @@ func (c *Worker) startHttpServer() error {
 }
 
 func (c *Worker) StartWorkers() error {
+	c.rpc.declareQueues()
 	taskChan, err := c.rpc.startWorking(c.poolSize)
 	if err != nil {
 		return err
