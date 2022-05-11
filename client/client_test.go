@@ -125,7 +125,7 @@ Waiting:
 			s.FailNow("transcoding is taking too long")
 		case <-wait.C:
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
 			if err != nil {
 				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
 			} else {
@@ -140,7 +140,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
 			rbody, err := ioutil.ReadAll(rr.Result().Body)
@@ -176,7 +176,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
 			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
@@ -203,7 +203,7 @@ Waiting:
 			s.FailNow("transcoding is taking too long")
 		case <-wait.C:
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
 			if err != nil {
 				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
 			} else {
@@ -216,7 +216,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 		})
 	}
@@ -227,7 +227,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Error(err)
 		})
 	}
