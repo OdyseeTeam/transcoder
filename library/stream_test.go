@@ -2,6 +2,7 @@ package library
 
 import (
 	"path"
+	"sort"
 	"testing"
 
 	"github.com/Pallinder/go-randomdata"
@@ -19,4 +20,6 @@ func TestInitStream(t *testing.T) {
 
 	assert.Greater(t, stream.Manifest.Size, int64(1000))
 	assert.NotEmpty(t, stream.Manifest.Checksum)
+	sort.Strings(PopulatedHLSPlaylistFiles)
+	assert.Equal(t, PopulatedHLSPlaylistFiles, stream.Manifest.Files)
 }

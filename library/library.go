@@ -3,13 +3,16 @@ package library
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"encoding/json"
 	"fmt"
 
-	"github.com/c2h5oh/datasize"
 	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/resolve"
+
+	"github.com/c2h5oh/datasize"
+	"github.com/pkg/errors"
+	"github.com/tabbed/pqtype"
 )
 
 const (
@@ -84,6 +87,10 @@ func (lib *Library) AddRemoteStream(stream Stream) error {
 		return errors.New("cannot add remote stream, manifest is missing")
 	}
 	m := stream.Manifest
+	bm, err := json.Marshal(m)
+	if err != nil {
+		return errors.Wrap(err, "cannot marshal stream manifest")
+	}
 	p := db.AddVideoParams{
 		TID:      m.TID,
 		URL:      m.URL,
@@ -93,8 +100,9 @@ func (lib *Library) AddRemoteStream(stream Stream) error {
 		Path:     m.TID,
 		Size:     stream.Size(),
 		Checksum: sql.NullString{String: stream.Checksum(), Valid: true},
+		Manifest: pqtype.NullRawMessage{RawMessage: bm, Valid: true},
 	}
-	_, err := lib.db.AddVideo(context.Background(), p)
+	_, err = lib.db.AddVideo(context.Background(), p)
 	return err
 }
 

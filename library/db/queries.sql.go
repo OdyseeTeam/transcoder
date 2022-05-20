@@ -6,6 +6,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/tabbed/pqtype"
 )
 
 const addChannel = `-- name: AddChannel :one
@@ -38,11 +40,11 @@ func (q *Queries) AddChannel(ctx context.Context, arg AddChannelParams) (Channel
 
 const addVideo = `-- name: AddVideo :one
 INSERT INTO videos (
-  tid, sd_hash, url, channel, storage, path, size, checksum
+  tid, sd_hash, url, channel, storage, path, size, checksum, manifest
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
-RETURNING id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum
+RETURNING id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest
 `
 
 type AddVideoParams struct {
@@ -54,6 +56,7 @@ type AddVideoParams struct {
 	Path     string
 	Size     int64
 	Checksum sql.NullString
+	Manifest pqtype.NullRawMessage
 }
 
 func (q *Queries) AddVideo(ctx context.Context, arg AddVideoParams) (Video, error) {
@@ -66,6 +69,7 @@ func (q *Queries) AddVideo(ctx context.Context, arg AddVideoParams) (Video, erro
 		arg.Path,
 		arg.Size,
 		arg.Checksum,
+		arg.Manifest,
 	)
 	var i Video
 	err := row.Scan(
@@ -82,6 +86,7 @@ func (q *Queries) AddVideo(ctx context.Context, arg AddVideoParams) (Video, erro
 		&i.Path,
 		&i.Size,
 		&i.Checksum,
+		&i.Manifest,
 	)
 	return i, err
 }
@@ -130,7 +135,7 @@ func (q *Queries) GetAllChannels(ctx context.Context) ([]Channel, error) {
 }
 
 const getAllVideos = `-- name: GetAllVideos :many
-SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum FROM videos
+SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest FROM videos
 `
 
 func (q *Queries) GetAllVideos(ctx context.Context) ([]Video, error) {
@@ -156,6 +161,7 @@ func (q *Queries) GetAllVideos(ctx context.Context) ([]Video, error) {
 			&i.Path,
 			&i.Size,
 			&i.Checksum,
+			&i.Manifest,
 		); err != nil {
 			return nil, err
 		}
@@ -171,7 +177,7 @@ func (q *Queries) GetAllVideos(ctx context.Context) ([]Video, error) {
 }
 
 const getAllVideosForStorage = `-- name: GetAllVideosForStorage :many
-SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum FROM videos
+SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest FROM videos
 WHERE storage = $1
 `
 
@@ -198,6 +204,7 @@ func (q *Queries) GetAllVideosForStorage(ctx context.Context, storage string) ([
 			&i.Path,
 			&i.Size,
 			&i.Checksum,
+			&i.Manifest,
 		); err != nil {
 			return nil, err
 		}
@@ -231,7 +238,7 @@ func (q *Queries) GetChannel(ctx context.Context, claimID string) (Channel, erro
 }
 
 const getVideo = `-- name: GetVideo :one
-SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum FROM videos
+SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest FROM videos
 WHERE sd_hash = $1 LIMIT 1
 `
 
@@ -252,6 +259,7 @@ func (q *Queries) GetVideo(ctx context.Context, sdHash string) (Video, error) {
 		&i.Path,
 		&i.Size,
 		&i.Checksum,
+		&i.Manifest,
 	)
 	return i, err
 }

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/grafov/m3u8"
@@ -54,7 +55,8 @@ type Manifest struct {
 	Size         int64  `yaml:",omitempty"`
 	Checksum     string `yaml:",omitempty"`
 
-	Ladder ladder.Ladder `yaml:",omitempty,flow"`
+	Ladder ladder.Ladder `yaml:",omitempty"`
+	Files  []string      `yaml:",omitempty"`
 }
 
 type StreamFileLoader func(rootPath ...string) ([]byte, error)
@@ -94,7 +96,7 @@ func (s *Stream) GenerateManifest(url, channel, sdHash string) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot calculate checksum")
 	}
-	m.Size, err = s.getSize()
+	m.Files, m.Size, err = s.getFileList()
 	if err != nil {
 		return errors.Wrap(err, "cannot calculate size")
 	}
@@ -146,16 +148,19 @@ func (s *Stream) generateChecksum() (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func (s *Stream) getSize() (int64, error) {
+func (s *Stream) getFileList() ([]string, int64, error) {
 	var size int64
+	fl := []string{}
 	err := s.Walk(func(fi fs.FileInfo, _, name string) error {
 		if name == ManifestName {
 			return nil
 		}
 		size += fi.Size()
+		fl = append(fl, name)
 		return nil
 	})
-	return size, err
+	sort.Strings(fl)
+	return fl, size, err
 }
 
 func (s *Stream) Walk(walker StreamWalker) error {

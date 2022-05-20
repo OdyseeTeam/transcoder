@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/tabbed/pqtype"
 )
 
 type ChannelPriority string
@@ -51,4 +53,5 @@ type Video struct {
 	Path        string
 	Size        int64
 	Checksum    sql.NullString
+	Manifest    pqtype.NullRawMessage
 }

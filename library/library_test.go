@@ -1,6 +1,7 @@
 package library
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -41,21 +42,27 @@ func (s *librarySuite) TestAddGetVideo() {
 	var err error
 
 	lib := New(Config{DB: s.DB, Storage: NewDummyStorage("storage1", "https://storage.host"), Log: zapadapter.NewKV(nil)})
-	stream := GenerateDummyStream()
+	newStream := GenerateDummyStream()
 
-	url, err := lib.GetVideoURL(stream.SDHash())
+	url, err := lib.GetVideoURL(newStream.SDHash())
 	s.ErrorIs(err, ErrStreamNotFound)
 	s.Empty(url)
 
-	err = lib.AddRemoteStream(*stream)
+	err = lib.AddRemoteStream(*newStream)
 	s.Require().NoError(err)
 
-	url, err = lib.GetVideoURL(stream.SDHash())
+	url, err = lib.GetVideoURL(newStream.SDHash())
 	s.Require().NoError(err)
-	s.Equal(fmt.Sprintf("remote://%s/%s/", stream.RemoteStorage, stream.Manifest.TID), url)
+	s.Equal(fmt.Sprintf("remote://%s/%s/", newStream.RemoteStorage, newStream.Manifest.TID), url)
 
-	v, err := lib.GetVideo(stream.SDHash())
+	v, err := lib.GetVideo(newStream.SDHash())
 	s.Require().NoError(err)
 	s.EqualValues(1, v.AccessCount.Int32)
 	s.GreaterOrEqual(2, int(time.Since(v.AccessedAt.Time).Seconds()))
+	m := &Manifest{}
+	err = json.Unmarshal(v.Manifest.RawMessage, m)
+	s.Require().NoError(err)
+	m.TranscodedAt = time.Time{}
+	newStream.Manifest.TranscodedAt = time.Time{}
+	s.EqualValues(m, newStream.Manifest)
 }

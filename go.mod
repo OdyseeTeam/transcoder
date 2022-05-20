@@ -39,6 +39,7 @@ require (
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.7.0
+	github.com/tabbed/pqtype v0.1.1 // indirect
 	github.com/valyala/fasthttp v1.31.0
 	github.com/wagslane/go-rabbitmq v0.7.2
 	go.uber.org/goleak v1.1.10

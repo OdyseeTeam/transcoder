@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 
@@ -86,7 +87,7 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 
 	e := encoder{Configuration: cfg}
 
-	spriteGen, err := NewSpriteGenerator(e.spritegenPath)
+	spriteGen, err := NewSpriteGenerator(e.spritegenPath, e.log)
 	if err != nil {
 		e.log.Info("sprite generator was not configured", "err", err)
 	} else {
@@ -132,6 +133,17 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	}
 	ll := e.log.With("input", input, "output", output)
 
+	fi, err := os.Stat(input)
+	if os.IsNotExist(err) {
+		return nil, errors.Wrap(err, "input file missing")
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "input file error")
+	}
+	if fi.IsDir() {
+		return nil, errors.New("input parameter must be a file, not a directory")
+	}
+
 	if err := os.MkdirAll(output, os.ModePerm); err != nil {
 		return nil, err
 	}
@@ -143,16 +155,20 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 	res := &Result{Input: input, Output: output, OrigMeta: meta, Ladder: targetLadder}
 
 	if e.spriteGen != nil {
-		ll.Info("starting sprite generator")
 		err := e.spriteGen.Generate(input, output)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not start sprite generator")
+			return nil, errors.Wrap(err, "could not start spritegen")
 		}
+		os.RemoveAll(path.Join(output, "processing"))
 		outputFiles, err := godirwalk.ReadDirnames(output, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not get a list of files")
+			return nil, errors.Wrap(err, "could not get file list")
 		}
-		e.log.Info("sprite generator done", "files", outputFiles)
+		if len(outputFiles) == 0 {
+			ll.Warn("spritegen produced no files")
+		} else {
+			ll.Info("spritegen done", "output", outputFiles)
+		}
 	}
 
 	args := targetLadder.ArgumentSet(output, meta)

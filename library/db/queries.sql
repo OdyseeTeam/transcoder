@@ -1,8 +1,8 @@
 -- name: AddVideo :one
 INSERT INTO videos (
-  tid, sd_hash, url, channel, storage, path, size, checksum
+  tid, sd_hash, url, channel, storage, path, size, checksum, manifest
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING *;
 

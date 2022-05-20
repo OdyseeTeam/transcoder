@@ -41,7 +41,7 @@ tccli_mac:
 	CGO_ENABLED=0 go build -o dist/arm64_darwin/tccli ./tccli
 
 tower_image: tower
-	docker buildx build -f Dockerfile-tower -t odyseeteam/transcoder-tower:dev4 --platform linux/amd64 .
+	docker buildx build -f Dockerfile-tower -t odyseeteam/transcoder-tower:dev4 --platform linux/amd64 . --push
 
 worker_image: worker
-	docker buildx build -f Dockerfile-worker -t odyseeteam/transcoder-worker:dev4 --platform linux/amd64 .
+	docker buildx build -f Dockerfile-worker -t odyseeteam/transcoder-worker:dev5 --platform linux/amd64 . --push

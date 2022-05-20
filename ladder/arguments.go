@@ -72,7 +72,7 @@ func (a *ArgumentSet) GetStrArguments() []string {
 			ladArgs = append(ladArgs, "-g:"+s, strconv.Itoa(a.Meta.IntFPS*2))
 		}
 
-		ladArgs = append(ladArgs, "-map", "a:0", "-b:"+s, tier.AudioBitrate)
+		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
 	}
 
 	for k, v := range args {

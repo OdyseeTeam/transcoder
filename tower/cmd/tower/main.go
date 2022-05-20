@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/lbryio/transcoder/db"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/library"
@@ -62,7 +61,6 @@ func serve() {
 	}
 
 	if !CLI.Debug {
-		db.SetLogger(logging.Create("db", logging.Prod))
 		encoder.SetLogger(logging.Create("encoder", logging.Prod))
 		manager.SetLogger(logging.Create("claim", logging.Prod))
 		storage.SetLogger(logging.Create("storage", logging.Prod))
