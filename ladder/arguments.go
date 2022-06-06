@@ -25,11 +25,11 @@ type ArgumentSet struct {
 }
 
 var hlsDefaultArguments = map[string]string{
-	"preset":               preset,
-	"sc_threshold":         "0",
-	"c:v":                  "libx264",
-	"pix_fmt":              "yuv420p",
-	"crf":                  constantRateFactor,
+	"preset":       preset,
+	"sc_threshold": "0",
+	"c:v":          "libx264",
+	"pix_fmt":      "yuv420p",
+	// "crf":                  constantRateFactor,
 	"c:a":                  "aac",
 	"ac":                   "2",
 	"ar":                   "44100",
@@ -61,15 +61,15 @@ func (a *ArgumentSet) GetStrArguments() []string {
 		ladArgs = append(ladArgs,
 			"-map", "v:0",
 			"-filter:v:"+s, "scale=-2:"+strconv.Itoa(tier.Height),
-			"-b:"+s, vRate,
-			"-maxrate:"+s, vRate,
-			"-bufsize:"+s, vRate,
+			"-b:v:"+s, vRate,
+			"-maxrate:v:"+s, vRate,
+			"-bufsize:v:"+s, vRate,
 		)
 
 		if tier.Framerate != 0 {
-			ladArgs = append(ladArgs, "-r:"+s, strconv.Itoa(tier.Framerate), "-g:"+s, strconv.Itoa(tier.Framerate*2))
+			ladArgs = append(ladArgs, "-r:v:"+s, strconv.Itoa(tier.Framerate), "-g:v:"+s, strconv.Itoa(tier.Framerate*2))
 		} else {
-			ladArgs = append(ladArgs, "-g:"+s, strconv.Itoa(a.Meta.IntFPS*2))
+			ladArgs = append(ladArgs, "-g:v:"+s, strconv.Itoa(a.Meta.IntFPS*2))
 		}
 
 		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
