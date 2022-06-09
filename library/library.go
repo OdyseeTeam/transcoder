@@ -112,6 +112,10 @@ func (lib *Library) AddChannel(uri string, priority db.ChannelPriority) (db.Chan
 	if err != nil {
 		return c, err
 	}
+	if claim.ClaimID == "" {
+		return c, errors.New("channel not found")
+	}
+
 	if priority == "" {
 		priority = db.ChannelPriorityNormal
 	}

@@ -55,12 +55,60 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile-tower
+  conductor:
+    image: odyseeteam/transcoder-conductor:dev
+    container_name: conductor
+    command:
+      - ./transcoder
+      - conductor
+      - --debug
+      # - --rmq-addr=amqp://guest:guest@rabbitmq/
+      # - --http-url=http://tower:8080
+      # - --dev-mode
+      # - --state-file=/storage/state.json
+    volumes:
+      - ${PWD}/conductor.ex.yml:/app/conductor.yml
+    ports:
+      - "8080:8080"
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile-tower
+  cworker:
+    image: odyseeteam/transcoder-cworker:dev
+    container_name: cworker
+    command:
+      - ./transcoder
+      - worker
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile-worker
+    volumes:
+      - ${PWD}/worker.ex.yml:/app/worker.yml
+  asynqmon:
+    image: hibiken/asynqmon:latest
+    container_name: asynqmon
+    environment:
+      - REDIS_URL=redis://:odyredis@redis:6379/1
+    ports:
+      - '9090:8080'
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
+  redis:
+    image: redis:7.0
+    container_name: redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    command: >
+      --requirepass odyredis --appendonly yes
+    labels:
+      com.centurylinklabs.watchtower.enable: false
+    restart: unless-stopped
   db:
     image: postgres:14
     container_name: db
@@ -91,3 +139,4 @@ volumes:
   tower-data: {}
   db-data: {}
   s3-data: {}
+  redis-data: {}

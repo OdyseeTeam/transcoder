@@ -167,7 +167,7 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		if len(outputFiles) == 0 {
 			ll.Warn("spritegen produced no files")
 		} else {
-			ll.Info("spritegen done", "output", outputFiles)
+			ll.Info("spritegen done", "files_count", len(outputFiles))
 		}
 	}
 

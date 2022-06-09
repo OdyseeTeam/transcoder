@@ -124,7 +124,7 @@ func (p *Pool) Next() *mfr.Item {
 	select {
 	case e := <-p.out:
 		return e
-	case <-time.After(pollTimeout + 20*time.Millisecond):
+	case <-time.After(pollTimeout + 50*time.Millisecond):
 		return nil
 	}
 }

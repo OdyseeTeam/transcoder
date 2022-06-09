@@ -54,12 +54,12 @@ func newrpc(rmqAddr string, log logging.KVLogger) (*rpc, error) {
 	}
 
 	var err error
-	s.publisher, err = rabbitmq.NewPublisher(rmqAddr, amqp.Config{})
+	s.publisher, err = rabbitmq.NewPublisher(rmqAddr, rabbitmq.Config{})
 	if err != nil {
 		return nil, err
 	}
 
-	s.consumer, err = rabbitmq.NewConsumer(rmqAddr, amqp.Config{})
+	s.consumer, err = rabbitmq.NewConsumer(rmqAddr, rabbitmq.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +123,8 @@ func newWorkerRPC(rmqAddr string, log logging.KVLogger) (*workerRPC, error) {
 func (s *rpc) Stop() {
 	s.log.Info("stopping RPC")
 	close(s.stopChan)
-	s.consumer.StopConsuming(s.id, false)
-	s.consumer.Disconnect()
-	s.publisher.StopPublishing()
+	s.consumer.Close()
+	s.publisher.Close()
 }
 
 func (s *rpc) startConsuming(queue string, handler rabbitmq.Handler, concurrency int, durable bool) error {
@@ -218,19 +217,19 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 	retryTaskChan := make(chan *activeTask)
 	// retryChan := make(chan *activeTask)
 
-	restoreChan, err := s.tasks.restore()
-	if err != nil {
-		return nil, err
-	}
+	// restoreChan, err := s.tasks.restore()
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	go func() {
-		for at := range restoreChan {
-			at.restored = true
-			s.log.Info("task restored", "tid", at.id)
-			activeTaskChan <- at
-		}
-		s.log.Info("done restoring tasks")
-	}()
+	// go func() {
+	// 	for at := range restoreChan {
+	// 		at.restored = true
+	// 		s.log.Info("task restored", "tid", at.id)
+	// 		activeTaskChan <- at
+	// 	}
+	// 	s.log.Info("done restoring tasks")
+	// }()
 
 	go func() {
 		t := time.NewTicker(1 * time.Second)
@@ -256,7 +255,7 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 	}()
 
 	// Start consuming task progress reports first
-	err = s.consumeTaskStatuses(taskStatusQueue, func(d rabbitmq.Delivery) rabbitmq.Action {
+	err := s.consumeTaskStatuses(taskStatusQueue, func(d rabbitmq.Delivery) rabbitmq.Action {
 		var msg interface{}
 		meta, err := s.getMsgMeta(d)
 		if err != nil {
@@ -338,7 +337,7 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 
 	// Start consuming work requests from workers
 	err = s.startConsuming(workRequestsQueue, func(d rabbitmq.Delivery) rabbitmq.Action {
-		s.log.Info("got work request", "reply-to", d.ReplyTo)
+		s.log.Info("task dispatcher: got work request", "reply-to", d.ReplyTo)
 		wr := MsgWorkerRequest{}
 		err := json.Unmarshal(d.Body, &wr)
 		if err != nil {
@@ -367,16 +366,16 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 		// 	}
 		// 	ll.Info("re-published task", "payload", mtt)
 		case at := <-retryTaskChan:
-			ll.Debug("got retried task", "tid", at.id)
+			ll.Debug("task dispatcher: got retried task", "tid", at.id)
 			s.dispatchActiveTask(d.ReplyTo, activeTaskChan, at)
 		default:
 			at := s.tasks.newEmptyTask(wr.WorkerID, s.generateULID())
-			ll.Debug("created a new task", "tid", at.id)
+			ll.Info("task dispatcher: task placeholder created", "tid", at.id)
 			s.dispatchActiveTask(d.ReplyTo, activeTaskChan, at)
 		}
 
 		return rabbitmq.Ack
-	}, 100, true)
+	}, 50, true)
 	if err != nil {
 		return nil, err
 	}
@@ -385,18 +384,22 @@ func (s *towerRPC) startConsumingWorkRequests() (<-chan *activeTask, error) {
 }
 
 func (s *towerRPC) dispatchActiveTask(wrkQueue string, activeTaskChan chan *activeTask, at *activeTask) {
+	ll := s.log.With("wid", at.workerID, "tid", at.id)
+	ll.Info("task dispatcher: handing off task placeholder...")
 	activeTaskChan <- at
+	ll.Info("task dispatcher: task placeholder handed off")
 	go func() {
 		for {
 			select {
 			case mtt := <-at.payload:
+				ll.Info("task dispatcher: payload received")
 				at.exPayload = &mtt
 				dbt, err := s.tasks.q.GetRunnableTaskByPayload(context.Background(), queue.GetRunnableTaskByPayloadParams{
 					URL:    mtt.URL,
 					SDHash: mtt.SDHash,
 				})
 				if err == nil && dbt.Status != queue.StatusErrored {
-					s.log.Warn("payload already found running in the database", "db_task", dbt)
+					ll.Warn("payload already found running in the database", "db_task", dbt)
 					// s.dispatchActiveTask(wrkQueue, activeTaskChan, at)
 					s.publishTask(wrkQueue, mtt)
 					return
@@ -404,7 +407,7 @@ func (s *towerRPC) dispatchActiveTask(wrkQueue string, activeTaskChan chan *acti
 
 				dbt, err = s.tasks.q.GetTaskBySDHash(context.Background(), mtt.SDHash)
 				if err == nil && dbt.Status == queue.StatusDone || (dbt.Status == queue.StatusFailed) {
-					s.log.Warn("task is not runnable due to status", "db_task", dbt)
+					ll.Warn("task is not runnable due to status", "db_task", dbt)
 					// Delete from active tasks dict here?
 					return
 				}
@@ -416,7 +419,7 @@ func (s *towerRPC) dispatchActiveTask(wrkQueue string, activeTaskChan chan *acti
 					SDHash: mtt.SDHash,
 				})
 				if err != nil {
-					s.log.Error("error saving task to db", "err", err, "ulid", at.id)
+					ll.Error("error saving task to db", "err", err)
 					at = s.tasks.newEmptyTask(at.workerID, s.generateULID())
 					s.dispatchActiveTask(wrkQueue, activeTaskChan, at)
 					return
@@ -424,11 +427,11 @@ func (s *towerRPC) dispatchActiveTask(wrkQueue string, activeTaskChan chan *acti
 				s.tasks.insert(at)
 				s.publishTask(wrkQueue, mtt)
 				if err != nil {
-					s.log.Error("failure publishing task", "err", err)
+					ll.Error("failure publishing task", "err", err)
 					s.tasks.delete(at.id)
 					return
 				}
-				s.log.Info("published task", "wid", at.workerID, "tid", at.id, "payload", mtt)
+				ll.Info("task dispatcher: task published", "payload", mtt)
 				return
 			case <-at.success:
 				return

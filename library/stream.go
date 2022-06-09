@@ -39,21 +39,21 @@ const (
 var SDHashRe = regexp.MustCompile(`/([A-Za-z0-9]{96})/`)
 
 type Stream struct {
-	LocalPath     string
-	RemoteStorage string
+	LocalPath     string `json:"local_path,omitempty"`
+	RemoteStorage string `json:"remote_storage,omitempty"`
 	Manifest      *Manifest
 }
 
 type Manifest struct {
 	URL        string
-	ChannelURL string `yaml:",omitempty"`
+	ChannelURL string `yaml:",omitempty" json:"channel_url"`
 	SDHash     string
 
 	// Generated attributes
-	TID          string `yaml:",omitempty"`
-	TranscodedAt time.Time
-	Size         int64  `yaml:",omitempty"`
-	Checksum     string `yaml:",omitempty"`
+	TID          string    `yaml:",omitempty"`
+	TranscodedAt time.Time `json:"transcoded_at"`
+	Size         int64     `yaml:",omitempty"`
+	Checksum     string    `yaml:",omitempty"`
 
 	Ladder ladder.Ladder `yaml:",omitempty"`
 	Files  []string      `yaml:",omitempty"`

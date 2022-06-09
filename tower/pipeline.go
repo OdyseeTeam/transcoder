@@ -132,6 +132,7 @@ func (c *pipeline) Process(task workerTask) {
 				}
 			}
 
+			time.Sleep(5 * time.Second)
 			stream = library.InitStream(encodedPath, c.s3.Name())
 			err = stream.GenerateManifest(task.payload.URL, resolved.ChannelURI, task.payload.SDHash)
 			if err != nil {

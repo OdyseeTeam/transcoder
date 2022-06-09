@@ -7,4 +7,4 @@ S3:
   MaxSize: 1TB
   CreateBucket: true
 
-SpritegenPath: /usr/src/spritegen/cli.js
+Redis: redis://:odyredis@redis:6379/1

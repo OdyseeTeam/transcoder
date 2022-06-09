@@ -195,6 +195,6 @@ func (c *Worker) StartWorkers() error {
 
 func (c *Worker) Stop() {
 	close(c.stopChan)
-	c.rpc.consumer.Disconnect()
-	c.rpc.publisher.StopPublishing()
+	c.rpc.consumer.Close()
+	c.rpc.publisher.Close()
 }

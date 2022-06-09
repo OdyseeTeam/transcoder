@@ -6,10 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fasthttp/router"
 	"github.com/lbryio/transcoder/library"
 	db "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/lbryio/transcoder/tower/metrics"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/karlseguin/ccache/v2"
 )
@@ -27,6 +31,11 @@ var (
 type TranscodingRequest struct {
 	resolve.ResolvedStream
 	queue *mfr.Queue
+}
+
+type HttpServerConfig struct {
+	ManagerToken string
+	Bind         string
 }
 
 type VideoLibrary interface {
@@ -162,11 +171,47 @@ func (m *VideoManager) Requests() <-chan *TranscodingRequest {
 			}
 
 			r := next.Value.(*TranscodingRequest)
-			logger.Infow("pulling out next request", "uri", r.URI, "hits", next.Hits())
+			logger.Infow("task dispatcher: sending next request", "uri", r.URI, "hits", next.Hits())
 			out <- r
+			logger.Infow("task dispatcher: next request sent", "uri", r.URI, "hits", next.Hits())
 		}
 	}()
 	return out
+}
+
+func (m *VideoManager) StartHttpServer(config HttpServerConfig) (chan struct{}, error) {
+	stopChan := make(chan struct{})
+	router := router.New()
+
+	metrics.RegisterTowerMetrics()
+
+	CreateRoutes(router, m, nil, func(ctx *fasthttp.RequestCtx) bool {
+		return ctx.UserValue(TokenCtxField).(string) == config.ManagerToken
+	})
+
+	router.GET("/debug/pprof/{profile:*}", pprofhandler.PprofHandler)
+
+	logger.Infow("starting tower http server", "addr", config.Bind)
+	server := &fasthttp.Server{
+		Handler:          MetricsMiddleware(CORSMiddleware(router.Handler)),
+		Name:             "tower",
+		DisableKeepalive: true,
+	}
+	// s.upAddr = l.Addr().String()
+
+	go func() {
+		err := server.ListenAndServe(config.Bind)
+		if err != nil {
+			logger.Error("http server error", "err", err)
+		}
+	}()
+	go func() {
+		<-stopChan
+		logger.Infow("shutting down tower http server", "addr", config.Bind)
+		server.Shutdown()
+	}()
+
+	return stopChan, nil
 }
 
 func (m *VideoManager) ResolveStream(uri string) (*TranscodingRequest, error) {

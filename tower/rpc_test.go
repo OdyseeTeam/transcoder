@@ -41,8 +41,8 @@ func (s *rpcSuite) SetupTest() {
 }
 
 func (s *rpcSuite) TearDownTest() {
-	s.tower.publisher.StopPublishing()
-	s.tower.consumer.StopConsuming("", true)
+	s.tower.publisher.Close()
+	s.tower.consumer.Close()
 	s.NoError(s.tower.deleteQueues())
 	s.dbCleanup()
 }

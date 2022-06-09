@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"path"
 	"testing"
@@ -8,15 +10,22 @@ import (
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/draganm/miniotest"
+	"github.com/docker/go-connections/nat"
 	"github.com/lbryio/transcoder/library"
 	"github.com/stretchr/testify/suite"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+type s3Container struct {
+	testcontainers.Container
+	URI string
+}
 
 type s3suite struct {
 	suite.Suite
 	cleanup     func() error
-	addr        string
+	s3container *s3Container
 	sdHash      string
 	streamsPath string
 }
@@ -30,7 +39,7 @@ func (s *s3suite) SetupSuite() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	s.addr, s.cleanup, err = miniotest.StartEmbedded()
+	s.s3container, err = setupS3(context.Background())
 	s.Require().NoError(err)
 }
 
@@ -44,9 +53,9 @@ func (s *s3suite) TestPutDelete() {
 	s3drv, err := InitS3Driver(
 		S3Configure().
 			Name("test").
-			Endpoint(s.addr).
+			Endpoint(s.s3container.URI).
 			Region("us-east-1").
-			Credentials("minioadmin", "minioadmin").
+			Credentials("s3-test", "s3-test").
 			Bucket("storage-s3-test").
 			DisableSSL(),
 	)
@@ -87,5 +96,80 @@ func (s *s3suite) TestPutDelete() {
 }
 
 func (s *s3suite) TearDownSuite() {
-	s.NoError(s.cleanup())
+	// s.NoError(s.cleanup())
+}
+
+type TestLogConsumer struct {
+	Msgs []string
+}
+
+func (g *TestLogConsumer) Accept(l testcontainers.Log) {
+	g.Msgs = append(g.Msgs, string(l.Content))
+	fmt.Println("YO", l.Content)
+}
+
+func setupS3(ctx context.Context) (*s3Container, error) {
+	p, err := nat.NewPort("tcp", "9000")
+	if err != nil {
+		return nil, err
+	}
+	req := testcontainers.ContainerRequest{
+		Image:        "minio/minio:latest",
+		ExposedPorts: []string{"9000/tcp"},
+		// Cmd:          []string{"minio", "server", "/data"},
+		// Cmd:          []string{"server", "--address", "0.0.0.0:9000", "./data"},
+		// WaitingFor: wait.ForListeningPort("9000/tcp"),
+		// WaitingFor: wait.ForLog("Finished loading IAM sub-system").WithStartupTimeout(10 * time.Second),
+		// WaitingFor: wait.ForListeningPort(p),
+		WaitingFor: wait.ForHTTP("/minio/health/ready").WithPort(p), //.WithStartupTimeout(20 * time.Second),
+		Env: map[string]string{
+			"MINIO_ACCESS_KEY": "s3-test",
+			"MINIO_SECRET_KEY": "s3-test",
+		},
+		Entrypoint: []string{"sh"},
+		// Cmd:        []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", bucket)},
+		Cmd: []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", "")},
+	}
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	g := TestLogConsumer{
+		Msgs: []string{},
+	}
+	err = container.StartLogProducer(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	container.FollowOutput(&g)
+
+	err = container.Start(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = container.StopLogProducer()
+	if err != nil {
+		return nil, err
+	}
+
+	ip, err := container.Host(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	mappedPort, err := container.MappedPort(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+
+	uri := fmt.Sprintf("http://%s:%s", ip, mappedPort.Port())
+
+	return &s3Container{Container: container, URI: uri}, nil
 }

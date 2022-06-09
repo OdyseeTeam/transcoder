@@ -166,9 +166,8 @@ func (s *Server) StopAll() {
 	s.log.Info("shutting down tower")
 	close(s.stopChan)
 	if s.rpc != nil {
-		s.rpc.consumer.StopConsuming("", false)
-		s.rpc.consumer.Disconnect()
-		s.rpc.publisher.StopPublishing()
+		s.rpc.consumer.Close()
+		s.rpc.publisher.Close()
 	}
 }
 
@@ -179,16 +178,21 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 	}
 
 	go func() {
+		defer func() {
+			s.log.Info("task dispatcher: QUIT")
+		}()
 		for {
 			select {
 			case at := <-activeTaskChan:
 				ll := s.log.With("tid", at.id, "wid", at.workerID)
 				if at.restored && at.exPayload != nil {
-					ll.Info("restored task received")
+					ll.Info("task dispatcher: restored task")
 					at.SendPayload(at.exPayload)
 				} else {
+					ll.Info("task dispatcher: new task")
 					var mtt *MsgTranscodingTask
 					for {
+						ll.Info("task dispatcher: getting task from the pool")
 						trReq := <-requests
 						mtt = &MsgTranscodingTask{
 							URL:    trReq.URI,
@@ -198,11 +202,11 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 						if err != nil {
 							break
 						}
-						ll.Info("task already exists", "payload", mtt)
+						ll.Info("task dispatcher: duplicate task, rejected", "payload", mtt)
 						trReq.Reject()
 					}
 
-					ll.Info("new task received, sending payload", "payload", mtt)
+					ll.Info("task dispatcher: sending payload", "payload", mtt)
 					at.SendPayload(mtt)
 				}
 				// Timing out a at means it will be shipped back to the queue again
@@ -211,6 +215,8 @@ func (s *Server) startForwardingRequests(requests <-chan *manager.TranscodingReq
 				go s.manageTask(at)
 			case <-s.stopChan:
 				return
+			default:
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
 	}()
@@ -224,7 +230,7 @@ func (s *Server) manageTask(at *activeTask) {
 	labels := prometheus.Labels{metrics.LabelWorkerName: at.workerID}
 	metrics.TranscodingRequestsRunning.With(labels).Inc()
 	defer metrics.TranscodingRequestsRunning.With(labels).Dec()
-	ll.Info("managing task", "restored", at.restored)
+	ll.Info("task dispatcher: managing task", "restored", at.restored)
 	for {
 		select {
 		case p := <-at.progress:
@@ -242,13 +248,15 @@ func (s *Server) manageTask(at *activeTask) {
 			}
 			metrics.TranscodingRequestsRunning.With(prometheus.Labels{metrics.LabelWorkerName: at.workerID}).Dec()
 			if err := s.videoManager.Library().AddRemoteStream(*d.RemoteStream); err != nil {
-				ll.Info("error adding remote stream", "err", err)
+				ll.Info("error adding remote stream", "err", err, "stream", d.RemoteStream)
 				metrics.TranscodingRequestsErrors.With(labels).Inc()
 				return
 			}
 			ll.Info("added remote stream", "url", d.RemoteStream.URL())
 			metrics.TranscodingRequestsDone.With(labels).Inc()
 			return
+		case <-time.After(300 * time.Second):
+			ll.Warn("timed out waiting for worker status")
 		case <-s.stopChan:
 			return
 		}

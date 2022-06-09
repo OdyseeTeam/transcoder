@@ -2,13 +2,16 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 
@@ -78,23 +81,59 @@ func (s *httpSuite) TestAdmin() {
 		return ctx.UserValue(TokenCtxField).(string) == token
 	})
 
-	data := url.Values{
-		AdminChannelField: {"@specialoperationstest:3"},
+	cases := []struct {
+		data                         url.Values
+		tokenHeader                  string
+		statusCode                   int
+		exURL, exClaimID, exResponse string
+	}{
+		{
+			data:        url.Values{AdminChannelField: {"@specialoperationstest:3"}},
+			tokenHeader: "Bearer " + token,
+			statusCode:  http.StatusCreated,
+			exURL:       "lbry://@specialoperationstest#3",
+			exClaimID:   "395b0f23dcd07212c3e956b697ba5ba89578ca54",
+		},
+		{
+			data:        url.Values{AdminChannelField: {"@specialoperationstest:3"}},
+			tokenHeader: "Bearer " + token,
+			statusCode:  http.StatusBadRequest,
+			exResponse:  `.+duplicate key value violates unique constraint.+`,
+		},
+		{
+			data:        url.Values{AdminChannelField: {randomdata.Alphanumeric(25)}},
+			tokenHeader: "Bearer " + token,
+			statusCode:  http.StatusBadRequest,
+			exResponse:  `channel not found`,
+		},
 	}
-	req, err := http.NewRequest(http.MethodPost, "http://localhost/api/v1/channel", strings.NewReader(data.Encode()))
-	s.Require().NoError(err)
-	req.Header.Set(AuthHeader, "Bearer "+token)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := client.Do(req)
-	s.Require().NoError(err)
+	for _, c := range cases {
+		s.Run(fmt.Sprintf("%+v", c.data), func() {
+			req, err := http.NewRequest(http.MethodPost, "http://localhost/api/v1/channel", strings.NewReader(c.data.Encode()))
+			s.Require().NoError(err)
+			req.Header.Set(AuthHeader, c.tokenHeader)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	rbody, err := ioutil.ReadAll(resp.Body)
-	s.Require().NoError(err)
-	s.Require().Equal(http.StatusCreated, resp.StatusCode, string(rbody))
+			resp, err := client.Do(req)
+			s.Require().NoError(err)
 
-	channels, err := lib.GetAllChannels()
-	s.Require().NoError(err)
-	s.Require().Equal("lbry://@specialoperationstest#3", channels[0].URL)
-	s.Require().Equal("395b0f23dcd07212c3e956b697ba5ba89578ca54", channels[0].ClaimID)
+			rbody, err := ioutil.ReadAll(resp.Body)
+			s.Require().NoError(err)
+			s.Require().Equal(c.statusCode, resp.StatusCode, string(rbody))
+			if c.exResponse != "" {
+				s.Require().Regexp(regexp.MustCompile(c.exResponse), string(rbody))
+			}
+
+			channels, err := lib.GetAllChannels()
+			s.Require().NoError(err)
+			if c.exURL != "" {
+				s.Require().Equal(c.exURL, channels[0].URL)
+			}
+			if c.exClaimID != "" {
+				s.Require().Equal(c.exClaimID, channels[0].ClaimID)
+			}
+		})
+	}
+
 }

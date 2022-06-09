@@ -59,8 +59,8 @@ func (s *towerSuite) SetupTest() {
 
 func (s *towerSuite) TearDownTest() {
 	s.NoError(s.tower.deleteQueues())
-	s.tower.publisher.StopPublishing()
-	s.tower.consumer.StopConsuming("", true)
+	s.tower.publisher.Close()
+	s.tower.consumer.Close()
 
 	s.Require().NoError(s.TearDownTowerDB())
 	s.Require().NoError(s.TearDownLibraryDB())

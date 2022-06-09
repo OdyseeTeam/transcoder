@@ -1,0 +1,16 @@
+S3:
+  Name: local
+  Endpoint: http://s3:9000
+  Bucket: transcoded
+  Key: ody
+  Secret: odyseetes3
+  MaxSize: 1TB
+
+AdaptiveQueue:
+  MinHits: 1
+
+Library:
+  DSN: postgres://postgres:odyseeteam@db
+  ManagerToken: managertoken123
+
+Redis: redis://:odyredis@redis:6379/1

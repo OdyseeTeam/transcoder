@@ -1,8 +1,0 @@
-S3:
-  Endpoint: https://na-storage-1.transcoder.odysee.com
-  Bucket: t-na
-  Key: AKIAJOREYERRQUVP3VHZ
-  Secret: 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
-  MaxSize: 50TB
-
-Redis: redis://:_efgs7YYj_4.uoMeJQzJ227a@use-tower1.transcoder.odysee.com:6379/1

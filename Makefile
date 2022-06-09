@@ -8,8 +8,8 @@ BUILD_DIR=dist/linux_amd64
 LOCAL_ARCH=$(shell uname)
 
 transcoder:
-	CC=$(CC) CXX=$(CXX) GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=1 \
-  	go build -ldflags "-linkmode external -extldflags -static" -o dist/linux_amd64/transcoder
+	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
+  	$(GO_BUILD) -o $(BUILD_DIR)/transcoder ./pkg/conductor/cmd/
 
 .PHONY: tower
 tower:

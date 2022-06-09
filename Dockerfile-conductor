@@ -1,0 +1,9 @@
+FROM alpine:3.16
+EXPOSE 8080
+
+RUN apk add --no-cache libc6-compat sqlite
+
+WORKDIR /app
+COPY ./dist/linux_amd64/transcoder .
+
+CMD ["./transcoder", "conductor"]
