@@ -12,9 +12,7 @@ type TranscodingRequest struct {
 }
 
 type TranscodingResult struct {
-	WorkerID      string          `json:"worker_id"`
-	WorkerVersion string          `json:"worker_version"`
-	Stream        *library.Stream `json:"stream"`
+	Stream *library.Stream `json:"stream"`
 }
 
 func (m TranscodingRequest) String() string {

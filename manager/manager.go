@@ -9,9 +9,9 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/lbryio/transcoder/library"
 	db "github.com/lbryio/transcoder/library/db"
+	"github.com/lbryio/transcoder/pkg/conductor/metrics"
 	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/lbryio/transcoder/tower/metrics"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 
@@ -183,7 +183,7 @@ func (m *VideoManager) StartHttpServer(config HttpServerConfig) (chan struct{}, 
 	stopChan := make(chan struct{})
 	router := router.New()
 
-	metrics.RegisterTowerMetrics()
+	metrics.RegisterConductorMetrics()
 
 	CreateRoutes(router, m, nil, func(ctx *fasthttp.RequestCtx) bool {
 		return ctx.UserValue(TokenCtxField).(string) == config.ManagerToken

@@ -49,11 +49,15 @@ type Manifest struct {
 	ChannelURL string `yaml:",omitempty" json:"channel_url"`
 	SDHash     string
 
-	// Generated attributes
-	TID          string    `yaml:",omitempty"`
-	TranscodedAt time.Time `json:"transcoded_at"`
-	Size         int64     `yaml:",omitempty"`
-	Checksum     string    `yaml:",omitempty"`
+	// Meta attributes
+	TranscodedBy string    `yaml:"transcoded_by,omitempty" json:"transcoded_by"`
+	TranscodedAt time.Time `yaml:"transcoded_at,omitempty" json:"transcoded_at"`
+	Version      string    `yaml:",omitempty"`
+
+	// Auto-filled attributes
+	TID      string `yaml:",omitempty"`
+	Size     int64  `yaml:",omitempty"`
+	Checksum string `yaml:",omitempty"`
 
 	Ladder ladder.Ladder `yaml:",omitempty"`
 	Files  []string      `yaml:",omitempty"`
@@ -63,6 +67,24 @@ type StreamFileLoader func(rootPath ...string) ([]byte, error)
 type StreamFileProcessor func(data []byte, name string) error
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
+
+func WithTimestamp(ts time.Time) func(*Manifest) {
+	return func(m *Manifest) {
+		m.TranscodedAt = ts
+	}
+}
+
+func WithWorkerName(n string) func(*Manifest) {
+	return func(m *Manifest) {
+		m.TranscodedBy = n
+	}
+}
+
+func WithVersion(v string) func(*Manifest) {
+	return func(m *Manifest) {
+		m.Version = v
+	}
+}
 
 func GetStreamHasher() hash.Hash {
 	return sha512.New512_224()
@@ -81,14 +103,18 @@ func (s *Stream) generateTID() string {
 }
 
 // GenerateManifest needs to be called for newly initialized (transcoded) streams.
-func (s *Stream) GenerateManifest(url, channel, sdHash string) error {
+func (s *Stream) GenerateManifest(url, channel, sdHash string, manifestFuncs ...func(*Manifest)) error {
 	var err error
 	m := &Manifest{
-		URL:          url,
-		ChannelURL:   channel,
-		SDHash:       sdHash,
-		TranscodedAt: time.Now(),
+		URL:        url,
+		ChannelURL: channel,
+		SDHash:     sdHash,
 	}
+
+	for _, f := range manifestFuncs {
+		f(m)
+	}
+
 	s.Manifest = m
 	s.Manifest.TID = s.generateTID()
 

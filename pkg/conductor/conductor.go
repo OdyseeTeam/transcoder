@@ -8,6 +8,7 @@ import (
 
 	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/manager"
+	"github.com/lbryio/transcoder/pkg/conductor/metrics"
 	"github.com/lbryio/transcoder/pkg/conductor/tasks"
 	"github.com/lbryio/transcoder/pkg/logging"
 
@@ -126,13 +127,18 @@ func (c *Conductor) PutLoad() error {
 	}
 	spares := 0
 	for _, s := range servers {
+		active := len(s.ActiveWorkers)
 		c.options.Logger.Info("inspecting worker", "wid", s.Host, "concurrency", s.Concurrency, "active", len(s.ActiveWorkers))
-		spares += s.Concurrency - len(s.ActiveWorkers)
+		metrics.Capacity.WithLabelValues(s.Host).Set(float64(s.Concurrency))
+		metrics.Running.WithLabelValues(s.Host).Set(float64(active))
+		spares += s.Concurrency - active
 	}
 	for i := 0; i < spares; i++ {
 		err := c.DispatchNextTask()
 		if err != nil {
 			return err
+		} else {
+			metrics.RequestsPublished.Inc()
 		}
 	}
 	return nil
@@ -180,6 +186,7 @@ func (c *Conductor) ProcessNextResult() error {
 		// metrics.TranscodingRequestsErrors.With(labels).Inc()
 		return fmt.Errorf("failed to add remote stream: %w", err)
 	}
+	metrics.RequestsCompleted.WithLabelValues(res.Stream.Manifest.TranscodedBy).Inc()
 	c.options.Logger.Info(
 		"remote stream added", "url", res.Stream.URL(), "tid", res.Stream.TID(), "sd_hash", res.Stream.SDHash())
 	return nil

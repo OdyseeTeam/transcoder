@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/hibiken/asynq"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/library"
 	ldb "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/manager"
 	"github.com/lbryio/transcoder/pkg/conductor"
+	"github.com/lbryio/transcoder/pkg/conductor/metrics"
 	"github.com/lbryio/transcoder/pkg/conductor/tasks"
 	"github.com/lbryio/transcoder/pkg/dispatcher"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -23,9 +23,15 @@ import (
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower/queue"
+	"go.etcd.io/etcd/api/v3/version"
 
 	"github.com/alecthomas/kong"
+	"github.com/fasthttp/router"
+	"github.com/hibiken/asynq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/viper"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"go.uber.org/zap"
 )
 
@@ -39,8 +45,9 @@ var CLI struct {
 	Worker struct {
 		StreamsDir  string `optional:"" help:"Directory for storing downloaded files"`
 		OutputDir   string `optional:"" help:"Directory for storing encoder output files"`
-		BlobServer  string `optional:"" name:"blob-server" help:"LBRY blobserver address."`
+		BlobServer  string `optional:"" help:"LBRY blobserver address."`
 		Concurrency int    `optional:"" help:"Number of task slots" default:"5"`
+		HttpBind    string `optional:"" help:"Address for prom metrics HTTP server to listen on" default:"0.0.0.0:8080"`
 	} `cmd:"" help:"Start worker"`
 	Redis string `optional:"" help:"Redis server address"`
 	Debug bool   `optional:"" help:"Enable debug logging" default:"false"`
@@ -55,6 +62,7 @@ func main() {
 		logger = logging.Create("", logging.Prod).Desugar()
 	}
 
+	logger.Info("odysee transcoder", zap.String("version", version.Version))
 	switch ctx.Command() {
 	case "conductor":
 		startConductor()
@@ -221,6 +229,9 @@ func startWorker() {
 		log.Fatal(err)
 	}
 
+	metricsStopChan := make(chan struct{})
+	startMetricsServer(CLI.Worker.HttpBind, metricsStopChan)
+
 	log.Infow("starting worker")
 	go conductor.StartWorker(redisOpts, CLI.Worker.Concurrency, runner, zapadapter.New(log.Desugar()))
 
@@ -230,6 +241,7 @@ func startWorker() {
 	sig := <-stopChan
 	log.Infof("caught an %v signal, shutting down...", sig)
 	runner.Cleanup()
+	close(metricsStopChan)
 }
 
 func readConfig(name string) (*viper.Viper, error) {
@@ -245,4 +257,33 @@ func readConfig(name string) (*viper.Viper, error) {
 	cfg.AddConfigPath(".")
 
 	return cfg, cfg.ReadInConfig()
+}
+
+func startMetricsServer(bind string, stopChan chan struct{}) error {
+	log := logger.Sugar()
+	router := router.New()
+
+	metrics.RegisterWorkerMetrics()
+	router.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.Handler()))
+
+	log.Info("starting worker http server", "addr", bind)
+	httpServer := &fasthttp.Server{
+		Handler:          router.Handler,
+		Name:             "worker",
+		DisableKeepalive: true,
+	}
+
+	go func() {
+		err := httpServer.ListenAndServe(bind)
+		if err != nil {
+			log.Fatalw("http server error", "err", err)
+		}
+	}()
+	go func() {
+		<-stopChan
+		log.Infow("shutting down worker http server", "addr", bind)
+		httpServer.Shutdown()
+	}()
+
+	return nil
 }

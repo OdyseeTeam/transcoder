@@ -8,17 +8,20 @@ import (
 	"math"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/hibiken/asynq"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/library"
+	"github.com/lbryio/transcoder/pkg/conductor/metrics"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/pkg/retriever"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/tower/metrics"
+	"go.etcd.io/etcd/api/v3/version"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 )
 
@@ -47,6 +50,7 @@ type EncoderRunner struct {
 
 type EncoderRunnerOptions struct {
 	StreamsDir, OutputDir string
+	Name                  string
 	Logger                logging.KVLogger
 }
 
@@ -69,6 +73,13 @@ func WithStreamsDir(dir string) func(options *EncoderRunnerOptions) {
 func WithOutputDir(dir string) func(options *EncoderRunnerOptions) {
 	return func(options *EncoderRunnerOptions) {
 		options.OutputDir = dir
+	}
+}
+
+// WithName sets worker name (defaults to os.Hostname).
+func WithName(name string) func(options *EncoderRunnerOptions) {
+	return func(options *EncoderRunnerOptions) {
+		options.Name = name
 	}
 }
 
@@ -99,6 +110,9 @@ func NewEncoderRunner(
 		}
 		options.OutputDir = d
 	}
+	if options.Name == "" {
+		options.Name, _ = os.Hostname()
+	}
 	r := &EncoderRunner{
 		encoder:      encoder,
 		resultWriter: resultWriter,
@@ -122,14 +136,14 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 	log := logging.AddLogRef(r.options.Logger, payload.SDHash).With("tid", t.ResultWriter().TaskID())
 
 	var origFile, encodedPath string
-	errMtr := metrics.TranscodingErrorsCount
+	errMtr := metrics.ErrorsCount
 
 	var resolved *resolve.ResolvedStream
 
 	{
 		timer := time.Now()
-		runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageDownloading))
-		spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageDownloading))
+		runMtr := metrics.StageRunning.WithLabelValues(string(StageDownloading))
+		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageDownloading))
 
 		runMtr.Inc()
 		dl, err := retriever.Retrieve(payload.URL, r.options.StreamsDir)
@@ -152,8 +166,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 
 	{
 		timer := time.Now()
-		runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageEncoding))
-		spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageEncoding))
+		runMtr := metrics.StageRunning.WithLabelValues(string(StageEncoding))
+		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageEncoding))
 
 		runMtr.Inc()
 		res, err := r.encoder.Encode(origFile, encodedPath)
@@ -176,7 +190,12 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		}
 
 		stream = library.InitStream(encodedPath, r.storage.Name())
-		err = stream.GenerateManifest(payload.URL, resolved.ChannelURI, payload.SDHash)
+		err = stream.GenerateManifest(
+			payload.URL, resolved.ChannelURI, payload.SDHash,
+			library.WithTimestamp(time.Now()),
+			library.WithWorkerName(r.options.Name),
+			library.WithVersion(version.Version),
+		)
 		if err != nil {
 			log.Error("failed to fill manifest", "err", err)
 			runMtr.Dec()
@@ -186,6 +205,9 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		}
 		stream.Manifest.Ladder = res.Ladder
 		metrics.OutputBytes.Add(float64(stream.Size()))
+		metrics.TranscodedCount.Inc()
+		d, _ := strconv.ParseFloat(res.OrigMeta.FMeta.GetFormat().GetDuration(), 64)
+		metrics.TranscodedSeconds.Add(d)
 		spentMtr.Add(time.Since(timer).Seconds())
 		runMtr.Dec()
 
@@ -195,8 +217,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 
 	{
 		timer := time.Now()
-		runMtr := metrics.PipelineStagesRunning.WithLabelValues(string(StageUploading))
-		spentMtr := metrics.PipelineSpentSeconds.WithLabelValues(string(StageUploading))
+		runMtr := metrics.StageRunning.WithLabelValues(string(StageUploading))
+		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageUploading))
 
 		runMtr.Inc()
 		err := r.storage.PutWithContext(context.Background(), stream, true)
