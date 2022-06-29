@@ -5,6 +5,7 @@ import (
 	"path"
 	"testing"
 
+	ljsonrpc "github.com/lbryio/lbry.go/v2/extras/jsonrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,6 +15,15 @@ func TestTranscodingRequestResolve(t *testing.T) {
 	c, err := Resolve(url)
 	require.NoError(t, err)
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
+}
+
+func TestTranscodingRequestResolveFailure(t *testing.T) {
+	lbrytvClientOrig := lbrytvClient
+	lbrytvClient = ljsonrpc.NewClient("http://localhost:2/")
+	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
+	_, err := Resolve(url)
+	require.ErrorIs(t, err, ErrNetwork)
+	lbrytvClient = lbrytvClientOrig
 }
 
 func TestTranscodingRequestDownload(t *testing.T) {

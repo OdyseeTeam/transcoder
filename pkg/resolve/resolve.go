@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nikooo777/lbry-blobs-downloader/downloader"
-	"github.com/nikooo777/lbry-blobs-downloader/shared"
-
 	ljsonrpc "github.com/lbryio/lbry.go/v2/extras/jsonrpc"
 	"github.com/lbryio/transcoder/pkg/timer"
+
+	"github.com/nikooo777/lbry-blobs-downloader/downloader"
+	"github.com/nikooo777/lbry-blobs-downloader/shared"
 )
 
 var (
@@ -23,6 +23,9 @@ var (
 	blobServer = "blobcache-us.lbry.com"
 
 	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
+
+	ErrNotReflected = errors.New("stream not fully reflected")
+	ErrNetwork      = errors.New("network error")
 )
 
 type WriteCounter struct {
@@ -87,8 +90,12 @@ func ResolveStream(uri string) (*ResolvedStream, error) {
 }
 
 func Resolve(uri string) (*ljsonrpc.Claim, error) {
+	lbrytvClient.SetRPCTimeout(10 * time.Second)
 	resolved, err := lbrytvClient.Resolve(uri)
 	if err != nil {
+		if strings.Contains(err.Error(), "rpc call resolve()") {
+			return nil, fmt.Errorf("%w: %s", ErrNetwork, err)
+		}
 		return nil, err
 	}
 
@@ -120,15 +127,21 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 		return nil, 0, err
 	}
 
-	tmpPath := "tmp_" + c.SDHash
-	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpPath)
+	tmpBlobsPath := "tmp_" + c.SDHash
+	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath)
 	if err != nil {
 		return nil, 0, err
 	}
-	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstDir, tmpPath); err != nil {
+	defer os.RemoveAll(tmpBlobsPath)
+
+	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstDir, tmpBlobsPath); err != nil {
+		// This is needed to cleanup after BuildStream failing midway
+		os.RemoveAll(path.Join(os.TempDir(), c.streamFileName()+".tmp"))
+		if strings.HasSuffix(err.Error(), "no such file or directory") {
+			return nil, 0, ErrNotReflected
+		}
 		return nil, 0, err
 	}
-	os.RemoveAll(tmpPath)
 	t.Stop()
 
 	fi, err := os.Stat(dstFile)

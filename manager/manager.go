@@ -10,6 +10,7 @@ import (
 	"github.com/lbryio/transcoder/library"
 	db "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/conductor/metrics"
+	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/mfr"
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/valyala/fasthttp"
@@ -185,7 +186,7 @@ func (m *VideoManager) StartHttpServer(config HttpServerConfig) (chan struct{}, 
 
 	metrics.RegisterConductorMetrics()
 
-	CreateRoutes(router, m, nil, func(ctx *fasthttp.RequestCtx) bool {
+	CreateRoutes(router, m, zapadapter.NewKV(logger.Desugar()), func(ctx *fasthttp.RequestCtx) bool {
 		return ctx.UserValue(TokenCtxField).(string) == config.ManagerToken
 	})
 

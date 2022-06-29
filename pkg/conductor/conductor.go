@@ -62,7 +62,6 @@ func StartWorker(redisOpts asynq.RedisConnOpt, concurrency int, runner *tasks.En
 	srv := asynq.NewServer(
 		redisOpts,
 		asynq.Config{
-			// Specify how many concurrent workers to use
 			Concurrency: concurrency,
 			// Optionally specify multiple queues with different priority.
 			// Queues: map[string]int{
@@ -70,7 +69,8 @@ func StartWorker(redisOpts asynq.RedisConnOpt, concurrency int, runner *tasks.En
 			// 	"default":  3,
 			// 	"low":      1,
 			// },
-			Logger: log,
+			Logger:         log,
+			RetryDelayFunc: runner.RetryDelay,
 		},
 	)
 
@@ -149,24 +149,26 @@ func (c *Conductor) DispatchNextTask() error {
 	trReq := <-c.incoming
 	req.URL = trReq.URI
 	req.SDHash = trReq.SDHash
+	logger := c.options.Logger.With("url", req.URL, "sd_hash", req.SDHash)
 	t, err := tasks.NewTranscodingTask(*req)
 	if err != nil {
 		return fmt.Errorf("task creation error: %w", err)
 	}
 	info, err := c.asynqClient.Enqueue(
 		t,
-		asynq.Unique(48*time.Hour),
-		asynq.Timeout(48*time.Hour),
+		asynq.Unique(24*time.Hour),
+		asynq.Timeout(24*time.Hour),
 		asynq.Retention(72*time.Hour),
 		// asynq.Queue("critical"),
 	)
 	if errors.Is(err, asynq.ErrDuplicateTask) {
+		logger.Info("task deemed duplicate, skipping")
 		return c.DispatchNextTask()
 	}
 	if err != nil {
 		return fmt.Errorf("task enqueue error: %w", err)
 	}
-	c.options.Logger.Info("enqueued task", "tid", info.ID, "queue", info.Queue)
+	logger.Info("enqueued task", "tid", info.ID, "queue", info.Queue)
 	return nil
 }
 
@@ -181,13 +183,13 @@ func (c *Conductor) ProcessNextResult() error {
 	if err != nil {
 		return fmt.Errorf("message parsing error: %w", err)
 	}
+	logger := c.options.Logger.With("url", res.Stream.URL(), "sd_hash", res.Stream.SDHash())
 	if err := c.library.AddRemoteStream(*res.Stream); err != nil {
-		// ll.Info("error adding remote stream", "err", err, "stream", d.RemoteStream)
+		logger.Info("error adding remote stream", "err", err)
 		// metrics.TranscodingRequestsErrors.With(labels).Inc()
 		return fmt.Errorf("failed to add remote stream: %w", err)
 	}
 	metrics.RequestsCompleted.WithLabelValues(res.Stream.Manifest.TranscodedBy).Inc()
-	c.options.Logger.Info(
-		"remote stream added", "url", res.Stream.URL(), "tid", res.Stream.TID(), "sd_hash", res.Stream.SDHash())
+	logger.Info("remote stream added", "tid", res.Stream.TID())
 	return nil
 }

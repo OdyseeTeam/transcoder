@@ -224,6 +224,8 @@ func startWorker() {
 	runner, err := tasks.NewEncoderRunner(
 		s3storage, enc, tasks.NewResultWriter(redisOpts),
 		tasks.WithLogger(zapadapter.NewKV(log.Desugar())),
+		tasks.WithOutputDir(CLI.Worker.OutputDir),
+		tasks.WithStreamsDir(CLI.Worker.StreamsDir),
 	)
 	if err != nil {
 		log.Fatal(err)

@@ -152,7 +152,7 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 			errMtr.WithLabelValues(string(StageDownloading)).Inc()
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
-			return errors.Wrap(err, "download failed")
+			return fmt.Errorf("download failed: %w", err)
 		}
 		metrics.InputBytes.Add(float64(dl.Size))
 		runMtr.Dec()
@@ -188,6 +188,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 				log.Info("encoding", "progress", pg)
 			}
 		}
+
+		time.Sleep(10 * time.Second)
 
 		stream = library.InitStream(encodedPath, r.storage.Name())
 		err = stream.GenerateManifest(
@@ -227,9 +229,9 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 			if errors.Is(err, storage.ErrStreamExists) {
-				return fmt.Errorf("stream upload failed: %w", err)
+				return fmt.Errorf("stream already exists: %v: %w", err, asynq.SkipRetry)
 			}
-			return fmt.Errorf("stream upload failed: %v: %w", err, asynq.SkipRetry)
+			return fmt.Errorf("stream upload failed: %w", err)
 		}
 		log.Info("stream uploaded")
 		spentMtr.Add(time.Since(timer).Seconds())
@@ -244,6 +246,23 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 	}
 
 	return nil
+}
+
+func (r *EncoderRunner) RetryDelay(n int, e error, t *asynq.Task) time.Duration {
+	if errors.Is(e, resolve.ErrNotReflected) {
+		delay := 1 * time.Hour
+		var payload TranscodingRequest
+		json.Unmarshal(t.Payload(), &payload)
+		r.options.Logger.Info("stream not fully reflected, delayed", "payload", payload, "delay", delay)
+		return delay
+	}
+	if errors.Is(e, resolve.ErrNetwork) {
+		delay := 2 * time.Minute
+		r.options.Logger.Info("resolve failed, delayed", "err", e, "delay", delay)
+		return delay
+	}
+	// return asynq.DefaultRetryDelayFunc(n, e, t)
+	return 1 * time.Minute
 }
 
 func (r *EncoderRunner) Cleanup() {
