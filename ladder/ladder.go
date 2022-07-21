@@ -81,9 +81,13 @@ func (l Ladder) Tweak(meta *Metadata) (Ladder, error) {
 }
 
 func (l Ladder) ArgumentSet(out string, meta *Metadata) *ArgumentSet {
+	d := map[string]string{}
+	for k, v := range hlsDefaultArguments {
+		d[k] = v
+	}
 	return &ArgumentSet{
 		Output:    out,
-		Arguments: hlsDefaultArguments,
+		Arguments: d,
 		Ladder:    l,
 		Meta:      meta,
 	}

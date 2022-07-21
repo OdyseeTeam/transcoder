@@ -43,7 +43,7 @@ type Video struct {
 	ID          int32
 	CreatedAt   time.Time
 	UpdatedAt   sql.NullTime
-	AccessedAt  sql.NullTime
+	AccessedAt  time.Time
 	AccessCount sql.NullInt32
 	TID         string
 	URL         string

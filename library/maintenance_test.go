@@ -2,7 +2,6 @@ package library
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -75,11 +74,11 @@ func (s *maintenanceSuite) TearDownTest() {
 
 func TestTailSizeables(t *testing.T) {
 	vs := []db.Video{
-		{Size: 10000, AccessedAt: sql.NullTime{Time: time.Now().Add(-25 * time.Hour)}},
-		{Size: 20000, AccessedAt: sql.NullTime{Time: time.Now().Add(-24 * time.Hour)}},
-		{Size: 50000, AccessedAt: sql.NullTime{Time: time.Now().Add(-1 * time.Hour)}},
-		{Size: 30000, AccessedAt: sql.NullTime{Time: time.Now().Add(-30 * time.Hour)}},
-		{Size: 20000, AccessedAt: sql.NullTime{Time: time.Now().Add(-23 * time.Hour)}},
+		{Size: 10000, AccessedAt: time.Now().Add(-25 * time.Hour)},
+		{Size: 20000, AccessedAt: time.Now().Add(-24 * time.Hour)},
+		{Size: 50000, AccessedAt: time.Now().Add(-1 * time.Hour)},
+		{Size: 30000, AccessedAt: time.Now().Add(-30 * time.Hour)},
+		{Size: 20000, AccessedAt: time.Now().Add(-23 * time.Hour)},
 	}
 	vsog := make([]db.Video, 5)
 	copy(vsog, vs)

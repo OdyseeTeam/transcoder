@@ -68,6 +68,10 @@ func main() {
 		startConductor()
 	case "worker":
 		startWorker()
+	case "migrate-up":
+		migrateUp()
+	case "migrate-down":
+		migrateDown()
 	default:
 		panic(ctx.Command())
 	}
@@ -288,4 +292,12 @@ func startMetricsServer(bind string, stopChan chan struct{}) error {
 	}()
 
 	return nil
+}
+
+func migrateUp() {
+
+}
+
+func migrateDown() {
+
 }

@@ -58,7 +58,7 @@ func (s *librarySuite) TestAddGetVideo() {
 	v, err := lib.GetVideo(newStream.SDHash())
 	s.Require().NoError(err)
 	s.EqualValues(1, v.AccessCount.Int32)
-	s.GreaterOrEqual(2, int(time.Since(v.AccessedAt.Time).Seconds()))
+	s.GreaterOrEqual(2, int(time.Since(v.AccessedAt).Seconds()))
 	m := &Manifest{}
 	err = json.Unmarshal(v.Manifest.RawMessage, m)
 	s.Require().NoError(err)

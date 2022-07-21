@@ -63,7 +63,7 @@ func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) 
 		return
 	}
 
-	weight := func(v db.Video) int64 { return v.AccessedAt.Time.Unix() }
+	weight := func(v db.Video) int64 { return v.AccessedAt.Unix() }
 	sort.Slice(videos, func(i, j int) bool { return weight(videos[i]) < weight(videos[j]) })
 	for _, s := range videos {
 		err := call(s)
