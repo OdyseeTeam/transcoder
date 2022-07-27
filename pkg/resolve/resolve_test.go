@@ -17,6 +17,13 @@ func TestTranscodingRequestResolve(t *testing.T) {
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
 }
 
+func TestTranscodingRequestResolveClaimID(t *testing.T) {
+	claimID := "aa372cc164a4164ce9ea20741dd7331c28c0e044"
+	c, err := Resolve(claimID)
+	require.NoError(t, err)
+	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
+}
+
 func TestTranscodingRequestResolveFailure(t *testing.T) {
 	lbrytvClientOrig := lbrytvClient
 	lbrytvClient = ljsonrpc.NewClient("http://localhost:2/")

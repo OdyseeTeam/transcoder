@@ -14,10 +14,10 @@ transcoder:
 	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
 	  ./pkg/conductor/cmd/
 
-conductor_image: tower
+conductor_image: transcoder
 	docker buildx build -f Dockerfile-conductor -t odyseeteam/transcoder-conductor:dev --platform linux/amd64 . --push
 
-cworker_image: worker
+cworker_image: transcoder
 	docker buildx build -f Dockerfile-cworker -t odyseeteam/transcoder-cworker:dev --platform linux/amd64 . --push
 
 towerz:

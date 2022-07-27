@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ var (
 
 	ErrNotReflected = errors.New("stream not fully reflected")
 	ErrNetwork      = errors.New("network error")
+
+	reClaimID = regexp.MustCompile("^[a-z0-9]{40}$")
 )
 
 type WriteCounter struct {
@@ -58,32 +61,32 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 }
 
 func ResolveStream(uri string) (*ResolvedStream, error) {
-	c, err := Resolve(uri)
+	claim, err := Resolve(uri)
 	if err != nil {
 		return nil, err
 	}
 
-	if c.SigningChannel == nil {
+	if claim.SigningChannel == nil {
 		return nil, ErrNoSigningChannel
 	}
 
-	src := c.Value.GetStream().GetSource()
+	src := claim.Value.GetStream().GetSource()
 	if src == nil {
 		return nil, errors.New("stream doesn't have source data")
 	}
 	h := hex.EncodeToString(src.SdHash)
 
-	ch := strings.Replace(strings.ToLower(c.SigningChannel.CanonicalURL), "#", ":", 1)
-	sup, _ := strconv.ParseFloat(c.SigningChannel.Meta.SupportAmount, 64)
+	ch := strings.Replace(strings.ToLower(claim.SigningChannel.CanonicalURL), "#", ":", 1)
+	sup, _ := strconv.ParseFloat(claim.SigningChannel.Meta.SupportAmount, 64)
 
 	r := &ResolvedStream{
-		URI:                  uri,
+		URI:                  claim.CanonicalURL,
 		SDHash:               h,
-		Name:                 c.Name,
-		NormalizedName:       c.NormalizedName,
-		ClaimID:              c.ClaimID,
+		Name:                 claim.Name,
+		NormalizedName:       claim.NormalizedName,
+		ClaimID:              claim.ClaimID,
 		ChannelURI:           ch,
-		ChannelClaimID:       c.SigningChannel.ClaimID,
+		ChannelClaimID:       claim.SigningChannel.ClaimID,
 		ChannelSupportAmount: int64(math.Floor(sup)),
 	}
 	return r, nil
@@ -91,6 +94,24 @@ func ResolveStream(uri string) (*ResolvedStream, error) {
 
 func Resolve(uri string) (*ljsonrpc.Claim, error) {
 	lbrytvClient.SetRPCTimeout(10 * time.Second)
+
+	if reClaimID.Match([]byte(uri)) {
+		res, err := lbrytvClient.ClaimSearch(ljsonrpc.ClaimSearchArgs{
+			ClaimID:  &uri,
+			Page:     1,
+			PageSize: 1,
+		})
+		if err != nil {
+			if strings.Contains(err.Error(), "rpc call claim_search()") {
+				return nil, fmt.Errorf("%w: %s", ErrNetwork, err)
+			}
+			return nil, err
+		}
+		if len(res.Claims) == 0 {
+			return nil, ErrClaimNotFound
+		}
+		return &res.Claims[0], nil
+	}
 	resolved, err := lbrytvClient.Resolve(uri)
 	if err != nil {
 		if strings.Contains(err.Error(), "rpc call resolve()") {
