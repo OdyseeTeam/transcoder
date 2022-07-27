@@ -159,8 +159,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		spentMtr.Add(time.Since(timer).Seconds())
 		encodedPath = path.Join(r.options.OutputDir, dl.Resolved.SDHash)
 		origFile = dl.File.Name()
-		defer os.RemoveAll(origFile)
 		defer os.RemoveAll(encodedPath)
+		defer os.RemoveAll(origFile)
 		resolved = dl.Resolved
 	}
 
@@ -190,6 +190,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		}
 
 		time.Sleep(10 * time.Second)
+		// This is removed twice to not wait for upload to finish before freeing up disk space
+		os.RemoveAll(origFile)
 
 		stream = library.InitStream(encodedPath, r.storage.Name())
 		err = stream.GenerateManifest(

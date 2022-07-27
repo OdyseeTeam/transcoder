@@ -5,6 +5,15 @@
 
 ## Development
 
+Currently requires go 1.17 due to one of the subdependencies.
+
+```
+go install golang.org/dl/go1.17@latest
+go1.17 install
+```
+
+`sqlc` is used for model generation.
+
 ```
 go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
 ```

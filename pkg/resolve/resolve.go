@@ -129,6 +129,8 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 
 	tmpBlobsPath := "tmp_" + c.SDHash
 	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath)
+	// This is needed to cleanup after downloader fails midway
+	defer os.RemoveAll(path.Join(os.TempDir(), c.streamFileName()+".tmp"))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -136,7 +138,6 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 
 	if err := shared.BuildStream(sdBlob, c.streamFileName(), dstDir, tmpBlobsPath); err != nil {
 		// This is needed to cleanup after BuildStream failing midway
-		os.RemoveAll(path.Join(os.TempDir(), c.streamFileName()+".tmp"))
 		os.RemoveAll(path.Join(dstDir, c.streamFileName()))
 		if strings.HasSuffix(err.Error(), "no such file or directory") {
 			return nil, 0, ErrNotReflected
