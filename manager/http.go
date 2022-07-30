@@ -104,6 +104,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 			statusCode = http.StatusAccepted
 		case resolve.ErrClaimNotFound:
 			statusCode = http.StatusNotFound
+			ll.Info("claim not found")
 		default:
 			statusCode = http.StatusInternalServerError
 			ll.Errorw("internal error", "err", err)
@@ -137,7 +138,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	} else if err == resolve.ErrClaimNotFound {
 		ctx.SetStatusCode(http.StatusNotFound)
-		ll.Debug("stream not found")
+		ll.Info("claim not found")
 		return
 	} else if err != nil {
 		ctx.SetStatusCode(http.StatusInternalServerError)
