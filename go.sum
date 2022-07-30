@@ -237,6 +237,8 @@ github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo
 github.com/andybalholm/brotli v1.0.2/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
 github.com/andybalholm/brotli v1.0.4 h1:V7DdXeJtZscaqfNuAdSRuRFzuiKlHSC/Zh3zl9qY3JY=
 github.com/andybalholm/brotli v1.0.4/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
+github.com/andybeletsky/miniotest v0.1.2 h1:iZJURHg0GdZCMFX6W6Ca1ngvM0UEyOUuNfC4AAYbHyk=
+github.com/andybeletsky/miniotest v0.1.2/go.mod h1:t/gtf8bj9rGVAPaGc7AVUNkEOtkkKSQlezG1LLYSRpg=
 github.com/andybeletsky/transcoder v1.2.1 h1:0g7MoRYmCzooy/90PSwCNi6RnDLmWx5tmhAMktu+Y3g=
 github.com/andybeletsky/transcoder v1.2.1/go.mod h1:lT+f8NEGaHP6AVeYLicas0EI0+TforD+DRuLziJg6bY=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=

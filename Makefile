@@ -4,13 +4,13 @@ GOARCH=amd64
 GOOS=linux
 LDFLAGS=-ldflags "-linkmode external -extldflags -static"
 GO_BUILD=go1.17 build
-BUILD_DIR=dist/linux_amd64
+BUILD_DIR=dist
 LOCAL_ARCH=$(shell uname)
 VERSION := $(shell git describe --tags --match 'v*'|sed -e 's/v//')
 
 transcoder:
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
-  	$(GO_BUILD) -o $(BUILD_DIR)/transcoder \
+  	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder \
 	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
 	  ./pkg/conductor/cmd/
 
@@ -25,12 +25,10 @@ towerz:
 
 .PHONY: tccli
 tccli:
-ifeq ($(LOCAL_ARCH),Darwin)
-	CC=$(CC) CXX=$(CXX) GOARCH=$(GOARCH) GOOS=$(GOOS) \
-	CGO_ENABLED=1 go build $(LDFLAGS) -o $(BUILD_DIR)/tccli ./tccli
-else
-	CGO_ENABLED=1 go build -o $(BUILD_DIR)/tccli ./tccli
-endif
+	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
+  	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/tccli \
+	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
+	  ./tccli/
 
 tccli_mac:
 	CGO_ENABLED=0 go build -o dist/arm64_darwin/tccli ./tccli

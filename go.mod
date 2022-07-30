@@ -31,6 +31,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.13.0
 	github.com/valyala/fasthttp v1.36.0
 	github.com/wagslane/go-rabbitmq v0.10.0
+	go.etcd.io/etcd/api/v3 v3.5.4
 	go.uber.org/goleak v1.1.12
 	go.uber.org/zap v1.21.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
@@ -272,7 +273,6 @@ require (
 	github.com/ybbus/jsonrpc v0.0.0-20180411222309-2a548b7d822d // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/xxh3 v1.0.0 // indirect
-	go.etcd.io/etcd/api/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.4 // indirect
 	go.mongodb.org/mongo-driver v1.8.4 // indirect
@@ -307,9 +307,9 @@ require (
 
 replace github.com/floostack/transcoder => github.com/andybeletsky/transcoder v1.2.1
 
-// replace github.com/draganm/miniotest => github.com/andybeletsky/miniotest v0.1.1
+replace github.com/draganm/miniotest v0.1.0 => github.com/andybeletsky/miniotest v0.1.2
 
-replace github.com/draganm/miniotest => /Users/silence/Documents/LBRY/External/miniotest
+// replace github.com/draganm/miniotest => /Users/silence/Documents/LBRY/External/miniotest
 
 // replace google.golang.org/grpc => google.golang.org/grpc v1.47.0
 
@@ -318,3 +318,5 @@ replace github.com/draganm/miniotest => /Users/silence/Documents/LBRY/External/m
 // replace github.com/nikooo777/lbry-blobs-downloader => /Users/silence/Documents/LBRY/Repos/lbry-blobs-downloader
 
 //  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/External/transcoder
+
+replace example.com/theirmodule v1.2.3 => example.com/myfork/theirmodule v1.2.3-fixed
