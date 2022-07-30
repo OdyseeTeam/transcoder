@@ -214,6 +214,12 @@ func startWorker() {
 		resolve.SetBlobServer(CLI.Worker.BlobServer)
 	}
 
+	if cfg.GetString("edgetoken") == "" {
+		log.Warn("edge token not set")
+	} else {
+		resolve.SetEdgeToken(cfg.GetString("edgetoken"))
+	}
+
 	var redisURI string
 	if CLI.Redis != "" {
 		redisURI = CLI.Redis

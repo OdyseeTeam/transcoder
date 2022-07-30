@@ -16,10 +16,10 @@ require (
 	github.com/grafov/m3u8 v0.11.1
 	github.com/hibiken/asynq v0.23.0
 	github.com/karlseguin/ccache/v2 v2.0.8
-	github.com/karrick/godirwalk v1.16.1
-	github.com/lbryio/lbry.go/v2 v2.7.2-0.20220208210038-a0391bec7915
+	github.com/karrick/godirwalk v1.17.0
+	github.com/lbryio/lbry.go/v2 v2.7.2-0.20220321182539-d0aeb0c22b22
 	github.com/lib/pq v1.10.4
-	github.com/nikooo777/lbry-blobs-downloader v1.0.9
+	github.com/nikooo777/lbry-blobs-downloader v1.1.0
 	github.com/oklog/ulid/v2 v2.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.1
@@ -157,23 +157,25 @@ require (
 	github.com/klauspost/reedsolomon v1.9.15 // indirect
 	github.com/lbryio/chainquery v1.9.0 // indirect
 	github.com/lbryio/lbry.go v1.1.2 // indirect
-	github.com/lbryio/reflector.go v1.1.3-0.20220209235713-2f7d67794f93 // indirect
-	github.com/lbryio/types v0.0.0-20201019032447-f0b4476ef386 // indirect
+	github.com/lbryio/reflector.go v1.1.3-0.20220730181028-f5d30b1a6e79 // indirect
+	github.com/lbryio/types v0.0.0-20220224142228-73610f6654a6 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.0 // indirect
 	github.com/lestrrat-go/iter v1.0.1 // indirect
 	github.com/lestrrat-go/jwx v1.2.19 // indirect
 	github.com/lestrrat-go/option v1.0.0 // indirect
-	github.com/lucas-clemente/quic-go v0.24.0 // indirect
+	github.com/lucas-clemente/quic-go v0.28.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/lyoshenka/bencode v0.0.0-20180323155644-b7abd7672df5 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/marten-seemann/qpack v0.2.1 // indirect
-	github.com/marten-seemann/qtls-go1-16 v0.1.4 // indirect
-	github.com/marten-seemann/qtls-go1-17 v0.1.0 // indirect
+	github.com/marten-seemann/qtls-go1-16 v0.1.5 // indirect
+	github.com/marten-seemann/qtls-go1-17 v0.1.2 // indirect
+	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
+	github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-ieproxy v0.0.1 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
@@ -252,6 +254,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
+	github.com/spf13/cobra v1.4.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/streadway/amqp v1.0.0 // indirect
@@ -281,10 +284,10 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/mod v0.5.1 // indirect
-	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
+	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20220502124256-b6088ccd6cba // indirect
+	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
@@ -318,5 +321,3 @@ replace github.com/draganm/miniotest v0.1.0 => github.com/andybeletsky/miniotest
 // replace github.com/nikooo777/lbry-blobs-downloader => /Users/silence/Documents/LBRY/Repos/lbry-blobs-downloader
 
 //  replace github.com/floostack/transcoder => /Users/silence/Documents/LBRY/External/transcoder
-
-replace example.com/theirmodule v1.2.3 => example.com/myfork/theirmodule v1.2.3-fixed

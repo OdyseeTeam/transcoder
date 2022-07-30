@@ -13,9 +13,12 @@ import (
 	"github.com/lbryio/transcoder/client"
 	"github.com/lbryio/transcoder/encoder"
 	"github.com/lbryio/transcoder/library"
+	ldb "github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/lbryio/transcoder/pkg/migrator"
 	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/spf13/viper"
 
 	"github.com/alecthomas/kong"
 )
@@ -66,7 +69,7 @@ func main() {
 
 		if strings.HasPrefix(CLI.Transcode.URL, "file://") {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
-			outPath = inPath
+			outPath = inPath + "_out"
 		} else {
 			tmpDir, err := ioutil.TempDir(".", "")
 			if err != nil {
@@ -99,14 +102,41 @@ func main() {
 			fmt.Printf("%.2f ", p.GetProgress())
 		}
 		fmt.Printf("done in %.2f seconds\n", time.Since(t).Seconds())
-		ls := library.InitStream(outPath, "")
+		ls := library.InitStream(outPath, "wasabi")
 		if err != nil {
 			panic(err)
 		}
-		err = ls.GenerateManifest(rr.URI, rr.ChannelURI, rr.SDHash)
+		err = ls.GenerateManifest(
+			rr.URI, rr.ChannelURI, rr.SDHash,
+			library.WithTimestamp(time.Now()),
+			library.WithWorkerName("manual"),
+		)
 		if err != nil {
 			panic(err)
 		}
+
+		cfg := viper.New()
+		cfg.SetConfigName("conductor")
+		cfg.AddConfigPath(".")
+		err = cfg.ReadInConfig()
+		if err != nil {
+			panic(err)
+		}
+
+		libCfg := cfg.GetStringMapString("library")
+
+		libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
+		if err != nil {
+			panic(err)
+		}
+		lib := library.New(library.Config{
+			DB:  libDB,
+			Log: zapadapter.NewKV(nil),
+		})
+		if err := lib.AddRemoteStream(*ls); err != nil {
+			fmt.Println("error adding remote stream", "err", err)
+		}
+
 	default:
 		panic(ctx.Command())
 	}

@@ -22,6 +22,7 @@ import (
 var (
 	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
 	blobServer = "blobcache-us.lbry.com"
+	edgeToken  = "UNSET"
 
 	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
 
@@ -137,6 +138,7 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 	shared.ReflectorPeerServer = fmt.Sprintf("%s:%d", blobServer, TCPPort)
 	shared.ReflectorQuicServer = fmt.Sprintf("%s:%d", blobServer, UDPPort)
 	shared.ReflectorHttpServer = fmt.Sprintf("%s:%d", blobServer, HTTPPort)
+	shared.EdgeToken = edgeToken
 
 	var readLen int64
 	dstFile := path.Join(dstDir, c.streamFileName())
@@ -189,4 +191,8 @@ func (c *ResolvedStream) streamFileName() string {
 
 func SetBlobServer(s string) {
 	blobServer = s
+}
+
+func SetEdgeToken(s string) {
+	edgeToken = s
 }
