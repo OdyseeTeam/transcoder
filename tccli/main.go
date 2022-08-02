@@ -40,9 +40,12 @@ var CLI struct {
 	} `cmd help:"Generate manifest files for videos"`
 	Retire struct {
 		VideoDir string `help:"Directory containing videos"`
-		DBPath   string `help:"Path to the SQLite DB file"`
 		MaxSize  int    `help:"Max size of videos to keep in gigabytes"`
 	} `cmd help:"Generate manifest files for videos"`
+	Genstream struct {
+		Path string `arg:"" help:"Path containing transcoded stream"`
+		URL  string `arg:"" help:"Stream URL"`
+	} `cmd help:"Generate stream"`
 	Transcode struct {
 		URL string `arg:"" help:"LBRY URL"`
 	} `cmd help:"Download and transcode a specified video"`
@@ -89,7 +92,7 @@ func main() {
 			defer os.RemoveAll(tmpDir)
 		}
 
-		e, err := encoder.NewEncoder(encoder.Configure().Log(log))
+		e, err := encoder.NewEncoder(encoder.Configure().Log(log).SpritegenPath("/dev/null"))
 		if err != nil {
 			panic(err)
 		}
@@ -106,6 +109,42 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		err = ls.GenerateManifest(
+			rr.URI, rr.ChannelURI, rr.SDHash,
+			library.WithTimestamp(time.Now()),
+			library.WithWorkerName("manual"),
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		cfg := viper.New()
+		cfg.SetConfigName("conductor")
+		cfg.AddConfigPath(".")
+		err = cfg.ReadInConfig()
+		if err != nil {
+			panic(err)
+		}
+
+		libCfg := cfg.GetStringMapString("library")
+
+		libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
+		if err != nil {
+			panic(err)
+		}
+		lib := library.New(library.Config{
+			DB:  libDB,
+			Log: zapadapter.NewKV(nil),
+		})
+		if err := lib.AddRemoteStream(*ls); err != nil {
+			fmt.Println("error adding remote stream", "err", err)
+		}
+	case "genstream <path> <url>":
+		rr, err := resolve.ResolveStream(CLI.Genstream.URL)
+		if err != nil {
+			panic(err)
+		}
+		ls := library.InitStream(CLI.Genstream.Path, "wasabi")
 		err = ls.GenerateManifest(
 			rr.URI, rr.ChannelURI, rr.SDHash,
 			library.WithTimestamp(time.Now()),
