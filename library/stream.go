@@ -1,7 +1,6 @@
 package library
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"crypto/sha512"
 	"encoding/hex"
@@ -9,14 +8,12 @@ import (
 	"hash"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
 	"sort"
 	"time"
 
-	"github.com/grafov/m3u8"
 	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/pkg/errors"
@@ -62,9 +59,6 @@ type Manifest struct {
 	Ladder ladder.Ladder `yaml:",omitempty"`
 	Files  []string      `yaml:",omitempty"`
 }
-
-type StreamFileLoader func(rootPath ...string) ([]byte, error)
-type StreamFileProcessor func(data []byte, name string) error
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
 
@@ -118,13 +112,13 @@ func (s *Stream) GenerateManifest(url, channel, sdHash string, manifestFuncs ...
 	s.Manifest = m
 	s.Manifest.TID = s.generateTID()
 
-	m.Checksum, err = s.generateChecksum()
-	if err != nil {
-		return errors.Wrap(err, "cannot calculate checksum")
-	}
 	m.Files, m.Size, err = s.getFileList()
 	if err != nil {
 		return errors.Wrap(err, "cannot calculate size")
+	}
+	m.Checksum, err = s.generateChecksum()
+	if err != nil {
+		return errors.Wrap(err, "cannot calculate checksum")
 	}
 
 	d, err := yaml.Marshal(s.Manifest)
@@ -154,13 +148,13 @@ func (s *Stream) TID() string {
 	}
 	return s.Manifest.TID
 }
+
 func (s *Stream) generateChecksum() (string, error) {
 	hash := GetStreamHasher()
-	err := WalkPlaylists(
+	err := WalkStream(
 		s.LocalPath,
-		readFile,
-		func(data []byte, _ string) error {
-			r := bytes.NewReader(data)
+		openFile,
+		func(_ string, r io.ReadCloser) error {
 			_, err := io.Copy(hash, r)
 			if err != nil {
 				return err
@@ -239,59 +233,6 @@ func (s *Stream) ReadManifest() error {
 	return nil
 }
 
-func readFile(rootPath ...string) ([]byte, error) {
-	return ioutil.ReadFile(path.Join(rootPath...))
-}
-
-// WalkPlaylists processes Local HLS stream, calling `loader` to load and `processor`
-// for each master/child playlists and all the files they reference.
-// `processor` with filename as second argument.
-func WalkPlaylists(dir string, loader StreamFileLoader, processor StreamFileProcessor) error {
-	doFile := func(path ...string) (io.Reader, error) {
-		data, err := loader(path...)
-		if err != nil {
-			return nil, err
-		}
-
-		err = processor(data, path[len(path)-1])
-		if err != nil {
-			return nil, errors.Wrapf(err, `error processing stream item "%v"`, path[len(path)-1])
-		}
-		return bytes.NewReader(data), err
-	}
-
-	data, err := doFile(dir, MasterPlaylistName)
-	if err != nil {
-		return err
-	}
-
-	pl, _, err := m3u8.DecodeFrom(data, true)
-	if err != nil {
-		return err
-	}
-
-	masterpl := pl.(*m3u8.MasterPlaylist)
-	for _, plv := range masterpl.Variants {
-		data, err := doFile(dir, plv.URI)
-		if err != nil {
-			return err
-		}
-
-		p, _, err := m3u8.DecodeFrom(data, true)
-		if err != nil {
-			return err
-		}
-		mediapl := p.(*m3u8.MediaPlaylist)
-
-		for _, seg := range mediapl.Segments {
-			if seg == nil {
-				continue
-			}
-			_, err := doFile(dir, seg.URI)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+func openFile(rootPath ...string) (io.ReadCloser, error) {
+	return os.Open(path.Join(rootPath...))
 }

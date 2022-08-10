@@ -1,8 +1,9 @@
 package library
 
 import (
+	"bytes"
 	"database/sql"
-	"io/ioutil"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -82,22 +83,28 @@ func (h *LibraryTestHelper) TearDownLibraryDB() error {
 
 // PopulateHLSPlaylist generates a stream of 3131915 bytes in size, segments binary data will all be zeroes.
 func PopulateHLSPlaylist(t *testing.T, dstPath, sdHash string) {
+	t.Helper()
 	err := os.MkdirAll(path.Join(dstPath, sdHash), os.ModePerm)
 	require.NoError(t, err)
 
 	srcPath, err := filepath.Abs("./testdata")
 	require.NoError(t, err)
 
-	err = WalkPlaylists(
+	err = WalkStream(
 		path.Join(srcPath, "dummy-stream"),
-		func(rootPath ...string) ([]byte, error) {
+		func(rootPath ...string) (io.ReadCloser, error) {
 			if path.Ext(rootPath[len(rootPath)-1]) == ".m3u8" {
-				return ioutil.ReadFile(path.Join(rootPath...))
+				return os.Open(path.Join(rootPath...))
 			}
-			return make([]byte, 10000), nil
+			return io.ReadCloser(io.NopCloser(bytes.NewReader(make([]byte, 10000)))), nil
 		},
-		func(data []byte, name string) error {
-			return ioutil.WriteFile(path.Join(dstPath, sdHash, name), data, os.ModePerm)
+		func(name string, r io.ReadCloser) error {
+			f, err := os.Create(path.Join(dstPath, sdHash, name))
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(f, r)
+			return err
 		},
 	)
 	require.NoError(t, err)

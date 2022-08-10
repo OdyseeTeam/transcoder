@@ -219,6 +219,56 @@ func (q *Queries) GetAllVideosForStorage(ctx context.Context, storage string) ([
 	return items, nil
 }
 
+const getAllVideosForStorageLimit = `-- name: GetAllVideosForStorageLimit :many
+SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest FROM videos
+WHERE storage = $1
+LIMIT $2 OFFSET $3
+`
+
+type GetAllVideosForStorageLimitParams struct {
+	Storage string
+	Limit   int32
+	Offset  int32
+}
+
+func (q *Queries) GetAllVideosForStorageLimit(ctx context.Context, arg GetAllVideosForStorageLimitParams) ([]Video, error) {
+	rows, err := q.db.QueryContext(ctx, getAllVideosForStorageLimit, arg.Storage, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Video
+	for rows.Next() {
+		var i Video
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AccessedAt,
+			&i.AccessCount,
+			&i.TID,
+			&i.URL,
+			&i.SDHash,
+			&i.Channel,
+			&i.Storage,
+			&i.Path,
+			&i.Size,
+			&i.Checksum,
+			&i.Manifest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChannel = `-- name: GetChannel :one
 SELECT id, created_at, url, claim_id, priority from channels
 WHERE claim_id = $1

@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/logging"
 	"github.com/lbryio/transcoder/pkg/resolve"
 
 	"github.com/c2h5oh/datasize"
+	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
 	"github.com/tabbed/pqtype"
 )
@@ -21,8 +23,8 @@ const (
 
 var ErrStreamNotFound = errors.New("stream not found")
 var storageURLs = map[string]string{
-	"wasabi": "https://s3.wasabisys.com/t-na",
-	"legacy": "https://cache.transcoder.odysee.com/t-na",
+	"wasabi": "https://s3.wasabisys.com/t-na2.odycdn.com",
+	"legacy": "https://na-storage-1.transcoder.odysee.com/t-na",
 }
 
 type Storage interface {
@@ -51,14 +53,6 @@ func New(config Config) *Library {
 		log:     config.Log,
 		storage: config.Storage,
 	}
-}
-
-func (lib *Library) GetStorageURL(name string) (string, error) {
-	url, ok := storageURLs[name]
-	if !ok {
-		return "", fmt.Errorf("no url configured for storage %v", name)
-	}
-	return url, nil
 }
 
 func (lib *Library) GetVideo(sdHash string) (db.Video, error) {
@@ -156,6 +150,71 @@ func (lib *Library) Retire(v db.Video) error {
 
 	ll.Info("video retired", "url", v.URL, "size", v.Size, "age", v.CreatedAt, "accessed", v.AccessedAt)
 	return nil
+}
+
+// RetireVideos deletes older videos from S3, keeping total size of remote videos at maxSize.
+func (lib *Library) ValidateStreams(storageName string, offset, limit int32, remove bool) ([]string, []string, error) {
+	broken := []string{}
+	valid := []string{}
+	tids := map[string]string{}
+	items, err := lib.db.GetAllVideosForStorageLimit(
+		context.Background(),
+		db.GetAllVideosForStorageLimitParams{
+			Storage: storageName,
+			Offset:  offset,
+			Limit:   limit,
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	wg := sync.WaitGroup{}
+	results := make(chan *ValidationResult)
+
+	go func() {
+		for vr := range results {
+			if len(vr.Missing) > 0 {
+				broken = append(broken, vr.URL)
+			} else {
+				valid = append(valid, vr.URL)
+			}
+		}
+	}()
+	pipe := func(i interface{}) error {
+		url := i.(string)
+		vr, _ := ValidateStream(url, true, true)
+		results <- vr
+		return nil
+	}
+
+	p, _ := ants.NewPoolWithFunc(10, func(i interface{}) {
+		err := pipe(i)
+		if err != nil {
+			lib.log.Error("error submitting a url", "err", err)
+		}
+		wg.Done()
+	})
+	defer p.Release()
+
+	for _, v := range items {
+		url := fmt.Sprintf("%s/%s", storageURLs[v.Storage], v.Path)
+		tids[url] = v.TID
+		wg.Add(1)
+		_ = p.Invoke(url)
+	}
+	wg.Wait()
+
+	if remove {
+		for _, u := range broken {
+			err := lib.db.DeleteVideo(context.Background(), tids[u])
+			if err != nil {
+				lib.log.Info("video removal failed", "tid", tids[u], "err", err)
+			} else {
+				lib.log.Info("video removed", "tid", tids[u])
+			}
+		}
+	}
+	return valid, broken, nil
 }
 
 func StringToSize(s string) uint64 {

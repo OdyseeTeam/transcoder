@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -8,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lbryio/transcoder/client"
@@ -18,9 +20,10 @@ import (
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/migrator"
 	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/spf13/viper"
 
 	"github.com/alecthomas/kong"
+	"github.com/panjf2000/ants/v2"
+	"github.com/spf13/viper"
 )
 
 var CLI struct {
@@ -49,6 +52,9 @@ var CLI struct {
 	Transcode struct {
 		URL string `arg:"" help:"LBRY URL"`
 	} `cmd help:"Download and transcode a specified video"`
+	ValidateStream struct {
+		URL string `arg:"" help:"HTTP URL for stream to verify"`
+	} `cmd help:"Verify a specified stream"`
 }
 
 func main() {
@@ -175,7 +181,54 @@ func main() {
 		if err := lib.AddRemoteStream(*ls); err != nil {
 			fmt.Println("error adding remote stream", "err", err)
 		}
+	case "validate-stream <url>":
+		res, err := library.ValidateStream(CLI.ValidateStream.URL, false, false)
 
+		if err != nil {
+			fmt.Printf("error validating stream: %s\n", err)
+			return
+		}
+		fmt.Printf("%v parts present, %v missing", len(res.Present), len(res.Missing))
+	case "validate-streams":
+		wg := sync.WaitGroup{}
+		results := make(chan *library.ValidationResult)
+
+		go func() {
+			for vr := range results {
+				if len(vr.Missing) > 0 {
+					fmt.Printf("%s broken\n", vr.URL)
+				}
+			}
+		}()
+		pipe := func(i interface{}) error {
+			url := i.(string)
+			vr, _ := library.ValidateStream(url, true, true)
+			results <- vr
+			return nil
+		}
+
+		scanner := bufio.NewScanner(os.Stdin)
+
+		p, _ := ants.NewPoolWithFunc(10, func(i interface{}) {
+			err := pipe(i)
+			if err != nil {
+				fmt.Println(err)
+			}
+			wg.Done()
+		})
+		defer p.Release()
+		for scanner.Scan() {
+			u := strings.TrimSpace(scanner.Text())
+			if u == "" {
+				break
+			}
+			wg.Add(1)
+			_ = p.Invoke(u)
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, "reading standard input:", err)
+		}
+		wg.Wait()
 	default:
 		panic(ctx.Command())
 	}

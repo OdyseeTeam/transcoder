@@ -13,6 +13,11 @@ SELECT * FROM videos;
 SELECT * FROM videos
 WHERE storage = $1;
 
+-- name: GetAllVideosForStorageLimit :many
+SELECT * FROM videos
+WHERE storage = $1
+LIMIT $2 OFFSET $3;
+
 -- name: GetVideo :one
 SELECT * FROM videos
 WHERE sd_hash = $1 LIMIT 1;

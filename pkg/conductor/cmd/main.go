@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,7 +24,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
 	"github.com/lbryio/transcoder/tower/queue"
-	"go.etcd.io/etcd/api/v3/version"
 
 	"github.com/alecthomas/kong"
 	"github.com/fasthttp/router"
@@ -32,6 +32,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
+	"go.etcd.io/etcd/api/v3/version"
 	"go.uber.org/zap"
 )
 
@@ -49,6 +50,12 @@ var CLI struct {
 		Concurrency int    `optional:"" help:"Number of task slots" default:"5"`
 		HttpBind    string `optional:"" help:"Address for prom metrics HTTP server to listen on" default:"0.0.0.0:8080"`
 	} `cmd:"" help:"Start worker"`
+	ValidateStreams struct {
+		Remove  bool   `optional:"" help:"Remove broken streams from the database"`
+		Storage string `help:"Storage name"`
+		Offset  int32  `optional:"" help:"Starting stream index"`
+		Limit   int32  `optional:"" help:"Stream count" default:"999999999"`
+	} `cmd:"" help:"Verify a list of streams supplied by stdin"`
 	Redis string `optional:"" help:"Redis server address"`
 	Debug bool   `optional:"" help:"Enable debug logging" default:"false"`
 }
@@ -72,6 +79,8 @@ func main() {
 		migrateUp()
 	case "migrate-down":
 		migrateDown()
+	case "validate-streams":
+		validateStreams()
 	default:
 		panic(ctx.Command())
 	}
@@ -254,6 +263,56 @@ func startWorker() {
 	log.Infof("caught an %v signal, shutting down...", sig)
 	runner.Cleanup()
 	close(metricsStopChan)
+}
+
+func validateStreams() {
+	log := logger.Sugar()
+	cfg, err := readConfig("conductor")
+	if err != nil {
+		log.Fatal("unable to read config", err)
+	}
+
+	if !CLI.Debug {
+		encoder.SetLogger(logging.Create("encoder", logging.Prod))
+		manager.SetLogger(logging.Create("claim", logging.Prod))
+		storage.SetLogger(logging.Create("storage", logging.Prod))
+		ladder.SetLogger(logging.Create("ladder", logging.Prod))
+		mfr.SetLogger(logging.Create("mfr", logging.Prod))
+		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+		library.SetLogger(logging.Create("library", logging.Prod))
+	}
+
+	s3cfg := cfg.GetStringMapString("s3")
+	libCfg := cfg.GetStringMapString("library")
+
+	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
+	if err != nil {
+		log.Fatal("library db initialization failed", err)
+	}
+
+	s3storage, err := storage.InitS3Driver(
+		storage.S3Configure().
+			Endpoint(s3cfg["endpoint"]).
+			Credentials(s3cfg["key"], s3cfg["secret"]).
+			Bucket(s3cfg["bucket"]).
+			Name(s3cfg["name"]),
+	)
+	if err != nil {
+		log.Fatal("s3 driver initialization failed", err)
+	}
+	log.Infow("s3 storage configured", "endpoint", s3cfg["endpoint"], "bucket", s3cfg["bucket"])
+
+	lib := library.New(library.Config{
+		DB:      libDB,
+		Storage: s3storage,
+		Log:     zapadapter.NewKV(nil),
+	})
+	valid, broken, err := lib.ValidateStreams(
+		CLI.ValidateStreams.Storage, CLI.ValidateStreams.Offset, CLI.ValidateStreams.Limit, CLI.ValidateStreams.Remove)
+	if err != nil {
+		log.Fatal("failed to validate streams:", err)
+	}
+	fmt.Printf("%v streams checked, %v valid, %v broken\n", len(valid)+len(broken), len(valid), len(broken))
 }
 
 func readConfig(name string) (*viper.Viper, error) {
