@@ -16,6 +16,7 @@ WHERE storage = $1;
 -- name: GetAllVideosForStorageLimit :many
 SELECT * FROM videos
 WHERE storage = $1
+ORDER BY id ASC
 LIMIT $2 OFFSET $3;
 
 -- name: GetVideo :one

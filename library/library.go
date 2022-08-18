@@ -175,6 +175,7 @@ func (lib *Library) ValidateStreams(storageName string, offset, limit int32, rem
 		for vr := range results {
 			if len(vr.Missing) > 0 {
 				broken = append(broken, vr.URL)
+				lib.log.Info("broken stream", "url", vr.URL, "missing", vr.Missing)
 			} else {
 				valid = append(valid, vr.URL)
 			}
@@ -210,7 +211,7 @@ func (lib *Library) ValidateStreams(storageName string, offset, limit int32, rem
 			if err != nil {
 				lib.log.Info("video removal failed", "tid", tids[u], "err", err)
 			} else {
-				lib.log.Info("video removed", "tid", tids[u])
+				lib.log.Info("video removed", "tid", tids[u], "url", u)
 			}
 		}
 	}

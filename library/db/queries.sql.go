@@ -222,6 +222,7 @@ func (q *Queries) GetAllVideosForStorage(ctx context.Context, storage string) ([
 const getAllVideosForStorageLimit = `-- name: GetAllVideosForStorageLimit :many
 SELECT id, created_at, updated_at, accessed_at, access_count, tid, url, sd_hash, channel, storage, path, size, checksum, manifest FROM videos
 WHERE storage = $1
+ORDER BY id ASC
 LIMIT $2 OFFSET $3
 `
 
