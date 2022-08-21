@@ -101,6 +101,7 @@ services:
       /usr/bin/mc policy set download myminio/transcoded;
       exit 0;
       "
+    depends_on: ["minio"]
 
 volumes:
   tower-data: {}

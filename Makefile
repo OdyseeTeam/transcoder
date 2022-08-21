@@ -8,17 +8,23 @@ BUILD_DIR=dist
 LOCAL_ARCH=$(shell uname)
 VERSION := $(shell git describe --tags --match 'v*'|sed -e 's/v//')
 
-transcoder:
+transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder \
 	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
 	  ./pkg/conductor/cmd/
 
-conductor_image: transcoder
+conductor_image:
 	docker buildx build -f Dockerfile-conductor -t odyseeteam/transcoder-conductor:dev --platform linux/amd64 .
 
-cworker_image: transcoder
+cworker_image:
 	docker buildx build -f Dockerfile-cworker -t odyseeteam/transcoder-cworker:dev --platform linux/amd64 .
+
+test:
+	docker-compose up -d minio db redis
+	docker-compose up -d cworker conductor
+	docker-compose up minio-prepare
+	go test -covermode=count -coverprofile=coverage.out ./...
 
 towerz:
 	docker run --rm -v "$(PWD)":/usr/src/transcoder -w /usr/src/transcoder --platform linux/amd64 golang:1.16.10 make tower
