@@ -14,13 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/draganm/miniotest"
 	"github.com/lbryio/transcoder/library"
-	"github.com/lbryio/transcoder/manager"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/tower"
 
 	"github.com/karrick/godirwalk"
 	"github.com/stretchr/testify/suite"
@@ -42,10 +37,8 @@ func (c dummyRedirectClient) Do(req *http.Request) (*http.Response, error) {
 
 type clientSuite struct {
 	suite.Suite
-	library.LibraryTestHelper
-	tower   *tower.ServerLite
-	cleanup func() error
-	s3addr  string
+	s3addr        string
+	httpServerURL string
 }
 
 var streamFragmentCases = []struct {
@@ -58,9 +51,9 @@ var streamFragmentCases = []struct {
 	{"v2.m3u8", 0},
 	{"v3.m3u8", 0},
 	{"v0_s000000.ts", 2_000_000},
-	{"v1_s000000.ts", 350_000},
+	{"v1_s000000.ts", 760_000},
 	{"v2_s000000.ts", 300_000},
-	{"v3_s000000.ts", 170_000},
+	{"v3_s000000.ts", 100_000},
 }
 
 func TestClientSuite(t *testing.T) {
@@ -68,51 +61,17 @@ func TestClientSuite(t *testing.T) {
 }
 
 func (s *clientSuite) SetupSuite() {
-	s3addr, s3cleanup, err := miniotest.StartEmbedded()
-	s.Require().NoError(err)
-	s3drv, err := storage.InitS3Driver(
-		storage.S3Configure().
-			Name("tower-test").
-			Endpoint("http://"+s3addr).
-			Region("us-east-1").
-			Credentials("minioadmin", "minioadmin").
-			Bucket("storage-s3-test").
-			DisableSSL(),
-	)
-	s.Require().NoError(err)
-
-	s.Require().NoError(s.SetupLibraryDB())
-	lib := library.New(library.Config{
-		DB:      s.DB,
-		Storage: s3drv,
-		Log:     zapadapter.NewKV(nil),
-	})
-	_, err = lib.AddChannel("@specialoperationstest#3", "")
-	s.Require().NoError(err)
-	mgr := manager.NewManager(lib, 0)
-
-	tower, err := tower.NewTestTowerLite(s.T(), s3drv, mgr)
-	s.Require().NoError(err)
-	err = tower.StartAll()
-	s.Require().NoError(err)
-
-	s.tower = tower
-	s.cleanup = s3cleanup
-	s.s3addr = s3addr
-}
-
-func (s *clientSuite) TearDownSuite() {
-	s.Require().NoError(s.cleanup())
-	s.Require().NoError(s.TearDownLibraryDB())
+	s.s3addr = "http://localhost:9000/transcoded"
+	s.httpServerURL = "http://localhost:8080"
 }
 
 func (s *clientSuite) TestPlayFragment() {
 	c := New(
 		Configure().
 			VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).
-			Server(s.tower.HttpServerURL).
+			Server(s.httpServerURL).
 			LogLevel(Dev).
-			RemoteServer("http://" + s.s3addr + "/storage-s3-test"),
+			RemoteServer(s.s3addr),
 	)
 
 	// Request stream and wait until it's available.
@@ -188,9 +147,9 @@ func (s *clientSuite) TestPlayFragmentStorageDown() {
 	c := New(
 		Configure().
 			VideoPath(path.Join(s.T().TempDir(), "TestPlayFragment")).
-			Server(s.tower.HttpServerURL).
+			Server(s.httpServerURL).
 			LogLevel(Dev).
-			RemoteServer("http://" + s.s3addr + "/storage-s3-test"),
+			RemoteServer(s.s3addr),
 	)
 
 	// Request stream and wait until it's available.

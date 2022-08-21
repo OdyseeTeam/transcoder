@@ -1,60 +1,6 @@
 version: '3.7'
 
 services:
-  worker:
-    image: odyseeteam/transcoder-worker:dev5
-    container_name: worker
-    command:
-      - ./worker
-      - start
-      - --rmq-addr=amqp://guest:guest@rabbitmq/
-      - --work-dir=/storage
-      - --debug
-      - --workers=1
-      - --threads=1
-      - --worker-id=worker1
-      - --http-bind=:8080
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile-worker
-    volumes:
-      - ${PWD}/worker.ex.yml:/app/worker.yml
-  worker2:
-    image: odyseeteam/transcoder-worker:dev5
-    container_name: worker2
-    command:
-      - ./worker
-      - start
-      - --rmq-addr=amqp://guest:guest@rabbitmq/
-      - --work-dir=/storage
-      - --debug
-      - --workers=1
-      - --threads=4
-      - --worker-id=worker2
-    volumes:
-      - ${PWD}/worker.ex.yml:/app/worker.yml
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile-worker
-  tower:
-    image: odyseeteam/transcoder-tower:dev4
-    container_name: tower
-    command:
-      - ./tower
-      - serve
-      - --rmq-addr=amqp://guest:guest@rabbitmq/
-      - --http-url=http://tower:8080
-      - --debug
-      - --dev-mode
-      - --state-file=/storage/state.json
-    volumes:
-      - tower-data:/storage
-      - ${PWD}/tower.ex.yml:/app/tower.yml
-    ports:
-      - "8080:8080"
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile-tower
   conductor:
     image: odyseeteam/transcoder-conductor:dev
     container_name: conductor
@@ -73,6 +19,15 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile-tower
+    depends_on:
+      - redis
+      - db
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 3s
+        max_attempts: 3
+        window: 120s
   cworker:
     image: odyseeteam/transcoder-cworker:dev
     container_name: cworker
@@ -82,21 +37,16 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile-worker
+    depends_on: ["redis"]
     volumes:
       - ${PWD}/worker.ex.yml:/app/worker.yml
-  asynqmon:
-    image: hibiken/asynqmon:latest
-    container_name: asynqmon
-    environment:
-      - REDIS_URL=redis://:odyredis@redis:6379/1
-    ports:
-      - '9090:8080'
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+  # asynqmon:
+  #   image: hibiken/asynqmon:latest
+  #   container_name: asynqmon
+  #   environment:
+  #     - REDIS_URL=redis://:odyredis@redis:6379/1
+  #   ports:
+  #     - '9090:8080'
   redis:
     image: redis:7.0
     container_name: redis
@@ -122,21 +72,38 @@ services:
       - -clogging_collector=on
       - -clog_statement=all
       - -clog_destination=stderr
-  s3:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  minio:
     image: minio/minio
-    container_name: s3
+    container_name: minio
     ports:
       - "9000:9000"
       - "38861:38861"
+      - "41949:41949"
     volumes:
-      - s3-data:/data
+      - minio-data:/data
     environment:
       MINIO_ACCESS_KEY: ody
       MINIO_SECRET_KEY: odyseetes3
     command: server --address 0.0.0.0:9000 /data
+  minio-prepare:
+    image: minio/mc
+    volumes:
+      - minio-data:/data
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
+      /usr/bin/mc mb myminio/transcoded;
+      /usr/bin/mc policy set download myminio/transcoded;
+      exit 0;
+      "
 
 volumes:
   tower-data: {}
   db-data: {}
-  s3-data: {}
+  minio-data: {}
   redis-data: {}
