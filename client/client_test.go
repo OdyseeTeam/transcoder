@@ -84,7 +84,7 @@ Waiting:
 			s.FailNow("transcoding is taking too long")
 		case <-wait.C:
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
 			if err != nil {
 				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
 			} else {
@@ -99,7 +99,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
 			rbody, err := ioutil.ReadAll(rr.Result().Body)
@@ -107,6 +107,7 @@ Waiting:
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
 				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.2)
+				s.EqualValues(sz, len(rbody))
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
@@ -135,7 +136,7 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))
 			s.Equal("public, max-age=21239", rr.Result().Header.Get(cacheControlHeaderName))
@@ -162,7 +163,7 @@ Waiting:
 			s.FailNow("transcoding is taking too long")
 		case <-wait.C:
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
+			_, err := c.PlayFragment(streamURL, streamSDHash, "master.m3u8", rr, httptest.NewRequest(http.MethodGet, "/video", nil))
 			if err != nil {
 				s.Require().ErrorIs(err, resolve.ErrTranscodingUnderway)
 			} else {
@@ -175,8 +176,9 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
+			s.NotZero(sz)
 		})
 	}
 
@@ -186,8 +188,9 @@ Waiting:
 	for _, tc := range streamFragmentCases {
 		s.Run(tc.name, func() {
 			rr := httptest.NewRecorder()
-			err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
+			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Error(err)
+			s.Zero(sz)
 		})
 	}
 }
@@ -204,7 +207,6 @@ func (s *clientSuite) TestRestoreCache() {
 		cvDirs = append(cvDirs, sdHash)
 	}
 
-	c = New(Configure().VideoPath(dstPath))
 	n, err := c.RestoreCache()
 	s.Require().NoError(err)
 	s.EqualValues((78*4+5)*10, n)

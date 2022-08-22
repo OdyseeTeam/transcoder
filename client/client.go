@@ -204,7 +204,7 @@ func newFragment(tid, name string, size int64) *Fragment {
 }
 
 // PlayFragment retrieves requested stream fragment and serves it into the provided HTTP response.
-func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.ResponseWriter, r *http.Request) error {
+func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.ResponseWriter, r *http.Request) (int64, error) {
 	var (
 		fg  *Fragment
 		err error
@@ -220,7 +220,7 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.Respon
 		}
 		if err == resolve.ErrTranscodingUnderway {
 			ll.Debugf("fragment not available: %v", err)
-			return fmt.Errorf("unable to serve fragment: %w", err)
+			return 0, fmt.Errorf("unable to serve fragment: %w", err)
 		}
 		TranscodedCacheRetry.Inc()
 		ll.Debugf("error getting fragment: %v, retrying", err)
@@ -228,7 +228,7 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.Respon
 	if err != nil {
 		msg := fmt.Errorf("failed to serve fragment after %v retries: %w", fragmentRetrievalRetries, err)
 		ll.Info(msg)
-		return err
+		return 0, err
 	}
 
 	c.logger.Infow("serving fragment", "path", c.fullFragmentPath(fg), "cache_hit", hit)
@@ -250,7 +250,7 @@ func (c Client) PlayFragment(lbryURL, sdHash, fragmentName string, w http.Respon
 	w.Header().Set("access-control-allow-origin", "*")
 	w.Header().Set("access-control-allow-methods", "GET, OPTIONS")
 	http.ServeFile(w, r, c.fullFragmentPath(fg))
-	return nil
+	return fg.size, nil
 }
 
 func (c Client) fullFragmentPath(fg *Fragment) string {
