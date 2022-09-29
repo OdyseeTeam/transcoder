@@ -1,22 +1,13 @@
 # syntax=docker/dockerfile:1
 
 FROM odyseeteam/transcoder-gensprite:latest AS spritegen
-
-FROM alpine:3.15 AS gather
-
-WORKDIR /build
-
-ADD https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz ./
-RUN tar -xf ffmpeg-git-amd64-static.tar.xz && mv ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe ./
-
-RUN chmod a+x ffmpeg ffprobe
-
-FROM odyseeteam/transcoder-gensprite:latest AS build
+FROM odyseeteam/transcoder-ffmpeg:latest AS ffmpeg
+FROM alpine:3.16
 
 EXPOSE 8080
 
 RUN apk add --no-cache libc6-compat
-COPY --from=gather /build/ffmpeg /build/ffprobe /usr/local/bin/
+COPY --from=ffmpeg /build/ffmpeg /build/ffprobe /usr/local/bin/
 COPY --from=spritegen /usr/src/app /usr/src/spritegen
 
 WORKDIR /app

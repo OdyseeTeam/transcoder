@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1
+
+FROM alpine:3.16
+
+WORKDIR /build
+
+ADD https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz ./
+RUN tar -xf ffmpeg-git-amd64-static.tar.xz && mv ffmpeg-*-static/ffprobe ffmpeg-*-static/ffmpeg ./
+
+RUN chmod a+x ffmpeg ffprobe

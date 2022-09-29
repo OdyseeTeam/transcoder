@@ -68,5 +68,5 @@ We take security seriously. Please contact security@odysee.com regarding any iss
 
 ## Contact
 
-The primary contact for this project is [@andybeletsky](https://github.com/andybeletsky) (andrey.beletsky@odysee.com).
+The primary contact for this project is [@anbsky](https://github.com/anbsky) (andrey.beletsky@odysee.com).
 

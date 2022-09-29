@@ -128,7 +128,7 @@ func (c *Conductor) PutLoad() error {
 	spares := 0
 	for _, s := range servers {
 		active := len(s.ActiveWorkers)
-		c.options.Logger.Info("inspecting worker", "wid", s.Host, "concurrency", s.Concurrency, "active", len(s.ActiveWorkers))
+		c.options.Logger.Debug("inspecting worker", "wid", s.Host, "concurrency", s.Concurrency, "active", len(s.ActiveWorkers))
 		metrics.Capacity.WithLabelValues(s.Host).Set(float64(s.Concurrency))
 		metrics.Running.WithLabelValues(s.Host).Set(float64(active))
 		spares += s.Concurrency - active
@@ -186,7 +186,7 @@ func (c *Conductor) ProcessNextResult() error {
 	logger := c.options.Logger.With("url", res.Stream.URL(), "sd_hash", res.Stream.SDHash())
 	if err := c.library.AddRemoteStream(*res.Stream); err != nil {
 		logger.Info("error adding remote stream", "err", err)
-		// metrics.TranscodingRequestsErrors.With(labels).Inc()
+		metrics.ErrorsCount.WithLabelValues(metrics.StageLibraryAdd).Inc()
 		return fmt.Errorf("failed to add remote stream: %w", err)
 	}
 	metrics.RequestsCompleted.WithLabelValues(res.Stream.Manifest.TranscodedBy).Inc()

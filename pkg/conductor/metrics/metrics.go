@@ -7,8 +7,15 @@ import (
 )
 
 const (
-	LabelWorkerName = "worker_name"
-	LabelStage      = "stage"
+	LabelWorkerName string = "worker_name"
+	LabelStage             = "stage"
+
+	StageAccepted     = "accepted"
+	StageDownloading  = "downloading"
+	StageEncoding     = "encoding"
+	StageUploading    = "uploading"
+	StageMetadataFill = "metadata_fill"
+	StageLibraryAdd   = "library_add"
 )
 
 var (

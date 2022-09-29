@@ -28,12 +28,6 @@ import (
 const (
 	TypeTranscodingRequest = "transcoder:transcode"
 
-	StageAccepted     = "accepted"
-	StageDownloading  = "downloading"
-	StageEncoding     = "encoding"
-	StageUploading    = "uploading"
-	StageMetadataFill = "metadata_fill"
-
 	QueueTranscodingResults = "transcoding:results"
 )
 
@@ -133,7 +127,10 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 	}
 
 	var stream *library.Stream
-	log := logging.AddLogRef(r.options.Logger, payload.SDHash).With("tid", t.ResultWriter().TaskID())
+	log := logging.AddLogRef(r.options.Logger, payload.SDHash)
+	if t.ResultWriter() != nil {
+		log = log.With("tid", t.ResultWriter().TaskID())
+	}
 
 	var origFile, encodedPath string
 	errMtr := metrics.ErrorsCount
@@ -142,14 +139,14 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 
 	{
 		timer := time.Now()
-		runMtr := metrics.StageRunning.WithLabelValues(string(StageDownloading))
-		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageDownloading))
+		runMtr := metrics.StageRunning.WithLabelValues(metrics.StageDownloading)
+		spentMtr := metrics.SpentSeconds.WithLabelValues(metrics.StageDownloading)
 
 		runMtr.Inc()
 		dl, err := retriever.Retrieve(payload.URL, r.options.StreamsDir)
 		if err != nil {
 			log.Error("download failed", "err", err)
-			errMtr.WithLabelValues(string(StageDownloading)).Inc()
+			errMtr.WithLabelValues(metrics.StageDownloading).Inc()
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 			return fmt.Errorf("download failed: %w", err)
@@ -166,15 +163,15 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 
 	{
 		timer := time.Now()
-		runMtr := metrics.StageRunning.WithLabelValues(string(StageEncoding))
-		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageEncoding))
+		runMtr := metrics.StageRunning.WithLabelValues(metrics.StageEncoding)
+		spentMtr := metrics.SpentSeconds.WithLabelValues(metrics.StageEncoding)
 
 		runMtr.Inc()
 		res, err := r.encoder.Encode(origFile, encodedPath)
 		if err != nil {
 			log.Error("encoder failure", "err", err)
 			spentMtr.Add(time.Since(timer).Seconds())
-			errMtr.WithLabelValues(string(StageEncoding)).Inc()
+			errMtr.WithLabelValues(metrics.StageEncoding).Inc()
 			runMtr.Dec()
 
 			return fmt.Errorf("encoder failure: %v: %w", err, asynq.SkipRetry)
@@ -204,7 +201,7 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 			log.Error("failed to fill manifest", "err", err)
 			runMtr.Dec()
 			spentMtr.Add(time.Since(timer).Seconds())
-			errMtr.WithLabelValues(string(StageMetadataFill)).Inc()
+			errMtr.WithLabelValues(metrics.StageMetadataFill).Inc()
 			return fmt.Errorf("failed to fill manifest: %w", err)
 		}
 		stream.Manifest.Ladder = res.Ladder
@@ -221,13 +218,13 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 
 	{
 		timer := time.Now()
-		runMtr := metrics.StageRunning.WithLabelValues(string(StageUploading))
-		spentMtr := metrics.SpentSeconds.WithLabelValues(string(StageUploading))
+		runMtr := metrics.StageRunning.WithLabelValues(metrics.StageUploading)
+		spentMtr := metrics.SpentSeconds.WithLabelValues(metrics.StageUploading)
 
 		runMtr.Inc()
 		err := r.storage.PutWithContext(context.Background(), stream, true)
 		if err != nil {
-			errMtr.WithLabelValues(string(StageUploading)).Inc()
+			errMtr.WithLabelValues(metrics.StageUploading).Inc()
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()
 			if errors.Is(err, storage.ErrStreamExists) {
@@ -242,7 +239,9 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			return fmt.Errorf("cannot serialize transcoding result: %w", err)
 		}
-		t.ResultWriter().Write(res)
+		if t.ResultWriter() != nil {
+			t.ResultWriter().Write(res)
+		}
 		r.resultWriter.Write(res)
 		log.Info("stream processed")
 	}
@@ -271,6 +270,10 @@ func (r *EncoderRunner) Cleanup() {
 	os.RemoveAll(r.options.StreamsDir)
 	os.RemoveAll(r.options.OutputDir)
 }
+
+// func (r *EncoderRunner) err(format string, a ...interface{}) error {
+// 	r.options.Logger.("stream not fully reflected, delayed", "payload", payload, "delay", delay)
+// }
 
 func NewResultWriter(redisOpts asynq.RedisConnOpt) *RedisResultWriter {
 	rw := &RedisResultWriter{

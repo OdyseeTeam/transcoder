@@ -149,7 +149,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 
 	ctx.Response.StatusCode()
 	metrics.StreamsRequestedCount.WithLabelValues(metrics.StorageRemote).Inc()
-	ll.Infow("stream found", "location", location)
+	ll.Debugw("stream found", "location", location)
 	ctx.Redirect(location, http.StatusSeeOther)
 }
 
