@@ -8,8 +8,8 @@ import (
 const (
 	MasterPlaylist     = "master.m3u8"
 	preset             = "veryfast"
-	videoCodec         = "libx264"
-	constantRateFactor = "26"
+	videoCodec         = "libsvtav1"
+	constantRateFactor = "30"
 	hlsTime            = "10"
 )
 
@@ -27,7 +27,7 @@ type ArgumentSet struct {
 var hlsDefaultArguments = map[string]string{
 	"preset":       preset,
 	"sc_threshold": "0",
-	"c:v":          "libx264",
+	"c:v":          "libsvtav1",
 	"pix_fmt":      "yuv420p",
 	// "crf":                  constantRateFactor,
 	"c:a":                  "aac",
