@@ -31,7 +31,7 @@ func TestTweak(t *testing.T) {
 			generateMeta(640, 360, 5000, FPS30),
 			[]Tier{
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -39,7 +39,7 @@ func TestTweak(t *testing.T) {
 			[]Tier{
 				{Width: 720, Height: 480, VideoBitrate: nsRate(720, 480), AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -48,7 +48,7 @@ func TestTweak(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -57,7 +57,7 @@ func TestTweak(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -65,7 +65,7 @@ func TestTweak(t *testing.T) {
 			[]Tier{
 				{Width: 800, Height: 600, VideoBitrate: nsRate(800, 600), AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -74,7 +74,7 @@ func TestTweak(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -83,7 +83,7 @@ func TestTweak(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -96,7 +96,7 @@ func TestTweak(t *testing.T) {
 				{Width: 1080, Height: 1920, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 720, Height: 1280, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 360, Height: 640, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 144, Height: 256, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 144, Height: 256, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 	}

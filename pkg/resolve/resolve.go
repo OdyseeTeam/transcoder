@@ -21,7 +21,7 @@ import (
 
 var (
 	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
-	blobServer = "blobcache-us.lbry.com"
+	blobServer = "blobcache-eu.lbry.com"
 	edgeToken  = "UNSET"
 
 	lbrytvClient = ljsonrpc.NewClient(odyseeAPI)
@@ -151,7 +151,7 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 	}
 
 	tmpBlobsPath := "tmp_" + c.SDHash
-	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath)
+	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath, 3)
 	// This is needed to cleanup after downloader fails midway
 	defer os.RemoveAll(path.Join(os.TempDir(), c.streamFileName()+".tmp"))
 	if err != nil {

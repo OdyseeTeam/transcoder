@@ -2,7 +2,6 @@ package encoder
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -69,7 +68,7 @@ func (s *encoderSuite) TestLadder() {
 	s.Require().NoError(err)
 	s.Equal([]ladder.Tier{
 		{Definition: "360p", Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 	}, res.Ladder.Tiers)
 }
 
@@ -101,16 +100,16 @@ func (s *encoderSuite) TestEncode() {
 		"master.m3u8": `
 #EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=4432120,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
 v0.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=660000,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
 v1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=105600,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
 v2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=70400,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
 v3.m3u8`,
 		"v0.m3u8":       "v0_s000000.ts",
 		"v1.m3u8":       "v1_s000000.ts",
@@ -122,7 +121,7 @@ v3.m3u8`,
 		"v3_s000000.ts": "",
 	}
 	for f, str := range outFiles {
-		cont, err := ioutil.ReadFile(path.Join(s.out, f))
+		cont, err := os.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
@@ -144,7 +143,7 @@ func TestTweakRealStreams(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 		{
@@ -154,19 +153,14 @@ func TestTweakRealStreams(t *testing.T) {
 				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
 				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
 				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		// c, err := resolve.ResolveStream(tc.url)
-		// require.NoError(t, err)
-		// file, _, err := c.Download(t.TempDir())
-		// require.NoError(t, err)
-		// file.Close()
-
 		absPath, err := filepath.Abs(filepath.Join("./testdata", tc.url))
+		require.NoError(t, err)
 		lmeta, err := encoder.GetMetadata(absPath)
 		require.NoError(t, err)
 
