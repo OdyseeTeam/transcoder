@@ -13,18 +13,15 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Set up Go 1.x
-        uses: actions/setup-go@v2
+      - uses: actions/checkout@v3
         with:
-          go-version: '1.17'
+          fetch-depth: 0
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.x'
         id: go
-
       - name: Install ffmpeg
         uses: FedericoCarboni/setup-ffmpeg@v1-beta
         id: setup-ffmpeg
-
       - name: Run tests
         run: make test
