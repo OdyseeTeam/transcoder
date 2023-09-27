@@ -20,6 +20,9 @@ conductor_image:
 cworker_image:
 	docker buildx build -f Dockerfile-cworker -t odyseeteam/transcoder-cworker:dev --platform linux/amd64 .
 
+test_down:
+	docker-compose down
+
 test_prepare:
 	docker-compose up -d minio db redis
 	docker-compose up -d cworker conductor

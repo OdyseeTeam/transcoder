@@ -3,7 +3,7 @@ version: '3.7'
 services:
   conductor:
     image: odyseeteam/transcoder-conductor:dev
-    container_name: conductor
+    container_name: tc-conductor
     command:
       - ./transcoder
       - conductor
@@ -30,10 +30,11 @@ services:
         window: 120s
   cworker:
     image: odyseeteam/transcoder-cworker:dev
-    container_name: cworker
+    container_name: tc-cworker
     command:
       - ./transcoder
       - worker
+      - --blob-server=blobcache-eu.lbry.com
     # build:
     #   context: .
     #   dockerfile: Dockerfile-worker
@@ -49,7 +50,7 @@ services:
   #     - '9090:8080'
   redis:
     image: redis:7.0
-    container_name: redis
+    container_name: tc-redis
     ports:
       - '6379:6379'
     volumes:
@@ -61,7 +62,7 @@ services:
     restart: unless-stopped
   db:
     image: postgres:14
-    container_name: db
+    container_name: tc-db
     ports:
       - "5432:5432"
     environment:
@@ -79,7 +80,7 @@ services:
       retries: 5
   minio:
     image: minio/minio
-    container_name: minio
+    container_name: tc-minio
     ports:
       - "9000:9000"
       - "38861:38861"
@@ -98,7 +99,8 @@ services:
       /bin/sh -c "
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
       /usr/bin/mc mb myminio/transcoded;
-      /usr/bin/mc policy set download myminio/transcoded;
+      /usr/bin/mc anonymous set download myminio/transcoded;
+      /usr/bin/mc anonymous set public myminio/transcoded;
       exit 0;
       "
     depends_on: ["minio"]

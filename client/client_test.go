@@ -3,7 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -76,7 +76,7 @@ func (s *clientSuite) TestPlayFragment() {
 
 	// Request stream and wait until it's available.
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	wait := time.NewTicker(500 * time.Millisecond)
+	wait := time.NewTicker(1000 * time.Millisecond)
 Waiting:
 	for {
 		select {
@@ -102,7 +102,7 @@ Waiting:
 			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
-			rbody, err := ioutil.ReadAll(rr.Result().Body)
+			rbody, err := io.ReadAll(rr.Result().Body)
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
@@ -111,7 +111,7 @@ Waiting:
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
-				tbody, err := ioutil.ReadFile(absPath)
+				tbody, err := os.ReadFile(absPath)
 				s.Require().NoError(err)
 				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
 			}
@@ -182,7 +182,7 @@ Waiting:
 		})
 	}
 
-	c.remoteServer = "http://localhost:63333"
+	c.remoteServer = "http://localhost:13131"
 	c.cache.Clear()
 
 	for _, tc := range streamFragmentCases {
