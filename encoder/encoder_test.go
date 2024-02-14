@@ -11,9 +11,16 @@ import (
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
+
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+)
+
+var (
+	FPS0  = decimal.NewFromInt(0)
+	FPS15 = decimal.NewFromInt(15)
 )
 
 type encoderSuite struct {
@@ -67,8 +74,8 @@ func (s *encoderSuite) TestLadder() {
 	res, err := e.Encode(file.Name(), s.out)
 	s.Require().NoError(err)
 	s.Equal([]ladder.Tier{
-		{Definition: "360p", Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
+		{Definition: "360p", Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
+		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
 	}, res.Ladder.Tiers)
 }
 
@@ -140,20 +147,20 @@ func TestTweakRealStreams(t *testing.T) {
 			// "hot-tub-streamers-are-furious-at#06e0bc43f55fec0bd946a3cb18fc2ff9bc1cb2aa",
 			"hot-tub-streamers-are-furious.mp4",
 			[]ladder.Tier{
-				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
-				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
-				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: FPS0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: FPS0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
 			},
 		},
 		{
 			// "hot-tub-streamers-are-furious-at#06e0bc43f55fec0bd946a3cb18fc2ff9bc1cb2aa",
 			"why-mountain-biking-here-will.mp4",
 			[]ladder.Tier{
-				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
-				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
-				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: 15},
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: FPS0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: FPS0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
 			},
 		},
 	}

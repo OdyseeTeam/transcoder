@@ -171,15 +171,16 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}
 	}
 
-	args := targetLadder.ArgumentSet(output, meta)
+	args := targetLadder.ArgumentSet(output)
 	vs := meta.VideoStream
 	ll.Info(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
-		"media_duration", meta.FMeta.GetFormat().GetDuration(),
-		"media_bitrate", meta.FMeta.GetFormat().GetBitRate(),
-		"media_width", vs.GetWidth(),
-		"media_height", vs.GetHeight(),
+		"duration", meta.FMeta.GetFormat().GetDuration(),
+		"bitrate", meta.FMeta.GetFormat().GetBitRate(),
+		"framerate", fmt.Sprintf("%.4f[%s]", meta.FPS.Float, meta.FPS.String()),
+		"width", vs.GetWidth(),
+		"height", vs.GetHeight(),
 	)
 
 	dur, _ := strconv.ParseFloat(meta.FMeta.GetFormat().GetDuration(), 64)

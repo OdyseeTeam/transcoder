@@ -3,6 +3,8 @@ package ladder
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -21,7 +23,7 @@ type ArgumentSet struct {
 	Output    string
 	Ladder    Ladder
 	Arguments map[string]string
-	Meta      *Metadata
+	Metadata  *Metadata
 }
 
 var hlsDefaultArguments = map[string]string{
@@ -66,10 +68,12 @@ func (a *ArgumentSet) GetStrArguments() []string {
 			"-bufsize:v:"+s, vRate,
 		)
 
-		if tier.Framerate != 0 {
-			ladArgs = append(ladArgs, "-r:v:"+s, strconv.Itoa(tier.Framerate), "-g:v:"+s, strconv.Itoa(tier.Framerate*2))
+		if tier.KeepFramerate {
+			ladArgs = append(ladArgs, "-g:v:"+s, strconv.Itoa(a.Metadata.FPS.Int()*2))
+		} else if !tier.Framerate.IsZero() {
+			ladArgs = append(ladArgs, "-r:v:"+s, tier.Framerate.String(), "-g:v:"+s, (tier.Framerate.Mul(decimal.NewFromInt(2)).String()))
 		} else {
-			ladArgs = append(ladArgs, "-g:v:"+s, strconv.Itoa(a.Meta.IntFPS*2))
+			ladArgs = append(ladArgs, "-r:v:"+s, a.Metadata.FPS.String(), "-g:v:"+s, strconv.Itoa(a.Metadata.FPS.Int()*2))
 		}
 
 		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)

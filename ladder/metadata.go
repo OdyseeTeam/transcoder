@@ -14,11 +14,15 @@ import (
 
 type Metadata struct {
 	FMeta       *ffmpeg.Metadata
-	FPS         float64
-	IntFPS      int
+	FPS         *FPS
 	FastStart   bool
 	VideoStream transcoder.Streams
 	AudioStream transcoder.Streams
+}
+
+type FPS struct {
+	Ratio string
+	Float float64
 }
 
 var fpsPattern = regexp.MustCompile(`^(\d+)/(\d+)$`)
@@ -38,12 +42,11 @@ func WrapMeta(fmeta *ffmpeg.Metadata) (*Metadata, error) {
 	}
 	m.AudioStream = as
 
-	f, err := m.detectFPS()
+	f, err := m.determineFramerate()
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot determine framerate")
 	}
 	m.FPS = f
-	m.IntFPS = int(math.Ceil(f))
 
 	return m, nil
 }
@@ -61,25 +64,33 @@ func (m *Metadata) audioStream() transcoder.Streams {
 	return nil
 }
 
-func (m *Metadata) detectFPS() (float64, error) {
-	fpsm := fpsPattern.FindStringSubmatch(m.VideoStream.GetAvgFrameRate())
+func (m *Metadata) determineFramerate() (*FPS, error) {
+	fr := m.VideoStream.GetAvgFrameRate()
+	fpsm := fpsPattern.FindStringSubmatch(fr)
 	if len(fpsm) < 2 {
-		return 0, fmt.Errorf("no match found in %s", m.VideoStream.GetAvgFrameRate())
+		return nil, fmt.Errorf("no match found in %s", fr)
 	}
 	fpsdd, err := strconv.Atoi(fpsm[1])
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	fpsds, err := strconv.Atoi(fpsm[2])
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if fpsds == 0 {
-		return 0, errors.New("divisor cannot be zero")
+		return nil, errors.New("divisor cannot be zero")
 	}
-	return float64(fpsdd) / float64(fpsds), nil
+	return &FPS{Ratio: fr, Float: float64(fpsdd) / float64(fpsds)}, nil
 }
 
+func (f FPS) Int() int {
+	return int(math.Ceil(f.Float))
+}
+
+func (f FPS) String() string {
+	return f.Ratio
+}
 func GetVideoStream(meta *ffmpeg.Metadata) transcoder.Streams {
 	for _, s := range meta.GetStreams() {
 		if s.GetCodecType() == "video" {
