@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -28,33 +27,33 @@ import (
 
 var CLI struct {
 	GetFragmentUrl struct {
-		Server string `optional name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
+		Server string `optional:"" name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
 		URL    string `name:"url" help:"LBRY URL"`
 		SDHash string `name:"sd-hash" help:"SD hash"`
-		Name   string `optional name:"name" help:"Fragment file name" default:"master.m3u8"`
-	} `cmd help:"Get fragment URL"`
+		Name   string `optional:"" name:"name" help:"Fragment file name" default:"master.m3u8"`
+	} `cmd:"" help:"Get fragment URL"`
 	GetVideoUrl struct {
-		Server string `optional name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
+		Server string `optional:""  name:"server" help:"Transcoding server" default:"use-tower1.transcoder.odysee.com:8080"`
 		URL    string `name:"url" help:"LBRY URL"`
-	} `cmd help:"Get video URL"`
+	} `cmd:"" help:"Get video URL"`
 	GenerateManifests struct {
 		VideoDir string `help:"Directory containing videos"`
 		DBPath   string `help:"Path to the SQLite DB file"`
-	} `cmd help:"Generate manifest files for videos"`
+	} `cmd:"" help:"Generate manifest files for videos"`
 	Retire struct {
 		VideoDir string `help:"Directory containing videos"`
 		MaxSize  int    `help:"Max size of videos to keep in gigabytes"`
-	} `cmd help:"Generate manifest files for videos"`
+	} `cmd:"" help:"Generate manifest files for videos"`
 	Genstream struct {
 		Path string `arg:"" help:"Path containing transcoded stream"`
 		URL  string `arg:"" help:"Stream URL"`
-	} `cmd help:"Generate stream"`
+	} `cmd:"" help:"Generate stream"`
 	Transcode struct {
 		URL string `arg:"" help:"LBRY URL"`
-	} `cmd help:"Download and transcode a specified video"`
+	} `cmd:"" help:"Download and transcode a specified video"`
 	ValidateStream struct {
 		URL string `arg:"" help:"HTTP URL for stream to verify"`
-	} `cmd help:"Verify a specified stream"`
+	} `cmd:"" help:"Verify a specified stream"`
 }
 
 func main() {
@@ -80,7 +79,7 @@ func main() {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
 			outPath = inPath + "_out"
 		} else {
-			tmpDir, err := ioutil.TempDir(".", "")
+			tmpDir, err := os.MkdirTemp(".", "")
 			if err != nil {
 				panic(err)
 			}
@@ -94,7 +93,7 @@ func main() {
 			}
 			f.Close()
 			inPath, _ = filepath.Abs(f.Name())
-			outPath = url.PathEscape(rr.URI)
+			outPath = url.PathEscape(rr.Name)
 			defer os.RemoveAll(tmpDir)
 		}
 
@@ -111,40 +110,6 @@ func main() {
 			fmt.Printf("%.2f ", p.GetProgress())
 		}
 		fmt.Printf("done in %.2f seconds\n", time.Since(t).Seconds())
-		ls := library.InitStream(outPath, "wasabi")
-		if err != nil {
-			panic(err)
-		}
-		err = ls.GenerateManifest(
-			rr.URI, rr.ChannelURI, rr.SDHash,
-			library.WithTimestamp(time.Now()),
-			library.WithWorkerName("manual"),
-		)
-		if err != nil {
-			panic(err)
-		}
-
-		cfg := viper.New()
-		cfg.SetConfigName("conductor")
-		cfg.AddConfigPath(".")
-		err = cfg.ReadInConfig()
-		if err != nil {
-			panic(err)
-		}
-
-		libCfg := cfg.GetStringMapString("library")
-
-		libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
-		if err != nil {
-			panic(err)
-		}
-		lib := library.New(library.Config{
-			DB:  libDB,
-			Log: zapadapter.NewKV(nil),
-		})
-		if err := lib.AddRemoteStream(*ls); err != nil {
-			fmt.Println("error adding remote stream", "err", err)
-		}
 	case "genstream <path> <url>":
 		rr, err := resolve.ResolveStream(CLI.Genstream.URL)
 		if err != nil {
