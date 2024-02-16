@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/ory/dockertest/v3"
+	dockertest "github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
@@ -75,7 +75,7 @@ func Minio() (*S3Options, Teardown, error) {
 		func(config *docker.HostConfig) {
 			// set AutoRemove to true so that stopped container goes away by itself
 			config.AutoRemove = true
-			config.RestartPolicy = docker.RestartPolicy{Name: "no"}
+			// config.RestartPolicy = docker.RestartPolicy{Name: "no"}
 		},
 	)
 	if err != nil {
@@ -90,7 +90,7 @@ func Minio() (*S3Options, Teardown, error) {
 	// the minio client does not do service discovery for you (i.e. it does not check if connection can be established), so we have to use the health check
 	if err := pool.Retry(func() error {
 		url := fmt.Sprintf("http://%s/minio/health/live", endpoint)
-		resp, err := http.Get(url)
+		resp, err := http.Get(url) // #nosec G107
 		if err != nil {
 			return err
 		}

@@ -21,11 +21,11 @@ type managerSuite struct {
 }
 
 func isLevel5(key string) bool {
-	return rand.Intn(2) == 0
+	return rand.Intn(2) == 0 // #nosec G404
 }
 
 func isChannelEnabled(key string) bool {
-	return rand.Intn(2) == 0
+	return rand.Intn(2) == 0 // #nosec G404
 }
 
 func TestManagerSuite(t *testing.T) {

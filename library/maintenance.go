@@ -46,11 +46,12 @@ func retireVideos(lib *Library, storageName string, maxSize uint64) {
 	ll := logger.With("total_gb", toGB(totalSize), "retired_gb", toGB(retiredSize))
 	LibraryBytes.Set(float64(totalSize))
 	LibraryRetiredBytes.Add(float64(retiredSize))
-	if err != nil {
+	switch {
+	case err != nil:
 		ll.Infow("error retiring videos", "err", err)
-	} else if retiredSize > 0 {
+	case retiredSize > 0:
 		ll.Infow("retired some videos")
-	} else {
+	default:
 		ll.Infow("failed to retire any videos")
 	}
 }

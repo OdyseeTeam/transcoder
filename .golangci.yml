@@ -1,0 +1,27 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+
+linters:
+  disable-all: true
+  enable:
+    - dupl
+    - gocritic
+    - goconst
+    - gocyclo
+    - gofmt
+    - goimports
+    - gosimple
+    - govet
+    - gosec
+    - ineffassign
+    - misspell
+    - staticcheck
+    - sqlclosecheck
+    - unused
+
+run:
+  timeout: 10m

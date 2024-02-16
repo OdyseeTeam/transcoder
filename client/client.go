@@ -59,13 +59,7 @@ var (
 	ErrNotFound          = errors.New("fragment not found")
 	ErrChannelNotEnabled = resolve.ErrChannelNotEnabled
 
-	errRefetch = errors.New("should refetch")
-	sdHashRe   = regexp.MustCompile(`/([A-Za-z0-9]{32,96})/?`)
-
-	fetchErrorTypes = map[int]string{
-		http.StatusInternalServerError: failureServerError,
-		http.StatusNotFound:            failureNotFound,
-	}
+	sdHashRe = regexp.MustCompile(`/([A-Za-z0-9]{32,96})/?`)
 )
 
 type HTTPRequester interface {

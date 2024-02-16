@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/resolve"
 
@@ -124,11 +124,12 @@ Waiting:
 			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
 			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
 
-			if strings.HasSuffix(tc.name, ".m3u8") {
+			switch {
+			case strings.HasSuffix(tc.name, ".m3u8"):
 				s.Equal("application/x-mpegurl", rr.Result().Header.Get("content-type"))
-			} else if strings.HasSuffix(tc.name, ".ts") {
+			case strings.HasSuffix(tc.name, ".ts"):
 				s.Equal("video/mp2t", rr.Result().Header.Get("content-type"))
-			} else if strings.HasSuffix(tc.name, ".png") {
+			case strings.HasSuffix(tc.name, ".png"):
 				s.Equal("image/png", rr.Result().Header.Get("content-type"))
 			}
 		})
@@ -202,7 +203,7 @@ func (s *clientSuite) TestRestoreCache() {
 
 	cvDirs := []string{}
 	for range [10]int{} {
-		sdHash := randomString(96)
+		sdHash := randomdata.Alphanumeric(96)
 		library.PopulateHLSPlaylist(s.T(), dstPath, sdHash)
 		cvDirs = append(cvDirs, sdHash)
 	}
@@ -267,14 +268,4 @@ func (s *clientSuite) Test_getFragmentURL() {
 		"master.m3u8")
 	s.Require().NoError(err)
 	s.Equal("https://cache-us.transcoder.odysee.com/sdhash/master.m3u8?origin=storage1", u)
-}
-
-func randomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
-	}
-	return string(b)
 }

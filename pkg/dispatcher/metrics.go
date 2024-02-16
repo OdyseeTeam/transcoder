@@ -6,15 +6,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const (
-	failureForbidden  = "forbidden"
-	failureNotFound   = "not_found"
-	resultUnderway    = "underway"
-	resultFound       = "found"
-	resultDownloading = "downloading"
-	resultLocalCache  = "local_cache"
-)
-
 var (
 	once = sync.Once{}
 

@@ -1,15 +1,10 @@
-version: 1
+version: "2"
 packages:
   - path: "library/db"
     name: "db"
     engine: "postgresql"
     schema: "library/db/migrations/"
     queries: "library/db/queries.sql"
-  - path: "tower/queue"
-    name: "queue"
-    engine: "postgresql"
-    schema: "tower/queue/migrations/"
-    queries: "tower/queue/queries.sql"
 rename:
   url: "URL"
   sd_hash: "SDHash"

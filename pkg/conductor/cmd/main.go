@@ -23,7 +23,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/migrator"
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/tower/queue"
 
 	"github.com/alecthomas/kong"
 	"github.com/fasthttp/router"
@@ -39,7 +38,7 @@ import (
 var logger *zap.Logger
 
 var CLI struct {
-	queue.MigratorCLI
+	migrator.CLI
 	Conductor struct {
 		HttpBind string `optional:"" help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
 	} `cmd:"" help:"Start conductor server"`

@@ -55,7 +55,7 @@ func (m *Metadata) videoStream() transcoder.Streams {
 	return GetVideoStream(m.FMeta)
 }
 
-func (m *Metadata) audioStream() transcoder.Streams {
+func (m *Metadata) audioStream() transcoder.Streams { // nolint:unused
 	for _, s := range m.FMeta.GetStreams() {
 		if s.GetCodecType() == "audio" {
 			return s

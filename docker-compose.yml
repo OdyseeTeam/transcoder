@@ -2,16 +2,13 @@ version: '3.7'
 
 services:
   conductor:
-    image: odyseeteam/transcoder-conductor:dev
+    image: odyseeteam/transcoder-conductor:24.2.0
+    platform: linux/amd64
     container_name: tc-conductor
     command:
       - ./transcoder
       - conductor
       - --debug
-      # - --rmq-addr=amqp://guest:guest@rabbitmq/
-      # - --http-url=http://tower:8080
-      # - --dev-mode
-      # - --state-file=/storage/state.json
     volumes:
       - ${PWD}/conductor.ex.yml:/app/conductor.yml
     ports:
@@ -29,7 +26,8 @@ services:
         max_attempts: 3
         window: 120s
   cworker:
-    image: odyseeteam/transcoder-cworker:dev
+    image: odyseeteam/transcoder-cworker:24.2.0
+    platform: linux/amd64
     container_name: tc-cworker
     command:
       - ./transcoder

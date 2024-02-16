@@ -1,15 +1,14 @@
 package dispatcher
 
 import (
-	"math/rand"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/pkg/logging"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
 )
@@ -23,32 +22,17 @@ type testWorker struct {
 	seenTasks []string
 }
 
-func (worker *testWorker) Work(t Task) error {
-	worker.Lock()
-	defer worker.Unlock()
+func (w *testWorker) Work(t Task) error {
+	w.Lock()
+	defer w.Unlock()
 	pl := t.Payload.(struct{ URL, SDHash string })
-	worker.seenTasks = append(worker.seenTasks, pl.URL+pl.SDHash)
+	w.seenTasks = append(w.seenTasks, pl.URL+pl.SDHash)
 	t.SetResult(pl.URL + pl.SDHash)
-	return nil
-}
-
-type slowWorker struct {
-	sync.Mutex
-	called    int
-	seenTasks []string
-}
-
-func (worker *slowWorker) Work(t Task) error {
-	time.Sleep(1 * time.Second)
 	return nil
 }
 
 func TestDispatcherSuite(t *testing.T) {
 	suite.Run(t, new(DispatcherSuite))
-}
-
-func (s *DispatcherSuite) SetupSuite() {
-	rand.Seed(time.Now().UTC().UnixNano())
 }
 
 func (s *DispatcherSuite) SetupTest() {

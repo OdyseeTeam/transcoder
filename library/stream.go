@@ -1,7 +1,7 @@
 package library
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
@@ -14,8 +14,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/karrick/godirwalk"
 	"github.com/lbryio/transcoder/ladder"
+
+	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -90,10 +91,9 @@ func InitStream(dir string, remoteStorage string) *Stream {
 }
 
 func (s *Stream) generateTID() string {
-	h := sha1.New()
+	h := sha256.New()
 	h.Write([]byte(s.SDHash()))
-	h.Write([]byte(s.Manifest.TranscodedAt.Format(tidTimestampFormat)))
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum([]byte(s.Manifest.TranscodedAt.Format(tidTimestampFormat))))
 }
 
 // GenerateManifest needs to be called for newly initialized (transcoded) streams.

@@ -1,7 +1,6 @@
 package encoder
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -91,7 +90,7 @@ v3.m3u8`,
 		"v3_s000000.ts": "",
 	}
 	for f, str := range outFiles {
-		cont, err := ioutil.ReadFile(path.Join(s.out, f))
+		cont, err := os.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}

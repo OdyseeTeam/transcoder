@@ -22,6 +22,7 @@ import (
 const (
 	TokenCtxField     = "token"
 	AuthHeader        = "Authorization"
+	AuthTokenPrefix   = "Bearer "
 	AdminChannelField = "channel"
 )
 
@@ -119,28 +120,31 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if err == resolve.ErrNoSigningChannel || err == resolve.ErrChannelNotEnabled {
+	switch err {
+	case nil:
+		break
+	case resolve.ErrNoSigningChannel, resolve.ErrChannelNotEnabled:
 		ctx.SetStatusCode(http.StatusForbidden)
 		ll.Debug("transcoding disabled")
 		return
-	} else if err == resolve.ErrTranscodingQueued {
+	case resolve.ErrTranscodingQueued:
 		ctx.SetStatusCode(http.StatusAccepted)
 		ll.Debug("trancoding queued")
 		return
-	} else if err == resolve.ErrTranscodingForbidden {
+	case resolve.ErrTranscodingForbidden:
 		ctx.SetStatusCode(http.StatusForbidden)
 		ctx.Response.SetBodyString(err.Error())
 		ll.Debug(err.Error())
 		return
-	} else if err == resolve.ErrTranscodingUnderway {
+	case resolve.ErrTranscodingUnderway:
 		ctx.SetStatusCode(http.StatusAccepted)
 		ll.Debug("trancoding underway")
 		return
-	} else if err == resolve.ErrClaimNotFound {
+	case resolve.ErrClaimNotFound:
 		ctx.SetStatusCode(http.StatusNotFound)
 		ll.Info("claim not found")
 		return
-	} else if err != nil {
+	default:
 		ctx.SetStatusCode(http.StatusInternalServerError)
 		ll.Errorw("internal error", "error", err)
 		fmt.Fprint(ctx, err.Error())
@@ -160,7 +164,7 @@ func (h httpVideoHandler) handleChannel(ctx *fasthttp.RequestCtx) {
 		ctx.SetBodyString("authorization failed")
 		return
 	}
-	token := strings.Replace(string(ctx.Request.Header.Peek(AuthHeader)), "Bearer ", "", 1)
+	token := strings.Replace(string(ctx.Request.Header.Peek(AuthHeader)), AuthTokenPrefix, "", 1)
 	ctx.SetUserValue(TokenCtxField, token)
 
 	if !h.authCallback(ctx) {
@@ -186,11 +190,6 @@ func (h httpVideoHandler) handleChannel(ctx *fasthttp.RequestCtx) {
 	}
 	ctx.SetStatusCode(http.StatusCreated)
 	fmt.Fprintf(ctx, "channel %s (%s) added with priority %s", c.URL, c.ClaimID, c.Priority)
-}
-
-func handlePanic(ctx *fasthttp.RequestCtx, p interface{}) {
-	ctx.SetStatusCode(http.StatusInternalServerError)
-	logger.Errorw("panicked", "url", ctx.Request.URI(), "panic", p)
 }
 
 func CORSMiddleware(h fasthttp.RequestHandler) fasthttp.RequestHandler {

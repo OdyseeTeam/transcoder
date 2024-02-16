@@ -33,9 +33,9 @@ func ValidateStream(baseURL string, failFast bool, skipSegments bool) (*Validati
 				if skipSegments {
 					return nil, SkipSegment
 				}
-				r, err = http.Head(url)
+				r, err = http.Head(url) // #nosec G107
 			} else {
-				r, err = http.Get(url)
+				r, err = http.Get(url) // #nosec G107
 			}
 			logger.Debugf("checked %s [%v]", p, r.StatusCode)
 			if err != nil {

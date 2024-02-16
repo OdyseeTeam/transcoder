@@ -7,7 +7,7 @@ GO_BUILD=go1.20 build
 BUILD_DIR=dist
 LOCAL_ARCH=$(shell uname)
 VERSION := $(shell git describe --tags --match 'v*'|sed -e 's/v//')
-TRANSCODER_VERSION ?= $(shell git describe --tags --match 'transcoder-v*'|sed 's/transcoder-v\([0-9.]*\)/\1/')
+TRANSCODER_VERSION ?= $(shell git describe --tags --match 'transcoder-v*'|sed 's/transcoder-v\([0-9.]*\).*/\1/')
 
 transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \

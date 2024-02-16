@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"github.com/grafov/m3u8"
 )
@@ -85,7 +84,7 @@ func WalkStream(baseURI string, getFn StreamGetter, processFn StreamProcessor) e
 }
 
 func read(r io.ReadCloser) (io.ReadSeeker, error) {
-	d, err := ioutil.ReadAll(r)
+	d, err := io.ReadAll(r)
 	r.Close()
 	if err != nil {
 		return nil, err

@@ -209,14 +209,15 @@ func TestTweak(t *testing.T) {
 		},
 	}
 
-	for _, testCase := range testCases {
+	for _, c := range testCases {
+		testCase := c
 		stream := GetVideoStream(&testCase.metadata)
 		testName := fmt.Sprintf(
 			"%vx%v@%vbps@%vfps",
 			stream.GetWidth(),
 			stream.GetHeight(),
-			testCase.metadata.GetFormat().GetBitRate(),
-			testCase.metadata.Streams[1].AvgFrameRate,
+			c.metadata.GetFormat().GetBitRate(),
+			c.metadata.Streams[1].AvgFrameRate,
 		)
 		t.Run(testName, func(t *testing.T) {
 			assert.NoError(err)
@@ -253,13 +254,4 @@ func generateMeta(w, h, br int, fr string) ffmpeg.Metadata {
 		Streams: []ffmpeg.Streams{{CodecType: "audio"}, {CodecType: "video", BitRate: strconv.Itoa(br * 1000), Index: 0, Width: w, Height: h, AvgFrameRate: fr}},
 	}
 	return meta
-}
-
-func indexOf[S ~[]E, E comparable](s S, v E) (bool, int) {
-	for n, i := range s {
-		if i == v {
-			return true, n
-		}
-	}
-	return false, 0
 }

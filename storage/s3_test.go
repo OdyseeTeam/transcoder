@@ -3,18 +3,22 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"path"
 	"testing"
-	"time"
 
-	"github.com/Pallinder/go-randomdata"
+	"github.com/lbryio/transcoder/library"
+
+	randomdata "github.com/Pallinder/go-randomdata"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/docker/go-connections/nat"
-	"github.com/lbryio/transcoder/library"
 	"github.com/stretchr/testify/suite"
-	"github.com/testcontainers/testcontainers-go"
+	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+)
+
+var (
+	minioAccessKey = "s3-test"
+	minioSecretKey = randomdata.Alphanumeric(24)
 )
 
 type s3Container struct {
@@ -24,7 +28,6 @@ type s3Container struct {
 
 type s3suite struct {
 	suite.Suite
-	cleanup     func() error
 	s3container *s3Container
 	sdHash      string
 	streamsPath string
@@ -36,8 +39,6 @@ func TestS3suite(t *testing.T) {
 
 func (s *s3suite) SetupSuite() {
 	var err error
-
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	s.s3container, err = setupS3(context.Background())
 	s.Require().NoError(err)
@@ -55,8 +56,9 @@ func (s *s3suite) TestPutDelete() {
 			Name("test").
 			Endpoint(s.s3container.URI).
 			Region("us-east-1").
-			Credentials("s3-test", "s3-test").
+			Credentials(minioAccessKey, minioSecretKey).
 			Bucket("storage-s3-test").
+			CreateBucket(). // This should be skipped for production/wasabi
 			DisableSSL(),
 	)
 	s.Require().NoError(err)
@@ -95,17 +97,12 @@ func (s *s3suite) TestPutDelete() {
 	}
 }
 
-func (s *s3suite) TearDownSuite() {
-	// s.NoError(s.cleanup())
-}
-
 type TestLogConsumer struct {
 	Msgs []string
 }
 
 func (g *TestLogConsumer) Accept(l testcontainers.Log) {
 	g.Msgs = append(g.Msgs, string(l.Content))
-	fmt.Println("YO", l.Content)
 }
 
 func setupS3(ctx context.Context) (*s3Container, error) {
@@ -116,19 +113,13 @@ func setupS3(ctx context.Context) (*s3Container, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "minio/minio:latest",
 		ExposedPorts: []string{"9000/tcp"},
-		// Cmd:          []string{"minio", "server", "/data"},
-		// Cmd:          []string{"server", "--address", "0.0.0.0:9000", "./data"},
-		// WaitingFor: wait.ForListeningPort("9000/tcp"),
-		// WaitingFor: wait.ForLog("Finished loading IAM sub-system").WithStartupTimeout(10 * time.Second),
-		// WaitingFor: wait.ForListeningPort(p),
-		WaitingFor: wait.ForHTTP("/minio/health/ready").WithPort(p), //.WithStartupTimeout(20 * time.Second),
+		WaitingFor:   wait.ForHTTP("/minio/health/ready").WithPort(p),
 		Env: map[string]string{
-			"MINIO_ACCESS_KEY": "s3-test",
-			"MINIO_SECRET_KEY": "s3-test",
+			"MINIO_ACCESS_KEY": minioAccessKey,
+			"MINIO_SECRET_KEY": minioSecretKey,
 		},
 		Entrypoint: []string{"sh"},
-		// Cmd:        []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", bucket)},
-		Cmd: []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", "")},
+		Cmd:        []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", "")},
 	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
