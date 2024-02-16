@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   conductor:
-    image: odyseeteam/transcoder-conductor:24.2.0
+    image: odyseeteam/transcoder-conductor:24.2.1
     platform: linux/amd64
     container_name: tc-conductor
     command:
@@ -26,7 +26,7 @@ services:
         max_attempts: 3
         window: 120s
   cworker:
-    image: odyseeteam/transcoder-cworker:24.2.0
+    image: odyseeteam/transcoder-cworker:24.2.1
     platform: linux/amd64
     container_name: tc-cworker
     command:
@@ -86,8 +86,8 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      MINIO_ACCESS_KEY: ody
-      MINIO_SECRET_KEY: odyseetes3
+      MINIO_ROOT_USER: ody
+      MINIO_ROOT_PASSWORD: odyseetes3
     command: server --address 0.0.0.0:9000 /data
   minio-prepare:
     image: minio/mc

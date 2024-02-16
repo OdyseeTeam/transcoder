@@ -20,9 +20,9 @@ import (
 	"github.com/lbryio/transcoder/storage"
 	"go.etcd.io/etcd/api/v3/version"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
+	redis "github.com/redis/go-redis/v9"
 )
 
 const (

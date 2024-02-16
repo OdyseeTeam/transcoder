@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-redis/redis/v8"
 	dockertest "github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	redis "github.com/redis/go-redis/v9"
 )
 
 type S3Options struct {

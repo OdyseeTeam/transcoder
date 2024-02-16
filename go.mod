@@ -11,7 +11,6 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/fasthttp/router v1.4.9
 	github.com/floostack/transcoder v1.2.0
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/grafov/m3u8 v0.11.1
 	github.com/hibiken/asynq v0.24.1
 	github.com/karlseguin/ccache/v2 v2.0.8
@@ -23,6 +22,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
+	github.com/redis/go-redis/v9 v9.4.0
 	github.com/rubenv/sql-migrate v1.4.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/viper v1.15.0
@@ -108,7 +108,6 @@ require (
 	github.com/quic-go/qtls-go1-19 v0.2.1 // indirect
 	github.com/quic-go/qtls-go1-20 v0.1.1 // indirect
 	github.com/quic-go/quic-go v0.33.0 // indirect
-	github.com/redis/go-redis/v9 v9.4.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20220401102855-e56b59f40436 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect

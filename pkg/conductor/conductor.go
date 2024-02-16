@@ -12,12 +12,12 @@ import (
 	"github.com/lbryio/transcoder/pkg/conductor/tasks"
 	"github.com/lbryio/transcoder/pkg/logging"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
+	redis "github.com/redis/go-redis/v9"
 )
 
 type Conductor struct {
-	rdb            redis.UniversalClient
+	rdb            *redis.Client
 	asynqClient    *asynq.Client
 	asynqInspector *asynq.Inspector
 	library        *library.Library
@@ -49,7 +49,7 @@ func NewConductor(
 	c := &Conductor{
 		asynqClient:    asynq.NewClient(redisOpts),
 		asynqInspector: asynq.NewInspector(redisOpts),
-		rdb:            redisOpts.MakeRedisClient().(redis.UniversalClient),
+		rdb:            redisOpts.MakeRedisClient().(*redis.Client),
 		stopChan:       make(chan struct{}),
 		options:        options,
 		incoming:       incoming,
