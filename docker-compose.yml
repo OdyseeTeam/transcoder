@@ -52,7 +52,7 @@ services:
     ports:
       - '6379:6379'
     volumes:
-      - ./data/redis:/data
+      - ./docker-data/redis:/data
     command: >
       --requirepass odyredis --appendonly yes
     labels:
@@ -66,7 +66,7 @@ services:
     environment:
       POSTGRES_PASSWORD: odyseeteam
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./docker-data/postgres:/var/lib/postgresql/data
     command:
       - -clogging_collector=on
       - -clog_statement=all
@@ -84,7 +84,7 @@ services:
       - "38861:38861"
       - "41949:41949"
     volumes:
-      - ./data/minio:/data
+      - ./docker-data/minio:/data
     environment:
       MINIO_ROOT_USER: ody
       MINIO_ROOT_PASSWORD: odyseetes3
@@ -92,7 +92,7 @@ services:
   minio-prepare:
     image: minio/mc
     volumes:
-      - ./data/minio:/data
+      - ./docker-data/minio:/data
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;

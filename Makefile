@@ -25,13 +25,12 @@ test_down:
 	docker-compose down
 
 test_prepare:
-	mkdir -p data/postgres
 	docker-compose up -d minio db redis
 	docker-compose up -d cworker conductor
 	docker-compose up minio-prepare
 
 test: test_prepare
-	go test -covermode=count -coverprofile=coverage.out ./...
+	go test -exclude="docker-data" -covermode=count -coverprofile=coverage.out ./...
 
 towerz:
 	docker run --rm -v "$(PWD)":/usr/src/transcoder -w /usr/src/transcoder --platform linux/amd64 golang:1.16.10 make tower
