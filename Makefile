@@ -25,6 +25,7 @@ test_down:
 	docker-compose down
 
 test_prepare:
+	mkdir data
 	docker-compose up -d minio db redis
 	docker-compose up -d cworker conductor
 	docker-compose up minio-prepare
