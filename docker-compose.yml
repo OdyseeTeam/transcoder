@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   conductor:
-    image: odyseeteam/transcoder-conductor:24.2.2
+    image: odyseeteam/transcoder-conductor:24.2.3
     platform: linux/amd64
     container_name: tc-conductor
     command:
@@ -26,7 +26,7 @@ services:
         max_attempts: 3
         window: 120s
   cworker:
-    image: odyseeteam/transcoder-cworker:24.2.2
+    image: odyseeteam/transcoder-cworker:24.2.3
     platform: linux/amd64
     container_name: tc-cworker
     command:

@@ -53,7 +53,7 @@ var streamFragmentCases = []struct {
 	{"v0_s000000.ts", 2_000_000},
 	{"v1_s000000.ts", 760_000},
 	{"v2_s000000.ts", 300_000},
-	{"v3_s000000.ts", 100_000},
+	{"v3_s000000.ts", 120_000},
 }
 
 func TestClientSuite(t *testing.T) {

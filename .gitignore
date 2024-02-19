@@ -2,4 +2,4 @@
 coverage.*
 *.sqlite*
 ./transcoder
-./data
+data/
