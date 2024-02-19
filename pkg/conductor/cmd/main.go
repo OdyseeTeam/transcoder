@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/internal/version"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/library"
 	ldb "github.com/lbryio/transcoder/library/db"
@@ -31,7 +32,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"go.etcd.io/etcd/api/v3/version"
 	"go.uber.org/zap"
 )
 

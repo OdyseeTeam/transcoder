@@ -67,6 +67,10 @@ func ResolveStream(uri string) (*ResolvedStream, error) {
 		return nil, err
 	}
 
+	if claim.ShortURL == "" {
+		return nil, ErrClaimNotFound
+	}
+
 	if claim.SigningChannel == nil {
 		return nil, ErrNoSigningChannel
 	}

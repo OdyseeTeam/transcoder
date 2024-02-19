@@ -75,7 +75,7 @@ func (s *clientSuite) TestPlayFragment() {
 	)
 
 	// Request stream and wait until it's available.
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	wait := time.NewTicker(1000 * time.Millisecond)
 Waiting:
 	for {

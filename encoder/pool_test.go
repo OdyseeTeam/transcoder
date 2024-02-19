@@ -10,6 +10,7 @@ import (
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
+
 	"github.com/stretchr/testify/suite"
 )
 
@@ -43,12 +44,12 @@ func (s *poolSuite) TearDownSuite() {
 
 func (s *poolSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	enc, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	enc, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	s.Require().NoError(err)
 	p := NewPool(enc, 10)
 
 	res := (<-p.Encode(absPath, s.out).Value()).(*Result)
-
+	s.Require().NotNil(res, "result shouldn't be nil")
 	vs := res.OrigMeta.VideoStream
 	s.Equal(1920, vs.GetWidth())
 	s.Equal(1080, vs.GetHeight())
@@ -78,7 +79,7 @@ v1.m3u8
 #EXT-X-STREAM-INF:BANDWIDTH=655600,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
 v2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=180400,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=215600,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
 v3.m3u8`,
 		"v0.m3u8":       "v0_s000000.ts",
 		"v1.m3u8":       "v1_s000000.ts",

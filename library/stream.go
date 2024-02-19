@@ -14,8 +14,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/lbryio/transcoder/ladder"
-
 	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -57,8 +55,8 @@ type Manifest struct {
 	Size     int64  `yaml:",omitempty"`
 	Checksum string `yaml:",omitempty"`
 
-	Ladder ladder.Ladder `yaml:",omitempty"`
-	Files  []string      `yaml:",omitempty"`
+	FfmpegArgs string   `yaml:"ffmpeg_args,omitempty"`
+	Files      []string `yaml:",omitempty"`
 }
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error

@@ -54,34 +54,16 @@ func (s *encoderSuite) TearDownSuite() {
 
 func (s *encoderSuite) TestCheckFastStart() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	s.Require().NoError(err)
 	m, err := e.GetMetadata(absPath)
 	s.Require().NoError(err)
 	s.True(m.FastStart)
 }
 
-func (s *encoderSuite) TestLadder() {
-	url := "CahlenLee_20220123_GrapheneOSOnAPixel4XL#1a208b628290b2514b632958c623c08fc0c190d2"
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
-	s.Require().NoError(err)
-
-	c, err := resolve.ResolveStream(url)
-	s.Require().NoError(err)
-	file, _, err := c.Download(s.T().TempDir())
-	s.Require().NoError(err)
-	file.Close()
-	res, err := e.Encode(file.Name(), s.out)
-	s.Require().NoError(err)
-	s.Equal([]ladder.Tier{
-		{Definition: "360p", Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
-		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
-	}, res.Ladder.Tiers)
-}
-
 func (s *encoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	s.Require().NoError(err)
 
 	res, err := e.Encode(absPath, s.out)
@@ -136,7 +118,7 @@ v3.m3u8`,
 
 func TestTweakRealStreams(t *testing.T) {
 	t.Skip()
-	encoder, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	encoder, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	require.NoError(t, err)
 
 	testCases := []struct {

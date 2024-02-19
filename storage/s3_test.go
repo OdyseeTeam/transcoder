@@ -115,8 +115,8 @@ func setupS3(ctx context.Context) (*s3Container, error) {
 		ExposedPorts: []string{"9000/tcp"},
 		WaitingFor:   wait.ForHTTP("/minio/health/ready").WithPort(p),
 		Env: map[string]string{
-			"MINIO_ACCESS_KEY": minioAccessKey,
-			"MINIO_SECRET_KEY": minioSecretKey,
+			"MINIO_ROOT_USER":     minioAccessKey,
+			"MINIO_ROOT_PASSWORD": minioSecretKey,
 		},
 		Entrypoint: []string{"sh"},
 		Cmd:        []string{"-c", fmt.Sprintf("mkdir -p /data/%s && /usr/bin/minio server /data", "")},
@@ -141,11 +141,6 @@ func setupS3(ctx context.Context) (*s3Container, error) {
 	container.FollowOutput(&g)
 
 	err = container.Start(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	err = container.StopLogProducer()
 	if err != nil {
 		return nil, err
 	}

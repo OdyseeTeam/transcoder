@@ -186,7 +186,7 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 			}
 		}
 
-		time.Sleep(10 * time.Second)
+		time.Sleep(5 * time.Second)
 		// This is removed twice to not wait for upload to finish before freeing up disk space
 		os.RemoveAll(origFile)
 
@@ -204,7 +204,8 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 			errMtr.WithLabelValues(metrics.StageMetadataFill).Inc()
 			return fmt.Errorf("failed to fill manifest: %w", err)
 		}
-		stream.Manifest.Ladder = res.Ladder
+
+		stream.Manifest.FfmpegArgs = res.Ladder.String()
 		metrics.OutputBytes.Add(float64(stream.Size()))
 		metrics.TranscodedCount.Inc()
 		d, _ := strconv.ParseFloat(res.OrigMeta.FMeta.GetFormat().GetDuration(), 64)

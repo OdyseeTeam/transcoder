@@ -3,6 +3,7 @@ package manager
 import (
 	"math/rand"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Pallinder/go-randomdata"
@@ -125,7 +126,7 @@ func (s *managerSuite) TestVideo() {
 	expectedUrls := []string{urlsPriority[0], urlsEnabled[0], urlsLevel5[0], urlsNotEnabled[0], urlsEnabled[1]}
 	receivedUrls := []string{}
 	for r := range mgr.Requests() {
-		receivedUrls = append(receivedUrls, r.URI)
+		receivedUrls = append(receivedUrls, strings.TrimPrefix(r.URI, "lbry://"))
 		if len(receivedUrls) == len(expectedUrls) {
 			mgr.pool.Stop()
 			break

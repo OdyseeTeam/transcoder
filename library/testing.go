@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/library/db"
 	"github.com/lbryio/transcoder/pkg/migrator"
 
@@ -120,7 +119,6 @@ func GenerateDummyStream() *Stream {
 			SDHash:       randomdata.Alphanumeric(96),
 			TranscodedAt: time.Now(),
 			Size:         int64(randomdata.Number(10000, 5000000)),
-			Ladder:       ladder.Default,
 		},
 	}
 	s.Manifest.TID = s.generateTID()

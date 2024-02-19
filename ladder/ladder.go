@@ -3,6 +3,7 @@ package ladder
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/shopspring/decimal"
 	yaml "gopkg.in/yaml.v3"
@@ -92,6 +93,10 @@ func (x Ladder) ArgumentSet(out string) *ArgumentSet {
 		Ladder:    x,
 		Metadata:  x.Metadata,
 	}
+}
+
+func (x Ladder) String() string {
+	return strings.Join(x.ArgumentSet("...").GetStrArguments(), " ")
 }
 
 func nsRate(w, h int) int {

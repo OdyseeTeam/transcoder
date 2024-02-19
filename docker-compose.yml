@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   conductor:
-    image: odyseeteam/transcoder-conductor:24.2.1
+    image: odyseeteam/transcoder-conductor:24.2.2
     platform: linux/amd64
     container_name: tc-conductor
     command:
@@ -26,7 +26,7 @@ services:
         max_attempts: 3
         window: 120s
   cworker:
-    image: odyseeteam/transcoder-cworker:24.2.1
+    image: odyseeteam/transcoder-cworker:24.2.2
     platform: linux/amd64
     container_name: tc-cworker
     command:
@@ -52,7 +52,7 @@ services:
     ports:
       - '6379:6379'
     volumes:
-      - redis-data:/data
+      - ./data/redis:/data
     command: >
       --requirepass odyredis --appendonly yes
     labels:
@@ -66,7 +66,7 @@ services:
     environment:
       POSTGRES_PASSWORD: odyseeteam
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     command:
       - -clogging_collector=on
       - -clog_statement=all
@@ -84,7 +84,7 @@ services:
       - "38861:38861"
       - "41949:41949"
     volumes:
-      - minio-data:/data
+      - ./data/minio:/data
     environment:
       MINIO_ROOT_USER: ody
       MINIO_ROOT_PASSWORD: odyseetes3
@@ -92,7 +92,7 @@ services:
   minio-prepare:
     image: minio/mc
     volumes:
-      - minio-data:/data
+      - ./data/minio:/data
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
@@ -102,9 +102,3 @@ services:
       exit 0;
       "
     depends_on: ["minio"]
-
-volumes:
-  tower-data: {}
-  db-data: {}
-  minio-data: {}
-  redis-data: {}
