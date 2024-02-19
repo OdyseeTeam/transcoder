@@ -15,7 +15,7 @@ services:
       - "8080:8080"
     # build:
     #   context: .
-    #   dockerfile: Dockerfile-tower
+    #   dockerfile: docker/Dockerfile-tower
     depends_on:
       - redis
       - db
@@ -35,7 +35,7 @@ services:
       - --blob-server=blobcache-eu.lbry.com
     # build:
     #   context: .
-    #   dockerfile: Dockerfile-worker
+    #   dockerfile: docker/Dockerfile-worker
     depends_on: ["redis"]
     volumes:
       - ${PWD}/worker.ex.yml:/app/worker.yml
@@ -52,7 +52,7 @@ services:
     ports:
       - '6379:6379'
     volumes:
-      - ./docker-data/redis:/data
+      - redis-data:/data
     command: >
       --requirepass odyredis --appendonly yes
     labels:
@@ -66,7 +66,7 @@ services:
     environment:
       POSTGRES_PASSWORD: odyseeteam
     volumes:
-      - ./docker-data/postgres:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql/data
     command:
       - -clogging_collector=on
       - -clog_statement=all
@@ -84,7 +84,7 @@ services:
       - "38861:38861"
       - "41949:41949"
     volumes:
-      - ./docker-data/minio:/data
+      - minio-data:/data
     environment:
       MINIO_ROOT_USER: ody
       MINIO_ROOT_PASSWORD: odyseetes3
@@ -92,7 +92,7 @@ services:
   minio-prepare:
     image: minio/mc
     volumes:
-      - ./docker-data/minio:/data
+      - minio-data:/data
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
@@ -102,3 +102,9 @@ services:
       exit 0;
       "
     depends_on: ["minio"]
+
+volumes:
+
+  db-data:
+  minio-data:
+  redis-data:

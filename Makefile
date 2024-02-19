@@ -16,10 +16,10 @@ transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	  ./pkg/conductor/cmd/
 
 conductor_image:
-	docker buildx build -f Dockerfile-conductor -t odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) --platform linux/amd64 .
+	docker buildx build -f docker/Dockerfile-conductor -t odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) --platform linux/amd64 .
 
 cworker_image:
-	docker buildx build -f Dockerfile-cworker -t odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) --platform linux/amd64 .
+	docker buildx build -f docker/Dockerfile-cworker -t odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) --platform linux/amd64 .
 
 test_down:
 	docker-compose down
@@ -30,7 +30,7 @@ test_prepare:
 	docker-compose up minio-prepare
 
 test: test_prepare
-	go test -exclude="docker-data" -covermode=count -coverprofile=coverage.out ./...
+	go test -covermode=count -coverprofile=coverage.out ./...
 
 towerz:
 	docker run --rm -v "$(PWD)":/usr/src/transcoder -w /usr/src/transcoder --platform linux/amd64 golang:1.16.10 make tower
