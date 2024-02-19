@@ -30,13 +30,13 @@ func NewSpriteGenerator(cmdPath string, log logging.KVLogger) (*SpriteGenerator,
 }
 
 func (g SpriteGenerator) Generate(input, output string) error {
-	args := append(g.args, "--input", input)
-	args = append(args, "--outputFolder", output)
+	args := g.args
+	args = append(args, "--input", input, "--outputFolder", output)
 	g.log.Info("starting spritegen",
 		"cmd", g.cmdPath,
 		"args", strings.Join(args, " "),
 	)
-	_, err := exec.Command(g.cmdPath, args...).Output()
+	_, err := exec.Command(g.cmdPath, args...).Output() // #nosec G204
 	if err != nil {
 		return err
 	}

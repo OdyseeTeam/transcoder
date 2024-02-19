@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/lbryio/transcoder/encoder"
+	"github.com/lbryio/transcoder/internal/version"
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/library"
 	ldb "github.com/lbryio/transcoder/library/db"
@@ -23,7 +24,6 @@ import (
 	"github.com/lbryio/transcoder/pkg/migrator"
 	"github.com/lbryio/transcoder/pkg/resolve"
 	"github.com/lbryio/transcoder/storage"
-	"github.com/lbryio/transcoder/tower/queue"
 
 	"github.com/alecthomas/kong"
 	"github.com/fasthttp/router"
@@ -32,14 +32,13 @@ import (
 	"github.com/spf13/viper"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
-	"go.etcd.io/etcd/api/v3/version"
 	"go.uber.org/zap"
 )
 
 var logger *zap.Logger
 
 var CLI struct {
-	queue.MigratorCLI
+	migrator.CLI
 	Conductor struct {
 		HttpBind string `optional:"" help:"Address for HTTP server to listen on" default:"0.0.0.0:8080"`
 	} `cmd:"" help:"Start conductor server"`

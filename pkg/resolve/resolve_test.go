@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testStreamURL = "@specialoperationstest#3/fear-of-death-inspirational#a"
+
 func TestTranscodingRequestResolve(t *testing.T) {
-	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := Resolve(url)
+	c, err := Resolve(testStreamURL)
 	require.NoError(t, err)
 	assert.Equal(t, "fear-of-death-inspirational", c.NormalizedName)
 }
@@ -34,19 +35,17 @@ func TestTranscodingRequestResolveClaimID2(t *testing.T) {
 func TestTranscodingRequestResolveFailure(t *testing.T) {
 	lbrytvClientOrig := lbrytvClient
 	lbrytvClient = ljsonrpc.NewClient("http://localhost:2/")
-	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
-	_, err := Resolve(url)
+	_, err := Resolve(testStreamURL)
 	require.ErrorIs(t, err, ErrNetwork)
 	lbrytvClient = lbrytvClientOrig
 }
 
 func TestTranscodingRequestDownload(t *testing.T) {
 	dstPath := path.Join(os.TempDir(), "transcoder_test")
-	url := "@specialoperationstest#3/fear-of-death-inspirational#a"
-	c, err := Resolve(url)
+	c, err := Resolve(testStreamURL)
 	require.NoError(t, err)
 
-	r, err := ResolveStream(url)
+	r, err := ResolveStream(testStreamURL)
 	require.NoError(t, err)
 
 	assert.Equal(t, "395b0f23dcd07212c3e956b697ba5ba89578ca54", r.ChannelClaimID)

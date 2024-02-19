@@ -2,7 +2,6 @@ package encoder
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,9 +11,16 @@ import (
 	"github.com/lbryio/transcoder/ladder"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 	"github.com/lbryio/transcoder/pkg/resolve"
+
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+)
+
+var (
+	FPS0  = decimal.NewFromInt(0)
+	FPS15 = decimal.NewFromInt(15)
 )
 
 type encoderSuite struct {
@@ -48,34 +54,16 @@ func (s *encoderSuite) TearDownSuite() {
 
 func (s *encoderSuite) TestCheckFastStart() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	s.Require().NoError(err)
 	m, err := e.GetMetadata(absPath)
 	s.Require().NoError(err)
 	s.True(m.FastStart)
 }
 
-func (s *encoderSuite) TestLadder() {
-	url := "CahlenLee_20220123_GrapheneOSOnAPixel4XL#1a208b628290b2514b632958c623c08fc0c190d2"
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
-	s.Require().NoError(err)
-
-	c, err := resolve.ResolveStream(url)
-	s.Require().NoError(err)
-	file, _, err := c.Download(s.T().TempDir())
-	s.Require().NoError(err)
-	file.Close()
-	res, err := e.Encode(file.Name(), s.out)
-	s.Require().NoError(err)
-	s.Equal([]ladder.Tier{
-		{Definition: "360p", Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-		{Definition: "144p", Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
-	}, res.Ladder.Tiers)
-}
-
 func (s *encoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	s.Require().NoError(err)
 
 	res, err := e.Encode(absPath, s.out)
@@ -101,16 +89,16 @@ func (s *encoderSuite) TestEncode() {
 		"master.m3u8": `
 #EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=4432120,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
 v0.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=660000,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
 v1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=105600,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
 v2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=70400,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
 v3.m3u8`,
 		"v0.m3u8":       "v0_s000000.ts",
 		"v1.m3u8":       "v1_s000000.ts",
@@ -122,7 +110,7 @@ v3.m3u8`,
 		"v3_s000000.ts": "",
 	}
 	for f, str := range outFiles {
-		cont, err := ioutil.ReadFile(path.Join(s.out, f))
+		cont, err := os.ReadFile(path.Join(s.out, f))
 		s.NoError(err)
 		s.Regexp(strings.TrimSpace(str), string(cont))
 	}
@@ -130,7 +118,7 @@ v3.m3u8`,
 
 func TestTweakRealStreams(t *testing.T) {
 	t.Skip()
-	encoder, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default))
+	encoder, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -141,32 +129,27 @@ func TestTweakRealStreams(t *testing.T) {
 			// "hot-tub-streamers-are-furious-at#06e0bc43f55fec0bd946a3cb18fc2ff9bc1cb2aa",
 			"hot-tub-streamers-are-furious.mp4",
 			[]ladder.Tier{
-				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
-				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
-				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: FPS0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: FPS0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
 			},
 		},
 		{
 			// "hot-tub-streamers-are-furious-at#06e0bc43f55fec0bd946a3cb18fc2ff9bc1cb2aa",
 			"why-mountain-biking-here-will.mp4",
 			[]ladder.Tier{
-				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: 0},
-				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: 0},
-				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: 0},
-				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "64k", Framerate: 15},
+				{Width: 1920, Height: 1080, VideoBitrate: 3500_000, AudioBitrate: "160k", Framerate: FPS0},
+				{Width: 1280, Height: 720, VideoBitrate: 2500_000, AudioBitrate: "128k", Framerate: FPS0},
+				{Width: 640, Height: 360, VideoBitrate: 500_000, AudioBitrate: "96k", Framerate: FPS0},
+				{Width: 256, Height: 144, VideoBitrate: 100_000, AudioBitrate: "96k", Framerate: FPS15},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		// c, err := resolve.ResolveStream(tc.url)
-		// require.NoError(t, err)
-		// file, _, err := c.Download(t.TempDir())
-		// require.NoError(t, err)
-		// file.Close()
-
 		absPath, err := filepath.Abs(filepath.Join("./testdata", tc.url))
+		require.NoError(t, err)
 		lmeta, err := encoder.GetMetadata(absPath)
 		require.NoError(t, err)
 

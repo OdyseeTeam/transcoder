@@ -3,6 +3,8 @@ package ladder
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -21,7 +23,7 @@ type ArgumentSet struct {
 	Output    string
 	Ladder    Ladder
 	Arguments map[string]string
-	Meta      *Metadata
+	Metadata  *Metadata
 }
 
 var hlsDefaultArguments = map[string]string{
@@ -42,7 +44,7 @@ var hlsDefaultArguments = map[string]string{
 	"hls_segment_filename": "v%v_s%06d.ts",
 }
 
-// GetStrArguments serializes ffmpeg arguments in a format sutable for ffmpeg.Transcoder.Start.
+// GetStrArguments serializes ffmpeg arguments in a format sutable for `ffmpeg.Transcoder.Start“.
 func (a *ArgumentSet) GetStrArguments() []string {
 	strArgs := []string{}
 
@@ -66,12 +68,19 @@ func (a *ArgumentSet) GetStrArguments() []string {
 			"-bufsize:v:"+s, vRate,
 		)
 
-		if tier.Framerate != 0 {
-			ladArgs = append(ladArgs, "-r:v:"+s, strconv.Itoa(tier.Framerate), "-g:v:"+s, strconv.Itoa(tier.Framerate*2))
-		} else {
-			ladArgs = append(ladArgs, "-g:v:"+s, strconv.Itoa(a.Meta.IntFPS*2))
+		switch {
+		case tier.KeepFramerate:
+			ladArgs = append(ladArgs,
+				"-g:v:"+s, strconv.Itoa(a.Metadata.FPS.Int()*2)) // nolint:goconst
+		case !tier.Framerate.IsZero():
+			ladArgs = append(ladArgs,
+				"-r:v:"+s, tier.Framerate.String(),
+				"-g:v:"+s, (tier.Framerate.Mul(decimal.NewFromInt(2)).String())) // nolint:goconst
+		default:
+			ladArgs = append(ladArgs,
+				"-r:v:"+s, a.Metadata.FPS.String(),
+				"-g:v:"+s, strconv.Itoa(a.Metadata.FPS.Int()*2)) // nolint:goconst
 		}
-
 		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
 	}
 

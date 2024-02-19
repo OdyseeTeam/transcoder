@@ -64,7 +64,6 @@ func (s *DummyStorage) GetURL(tid string) string {
 }
 
 func (s *maintenanceSuite) SetupTest() {
-	rand.Seed(time.Now().UnixNano())
 	s.Require().NoError(s.SetupLibraryDB())
 }
 
@@ -98,7 +97,7 @@ func TestMaintenanceSuite(t *testing.T) {
 	suite.Run(t, new(maintenanceSuite))
 }
 
-func (s maintenanceSuite) TestRetireVideos() {
+func (s *maintenanceSuite) TestRetireVideos() {
 	var totalSize, sizeToKeep, sizeRemote uint64
 	var initialCount, afterCount int64
 
@@ -124,7 +123,7 @@ func (s maintenanceSuite) TestRetireVideos() {
 			context.Background(),
 			"UPDATE videos SET accessed_at = $2 where tid = $1",
 			stream.TID(),
-			time.Now().AddDate(0, 0, -rand.Intn(30)),
+			time.Now().AddDate(0, 0, -rand.Intn(30)), // #nosec G404
 		)
 		s.Require().NoError(err)
 	}
@@ -137,7 +136,7 @@ func (s maintenanceSuite) TestRetireVideos() {
 	err = r.Scan(&initialCount)
 	s.Require().NoError(err)
 
-	sizeToKeep = uint64(rand.Int63n(1000000 * 50))
+	sizeToKeep = uint64(rand.Int63n(1000000 * 50)) // #nosec G404
 	totalSizeAfterRetire, retiredSize, err := lib.RetireVideos("storage1", sizeToKeep)
 	s.NoError(err)
 	s.Equal(totalSize, totalSizeAfterRetire)

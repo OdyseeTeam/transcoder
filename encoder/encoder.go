@@ -75,12 +75,12 @@ func NewEncoder(cfg *Configuration) (Encoder, error) {
 	}
 
 	var cmd *exec.Cmd
-	cmd = exec.Command(cfg.ffmpegPath, "-h")
+	cmd = exec.Command(cfg.ffmpegPath, "-h") // #nosec G204
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("unable to execute ffmpeg: %w", err)
 	}
 
-	cmd = exec.Command(cfg.ffprobePath, "-h")
+	cmd = exec.Command(cfg.ffprobePath, "-h") // #nosec G204
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("unable to execute ffprobe: %w", err)
 	}
@@ -171,15 +171,16 @@ func (e encoder) Encode(input, output string) (*Result, error) {
 		}
 	}
 
-	args := targetLadder.ArgumentSet(output, meta)
+	args := targetLadder.ArgumentSet(output)
 	vs := meta.VideoStream
 	ll.Info(
 		"starting transcoding",
 		"args", strings.Join(args.GetStrArguments(), " "),
-		"media_duration", meta.FMeta.GetFormat().GetDuration(),
-		"media_bitrate", meta.FMeta.GetFormat().GetBitRate(),
-		"media_width", vs.GetWidth(),
-		"media_height", vs.GetHeight(),
+		"duration", meta.FMeta.GetFormat().GetDuration(),
+		"bitrate", meta.FMeta.GetFormat().GetBitRate(),
+		"framerate", fmt.Sprintf("%.4f[%s]", meta.FPS.Float, meta.FPS.String()),
+		"width", vs.GetWidth(),
+		"height", vs.GetHeight(),
 	)
 
 	dur, _ := strconv.ParseFloat(meta.FMeta.GetFormat().GetDuration(), 64)
@@ -214,7 +215,7 @@ func (e encoder) GetMetadata(input string) (*ladder.Metadata, error) {
 
 	args := []string{"-i", input, "-print_format", "json", "-show_format", "-show_streams", "-show_error"}
 
-	cmd := exec.Command(e.ffprobePath, args...)
+	cmd := exec.Command(e.ffprobePath, args...) // #nosec G204
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 
@@ -241,7 +242,7 @@ func (e encoder) GetMetadata(input string) (*ladder.Metadata, error) {
 }
 
 func (e encoder) checkFastStart(input string) (bool, error) {
-	cmd := exec.Command(e.ffmpegPath, "-v", "trace", "-i", input)
+	cmd := exec.Command(e.ffmpegPath, "-v", "trace", "-i", input) // #nosec G204
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

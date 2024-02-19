@@ -7,9 +7,6 @@ import (
 )
 
 var (
-	loggers     = map[string]*zap.SugaredLogger{}
-	environment = EnvDebug
-
 	EnvDebug = "debug"
 	EnvProd  = "prod"
 )

@@ -3,7 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Pallinder/go-randomdata"
+	randomdata "github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
 
@@ -21,6 +21,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
+)
+
+const (
+	adminChannel = "@specialoperationstest:3"
 )
 
 type httpSuite struct {
@@ -88,21 +92,21 @@ func (s *httpSuite) TestAdmin() {
 		exURL, exClaimID, exResponse string
 	}{
 		{
-			data:        url.Values{AdminChannelField: {"@specialoperationstest:3"}},
-			tokenHeader: "Bearer " + token,
+			data:        url.Values{AdminChannelField: []string{adminChannel}},
+			tokenHeader: AuthTokenPrefix + token,
 			statusCode:  http.StatusCreated,
 			exURL:       "lbry://@specialoperationstest#3",
 			exClaimID:   "395b0f23dcd07212c3e956b697ba5ba89578ca54",
 		},
 		{
-			data:        url.Values{AdminChannelField: {"@specialoperationstest:3"}},
-			tokenHeader: "Bearer " + token,
+			data:        url.Values{AdminChannelField: []string{adminChannel}},
+			tokenHeader: AuthTokenPrefix + token,
 			statusCode:  http.StatusBadRequest,
 			exResponse:  `.+duplicate key value violates unique constraint.+`,
 		},
 		{
-			data:        url.Values{AdminChannelField: {randomdata.Alphanumeric(25)}},
-			tokenHeader: "Bearer " + token,
+			data:        url.Values{AdminChannelField: []string{randomdata.Alphanumeric(25)}},
+			tokenHeader: AuthTokenPrefix + token,
 			statusCode:  http.StatusBadRequest,
 			exResponse:  `channel not found`,
 		},
@@ -118,7 +122,7 @@ func (s *httpSuite) TestAdmin() {
 			resp, err := client.Do(req)
 			s.Require().NoError(err)
 
-			rbody, err := ioutil.ReadAll(resp.Body)
+			rbody, err := io.ReadAll(resp.Body)
 			s.Require().NoError(err)
 			s.Require().Equal(c.statusCode, resp.StatusCode, string(rbody))
 			if c.exResponse != "" {

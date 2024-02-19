@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var logger = logging.Create("encoder", logging.Dev)
+var logger = logging.Create("encoder", logging.Dev) // nolint:unused
 
 func SetLogger(l *zap.SugaredLogger) {
 	logger = l

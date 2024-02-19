@@ -3,8 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/library"
 	"github.com/lbryio/transcoder/pkg/resolve"
 
@@ -53,7 +53,7 @@ var streamFragmentCases = []struct {
 	{"v0_s000000.ts", 2_000_000},
 	{"v1_s000000.ts", 760_000},
 	{"v2_s000000.ts", 300_000},
-	{"v3_s000000.ts", 100_000},
+	{"v3_s000000.ts", 120_000},
 }
 
 func TestClientSuite(t *testing.T) {
@@ -75,8 +75,8 @@ func (s *clientSuite) TestPlayFragment() {
 	)
 
 	// Request stream and wait until it's available.
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	wait := time.NewTicker(500 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	wait := time.NewTicker(1000 * time.Millisecond)
 Waiting:
 	for {
 		select {
@@ -102,7 +102,7 @@ Waiting:
 			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
-			rbody, err := ioutil.ReadAll(rr.Result().Body)
+			rbody, err := io.ReadAll(rr.Result().Body)
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
@@ -111,7 +111,7 @@ Waiting:
 			} else {
 				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
-				tbody, err := ioutil.ReadFile(absPath)
+				tbody, err := os.ReadFile(absPath)
 				s.Require().NoError(err)
 				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
 			}
@@ -124,11 +124,12 @@ Waiting:
 			s.Equal("GET, OPTIONS", rr.Result().Header.Get("Access-Control-Allow-Methods"))
 			s.Equal("*", rr.Result().Header.Get("Access-Control-Allow-Origin"))
 
-			if strings.HasSuffix(tc.name, ".m3u8") {
+			switch {
+			case strings.HasSuffix(tc.name, ".m3u8"):
 				s.Equal("application/x-mpegurl", rr.Result().Header.Get("content-type"))
-			} else if strings.HasSuffix(tc.name, ".ts") {
+			case strings.HasSuffix(tc.name, ".ts"):
 				s.Equal("video/mp2t", rr.Result().Header.Get("content-type"))
-			} else if strings.HasSuffix(tc.name, ".png") {
+			case strings.HasSuffix(tc.name, ".png"):
 				s.Equal("image/png", rr.Result().Header.Get("content-type"))
 			}
 		})
@@ -182,7 +183,7 @@ Waiting:
 		})
 	}
 
-	c.remoteServer = "http://localhost:63333"
+	c.remoteServer = "http://localhost:13131"
 	c.cache.Clear()
 
 	for _, tc := range streamFragmentCases {
@@ -202,7 +203,7 @@ func (s *clientSuite) TestRestoreCache() {
 
 	cvDirs := []string{}
 	for range [10]int{} {
-		sdHash := randomString(96)
+		sdHash := randomdata.Alphanumeric(96)
 		library.PopulateHLSPlaylist(s.T(), dstPath, sdHash)
 		cvDirs = append(cvDirs, sdHash)
 	}
@@ -267,14 +268,4 @@ func (s *clientSuite) Test_getFragmentURL() {
 		"master.m3u8")
 	s.Require().NoError(err)
 	s.Equal("https://cache-us.transcoder.odysee.com/sdhash/master.m3u8?origin=storage1", u)
-}
-
-func randomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
-	}
-	return string(b)
 }

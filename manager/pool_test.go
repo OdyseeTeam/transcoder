@@ -1,9 +1,7 @@
 package manager
 
 import (
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/lbryio/transcoder/pkg/logging"
@@ -26,7 +24,6 @@ func TestPoolSuite(t *testing.T) {
 
 func (s *poolSuite) TestPool() {
 	sampleSize := 200
-	rand.Seed(time.Now().UnixNano())
 	mfr.SetLogger(logging.Create("mfr", logging.Prod))
 
 	var p1, p2, p3 int

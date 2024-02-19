@@ -2,23 +2,20 @@ version: '3.7'
 
 services:
   conductor:
-    image: odyseeteam/transcoder-conductor:dev
-    container_name: conductor
+    image: odyseeteam/transcoder-conductor:24.2.3
+    platform: linux/amd64
+    container_name: tc-conductor
     command:
       - ./transcoder
       - conductor
       - --debug
-      # - --rmq-addr=amqp://guest:guest@rabbitmq/
-      # - --http-url=http://tower:8080
-      # - --dev-mode
-      # - --state-file=/storage/state.json
     volumes:
       - ${PWD}/conductor.ex.yml:/app/conductor.yml
     ports:
       - "8080:8080"
     # build:
     #   context: .
-    #   dockerfile: Dockerfile-tower
+    #   dockerfile: docker/Dockerfile-tower
     depends_on:
       - redis
       - db
@@ -29,14 +26,16 @@ services:
         max_attempts: 3
         window: 120s
   cworker:
-    image: odyseeteam/transcoder-cworker:dev
-    container_name: cworker
+    image: odyseeteam/transcoder-cworker:24.2.3
+    platform: linux/amd64
+    container_name: tc-cworker
     command:
       - ./transcoder
       - worker
+      - --blob-server=blobcache-eu.lbry.com
     # build:
     #   context: .
-    #   dockerfile: Dockerfile-worker
+    #   dockerfile: docker/Dockerfile-worker
     depends_on: ["redis"]
     volumes:
       - ${PWD}/worker.ex.yml:/app/worker.yml
@@ -49,7 +48,7 @@ services:
   #     - '9090:8080'
   redis:
     image: redis:7.0
-    container_name: redis
+    container_name: tc-redis
     ports:
       - '6379:6379'
     volumes:
@@ -61,7 +60,7 @@ services:
     restart: unless-stopped
   db:
     image: postgres:14
-    container_name: db
+    container_name: tc-db
     ports:
       - "5432:5432"
     environment:
@@ -79,7 +78,7 @@ services:
       retries: 5
   minio:
     image: minio/minio
-    container_name: minio
+    container_name: tc-minio
     ports:
       - "9000:9000"
       - "38861:38861"
@@ -87,8 +86,8 @@ services:
     volumes:
       - minio-data:/data
     environment:
-      MINIO_ACCESS_KEY: ody
-      MINIO_SECRET_KEY: odyseetes3
+      MINIO_ROOT_USER: ody
+      MINIO_ROOT_PASSWORD: odyseetes3
     command: server --address 0.0.0.0:9000 /data
   minio-prepare:
     image: minio/mc
@@ -98,13 +97,14 @@ services:
       /bin/sh -c "
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
       /usr/bin/mc mb myminio/transcoded;
-      /usr/bin/mc policy set download myminio/transcoded;
+      /usr/bin/mc anonymous set download myminio/transcoded;
+      /usr/bin/mc anonymous set public myminio/transcoded;
       exit 0;
       "
     depends_on: ["minio"]
 
 volumes:
-  tower-data: {}
-  db-data: {}
-  minio-data: {}
-  redis-data: {}
+
+  db-data:
+  minio-data:
+  redis-data:

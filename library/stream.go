@@ -1,7 +1,7 @@
 package library
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/ladder"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -56,8 +55,8 @@ type Manifest struct {
 	Size     int64  `yaml:",omitempty"`
 	Checksum string `yaml:",omitempty"`
 
-	Ladder ladder.Ladder `yaml:",omitempty"`
-	Files  []string      `yaml:",omitempty"`
+	FfmpegArgs string   `yaml:"ffmpeg_args,omitempty"`
+	Files      []string `yaml:",omitempty"`
 }
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
@@ -90,10 +89,9 @@ func InitStream(dir string, remoteStorage string) *Stream {
 }
 
 func (s *Stream) generateTID() string {
-	h := sha1.New()
+	h := sha256.New()
 	h.Write([]byte(s.SDHash()))
-	h.Write([]byte(s.Manifest.TranscodedAt.Format(tidTimestampFormat)))
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum([]byte(s.Manifest.TranscodedAt.Format(tidTimestampFormat))))
 }
 
 // GenerateManifest needs to be called for newly initialized (transcoded) streams.

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-FROM odyseeteam/transcoder-gensprite:latest AS spritegen
-FROM odyseeteam/transcoder-ffmpeg:latest AS ffmpeg
-FROM alpine:3.16
+FROM odyseeteam/transcoder-ffmpeg:6.1 AS ffmpeg
+FROM odyseeteam/transcoder-gensprite:22.10.0 AS spritegen
+FROM odyseeteam/transcoder-gensprite:22.10.0
 
 EXPOSE 8080
 
@@ -13,6 +13,5 @@ COPY --from=spritegen /usr/src/app /usr/src/spritegen
 WORKDIR /app
 
 COPY ./dist/linux_amd64/transcoder .
-# COPY ./transcoder.ex.yml ./transcoder.yml
 
 CMD ["./transcoder", "worker"]

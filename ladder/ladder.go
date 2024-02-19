@@ -3,30 +3,29 @@ package ladder
 import (
 	"math"
 	"strconv"
+	"strings"
 
-	"gopkg.in/yaml.v3"
-)
-
-const (
-	FPS30 = 30
-	FPS60 = 60
+	"github.com/shopspring/decimal"
+	yaml "gopkg.in/yaml.v3"
 )
 
 type Definition string
 
 type Ladder struct {
-	Args  map[string]string
-	Tiers []Tier `yaml:",flow"`
+	Args     map[string]string
+	Metadata *Metadata
+	Tiers    []Tier `yaml:",flow"`
 }
 
 type Tier struct {
 	Definition    Definition
 	Height        int
 	Width         int
-	VideoBitrate  int    `yaml:"bitrate"`
-	AudioBitrate  string `yaml:"audio_bitrate"`
-	Framerate     int    `yaml:",omitempty"`
-	BitrateCutoff int    `yaml:"bitrate_cutoff"`
+	VideoBitrate  int             `yaml:"bitrate"`
+	AudioBitrate  string          `yaml:"audio_bitrate"`
+	Framerate     decimal.Decimal `yaml:",omitempty"`
+	KeepFramerate bool            `yaml:"keep_framerate"`
+	BitrateCutoff int             `yaml:"bitrate_cutoff"`
 }
 
 func Load(yamlLadder []byte) (Ladder, error) {
@@ -35,17 +34,21 @@ func Load(yamlLadder []byte) (Ladder, error) {
 	return l, err
 }
 
-// Tweak modifies existing ladder according to supplied video metadata
-func (l Ladder) Tweak(meta *Metadata) (Ladder, error) {
-	vrate, _ := strconv.Atoi(meta.VideoStream.GetBitRate())
+// Tweak generates encoding parameters from the ladder for provided video metadata.
+func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
+	newLadder := Ladder{
+		Args:     x.Args,
+		Tiers:    []Tier{},
+		Metadata: md,
+	}
+	vrate, _ := strconv.Atoi(md.VideoStream.GetBitRate())
 	var vert, origResSeen bool
-	w := meta.VideoStream.GetWidth()
-	h := meta.VideoStream.GetHeight()
+	w := md.VideoStream.GetWidth()
+	h := md.VideoStream.GetHeight()
 	if h > w {
 		vert = true
 	}
-	tweakedTiers := []Tier{}
-	for _, t := range l.Tiers {
+	for _, t := range x.Tiers {
 		if t.BitrateCutoff >= vrate {
 			logger.Debugw("video bitrate lower than the cut-off", "bitrate", vrate, "cutoff", t.BitrateCutoff)
 			if t.Height == h {
@@ -63,24 +66,23 @@ func (l Ladder) Tweak(meta *Metadata) (Ladder, error) {
 		if t.Height == h {
 			origResSeen = true
 		}
-		tweakedTiers = append(tweakedTiers, t)
+		newLadder.Tiers = append(newLadder.Tiers, t)
 	}
 
-	if !origResSeen && l.Tiers[0].Height >= h && len(tweakedTiers) > 0 {
-		tweakedTiers = append([]Tier{{
+	if !origResSeen && x.Tiers[0].Height >= h && len(newLadder.Tiers) > 0 {
+		newLadder.Tiers = append([]Tier{{
 			Height:       h,
 			Width:        w,
 			VideoBitrate: nsRate(w, h),
 			AudioBitrate: "128k",
-		}}, tweakedTiers...)
+		}}, newLadder.Tiers...)
 	}
 
-	l.Tiers = tweakedTiers
-	logger.Debugw("ladder built", "tiers", l.Tiers)
-	return l, nil
+	logger.Debugw("ladder built", "tiers", newLadder.Tiers)
+	return newLadder, nil
 }
 
-func (l Ladder) ArgumentSet(out string, meta *Metadata) *ArgumentSet {
+func (x Ladder) ArgumentSet(out string) *ArgumentSet {
 	d := map[string]string{}
 	for k, v := range hlsDefaultArguments {
 		d[k] = v
@@ -88,9 +90,13 @@ func (l Ladder) ArgumentSet(out string, meta *Metadata) *ArgumentSet {
 	return &ArgumentSet{
 		Output:    out,
 		Arguments: d,
-		Ladder:    l,
-		Meta:      meta,
+		Ladder:    x,
+		Metadata:  x.Metadata,
 	}
+}
+
+func (x Ladder) String() string {
+	return strings.Join(x.ArgumentSet("...").GetStrArguments(), " ")
 }
 
 func nsRate(w, h int) int {

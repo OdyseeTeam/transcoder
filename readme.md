@@ -5,68 +5,42 @@
 
 ## Development
 
-Currently requires go 1.17 due to one of the subdependencies.
-
-```
-go install golang.org/dl/go1.17@latest
-go1.17 install
-```
-
-`sqlc` is used for model generation.
-
-```
-go install github.com/kyleconroy/sqlc/cmd/sqlc@latest
-```
+Currently requires go 1.20 due to the `quic` package subdependency.
 
 ## Building
 
-To build an x86-64 Linux binaries for tower (server part) and worker:
+To build the x86 Linux binary, which is used both for `conductor` (controller part) and `cworker` (transcoding worker part):
 
 ```
-make tower worker
+make transcoder
 ```
 
 #### Building docker images
 
 ```
-make tower_image_latest worker_image_latest
-```
-
-#### Prerequisites on MacOS
-
-To build for Linux on macos, you need to have musl toolchain installed. Using homebrew:
-
-```
-brew install filosottile/musl-cross/musl-cross
-```
-
-On ARM Macs:
-
-```
-brew install richard-vd/musl-cross/musl-cross
-brew install zstd
+make conductor_image cworker_image
 ```
 
 ## Versioning
 
-This project is using [SemVer](https://semver.org) YY.MM.MINOR[.MICRO].
+This project is using [SemVer](https://semver.org) YY.MM.MINOR[.MICRO] for `client` package and [CalVer](https://calver.org) YY.MM.MINOR for `transcoder` releases since February 2024:
+
+```
+git tag transcoder-v24.2.0
+```
 
 ## Contributing
 
-Please ensure that your code builds and automated tests run successfully before pushing your branch. You must `go fmt` your code before you commit it, or the build will fail.
-
+Please ensure that your code builds, passes `golanci-lint` and automated tests run successfully before pushing your branch.
 
 ## License
 
 This project is MIT licensed. For the full license, see [LICENSE](LICENSE).
 
-
 ## Security
 
 We take security seriously. Please contact security@odysee.com regarding any issues you may encounter.
 
-
 ## Contact
 
 The primary contact for this project is [@anbsky](https://github.com/anbsky) (andrey.beletsky@odysee.com).
-

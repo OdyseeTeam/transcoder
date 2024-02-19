@@ -26,9 +26,10 @@ type Worker interface {
 // Task represents a unit of work.
 // Each worker should accept it as an argument.
 // Example:
-//  func (w encoderWorker) Work(t dispatcher.Task) error {
-//		r := t.Payload.(*resolve.TranscodingRequest)
-//  ...
+//
+//	 func (w encoderWorker) Work(t dispatcher.Task) error {
+//			r := t.Payload.(*resolve.TranscodingRequest)
+//	 ...
 type Task struct {
 	Payload    interface{}
 	Dispatcher *Dispatcher

@@ -30,7 +30,6 @@ func (s *mfrSuite) SetupTest() {
 	now = func() time.Time { return time.Now().Add(-30 * time.Second) }
 
 	SetLogger(logging.Create("mfr", logging.Prod))
-	rand.Seed(time.Now().UnixNano())
 
 	q := NewQueue()
 
@@ -154,7 +153,7 @@ func randomString(n int) string {
 
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = letter[rand.Intn(len(letter))]
+		b[i] = letter[rand.Intn(len(letter))] // #nosec G404
 	}
 	return string(b)
 }

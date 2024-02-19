@@ -3,22 +3,26 @@ CXX=x86_64-linux-musl-g++
 GOARCH=amd64
 GOOS=linux
 LDFLAGS=-ldflags "-linkmode external -extldflags -static"
-GO_BUILD=go1.17 build
+GO_BUILD=go1.20 build
 BUILD_DIR=dist
 LOCAL_ARCH=$(shell uname)
 VERSION := $(shell git describe --tags --match 'v*'|sed -e 's/v//')
+TRANSCODER_VERSION ?= $(shell git describe --tags --match 'transcoder-v*'|sed 's/transcoder-v\([0-9.]*\).*/\1/')
 
 transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder \
-	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
+	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
 	  ./pkg/conductor/cmd/
 
 conductor_image:
-	docker buildx build -f Dockerfile-conductor -t odyseeteam/transcoder-conductor:dev --platform linux/amd64 .
+	docker buildx build -f docker/Dockerfile-conductor -t odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) --platform linux/amd64 .
 
 cworker_image:
-	docker buildx build -f Dockerfile-cworker -t odyseeteam/transcoder-cworker:dev --platform linux/amd64 .
+	docker buildx build -f docker/Dockerfile-cworker -t odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) --platform linux/amd64 .
+
+test_down:
+	docker-compose down
 
 test_prepare:
 	docker-compose up -d minio db redis
@@ -35,7 +39,7 @@ towerz:
 tccli:
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/tccli \
-	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(VERSION)" \
+	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
 	  ./tccli/
 
 tccli_mac:

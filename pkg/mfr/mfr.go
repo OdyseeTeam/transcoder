@@ -37,7 +37,7 @@ type Queue struct {
 	mu        sync.RWMutex
 }
 
-var now = func() time.Time { return time.Now() }
+var now = time.Now
 
 // NewQueue initializes an empty priority queue suitable for registering Hits right away.
 func NewQueue() *Queue {

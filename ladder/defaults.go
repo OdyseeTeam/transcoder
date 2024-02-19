@@ -31,7 +31,7 @@ tiers:
     width: 256
     height: 144
     bitrate: 100_000
-    audio_bitrate: 64k
+    audio_bitrate: 96k
     framerate: 15
 `)
 
