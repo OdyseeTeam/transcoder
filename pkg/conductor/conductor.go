@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lbryio/transcoder/library"
-	"github.com/lbryio/transcoder/manager"
-	"github.com/lbryio/transcoder/pkg/conductor/metrics"
-	"github.com/lbryio/transcoder/pkg/conductor/tasks"
-	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/library"
+	"github.com/odyseeteam/transcoder/manager"
+	"github.com/odyseeteam/transcoder/pkg/conductor/metrics"
+	"github.com/odyseeteam/transcoder/pkg/conductor/tasks"
+	"github.com/odyseeteam/transcoder/pkg/logging"
 
 	"github.com/hibiken/asynq"
 	redis "github.com/redis/go-redis/v9"

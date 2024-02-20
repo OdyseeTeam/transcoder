@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lbryio/transcoder/library/db"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/odyseeteam/transcoder/library/db"
+	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
 
 	"github.com/stretchr/testify/suite"
 )

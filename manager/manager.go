@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/lbryio/transcoder/library"
-	db "github.com/lbryio/transcoder/library/db"
-	"github.com/lbryio/transcoder/pkg/conductor/metrics"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
-	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/library"
+	db "github.com/odyseeteam/transcoder/library/db"
+	"github.com/odyseeteam/transcoder/pkg/conductor/metrics"
+	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
+	"github.com/odyseeteam/transcoder/pkg/mfr"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 

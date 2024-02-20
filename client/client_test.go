@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/lbryio/transcoder/library"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/library"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 
 	"github.com/karrick/godirwalk"
 	"github.com/stretchr/testify/suite"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/logging"
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lbryio/transcoder/ladder"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/ladder"
+	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 
 	"github.com/stretchr/testify/suite"
 )

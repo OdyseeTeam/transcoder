@@ -3,8 +3,8 @@ package retriever
 import (
 	"os"
 
-	"github.com/lbryio/transcoder/pkg/dispatcher"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/pkg/dispatcher"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 )
 
 type downloadTask struct {

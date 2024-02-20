@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/logging"
 )
 
 type SpriteGenerator struct {

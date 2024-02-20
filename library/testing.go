@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/lbryio/transcoder/library/db"
-	"github.com/lbryio/transcoder/pkg/migrator"
+	"github.com/odyseeteam/transcoder/library/db"
+	"github.com/odyseeteam/transcoder/pkg/migrator"
 
 	"github.com/stretchr/testify/require"
 )

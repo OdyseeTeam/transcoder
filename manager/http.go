@@ -6,12 +6,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/lbryio/transcoder/internal/metrics"
-	"github.com/lbryio/transcoder/library/db"
-	"github.com/lbryio/transcoder/pkg/dispatcher"
-	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/lbryio/transcoder/pkg/timer"
+	"github.com/odyseeteam/transcoder/internal/metrics"
+	"github.com/odyseeteam/transcoder/library/db"
+	"github.com/odyseeteam/transcoder/pkg/dispatcher"
+	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/pkg/timer"
 
 	"github.com/fasthttp/router"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
