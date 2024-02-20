@@ -4,8 +4,8 @@ import (
 	"container/ring"
 	"time"
 
-	"github.com/lbryio/transcoder/pkg/mfr"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/pkg/mfr"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

@@ -12,7 +12,7 @@ TRANSCODER_VERSION ?= $(shell git describe --tags --match 'transcoder-v*'|sed 's
 transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder \
-	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
+	  -ldflags "-s -w -X github.com/odyseeteam/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
 	  ./pkg/conductor/cmd/
 
 conductor_image:
@@ -39,7 +39,7 @@ towerz:
 tccli:
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/tccli \
-	  -ldflags "-s -w -X github.com/lbryio/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
+	  -ldflags "-s -w -X github.com/odyseeteam/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
 	  ./tccli/
 
 tccli_mac:

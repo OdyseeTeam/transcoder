@@ -6,7 +6,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/lbryio/transcoder/library"
+	"github.com/odyseeteam/transcoder/library"
 
 	randomdata "github.com/Pallinder/go-randomdata"
 	"github.com/aws/aws-sdk-go/aws/awserr"

@@ -1,4 +1,4 @@
-module github.com/lbryio/transcoder
+module github.com/odyseeteam/transcoder
 
 go 1.20
 

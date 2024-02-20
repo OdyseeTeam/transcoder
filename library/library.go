@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lbryio/transcoder/library/db"
-	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/library/db"
+	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/panjf2000/ants/v2"

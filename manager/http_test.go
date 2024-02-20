@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	randomdata "github.com/Pallinder/go-randomdata"
-	"github.com/lbryio/transcoder/library"
-	"github.com/lbryio/transcoder/pkg/logging/zapadapter"
+	"github.com/odyseeteam/transcoder/library"
+	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
 
 	"github.com/fasthttp/router"
 	"github.com/prometheus/client_golang/prometheus"

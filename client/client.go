@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lbryio/transcoder/library"
-	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/pkg/resolve"
-	"github.com/lbryio/transcoder/pkg/timer"
+	"github.com/odyseeteam/transcoder/library"
+	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/resolve"
+	"github.com/odyseeteam/transcoder/pkg/timer"
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"

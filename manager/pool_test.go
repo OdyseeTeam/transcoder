@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/lbryio/transcoder/pkg/logging"
-	"github.com/lbryio/transcoder/pkg/mfr"
+	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/pkg/mfr"
 
 	"github.com/stretchr/testify/suite"
 )

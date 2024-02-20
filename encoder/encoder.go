@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/karrick/godirwalk"
-	"github.com/lbryio/transcoder/internal/metrics"
-	"github.com/lbryio/transcoder/ladder"
-	"github.com/lbryio/transcoder/pkg/logging"
+	"github.com/odyseeteam/transcoder/internal/metrics"
+	"github.com/odyseeteam/transcoder/ladder"
+	"github.com/odyseeteam/transcoder/pkg/logging"
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
