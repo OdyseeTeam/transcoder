@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/odyseeteam/transcoder/encoder"
+	"github.com/odyseeteam/transcoder/internal/version"
 	"github.com/odyseeteam/transcoder/library"
 	"github.com/odyseeteam/transcoder/pkg/conductor/metrics"
 	"github.com/odyseeteam/transcoder/pkg/logging"
 	"github.com/odyseeteam/transcoder/pkg/resolve"
 	"github.com/odyseeteam/transcoder/pkg/retriever"
 	"github.com/odyseeteam/transcoder/storage"
-	"go.etcd.io/etcd/api/v3/version"
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
