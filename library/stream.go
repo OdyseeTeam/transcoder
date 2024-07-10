@@ -123,7 +123,7 @@ func (s *Stream) GenerateManifest(url, channel, sdHash string, manifestFuncs ...
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path.Join(s.LocalPath, ManifestName), d, os.ModePerm)
+	return os.WriteFile(path.Join(s.LocalPath, ManifestName), d, 0644) // #nosec G306, we need the file to be publicly readable
 }
 
 func (s *Stream) Checksum() string {

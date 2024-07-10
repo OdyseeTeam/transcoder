@@ -1,11 +1,11 @@
 module github.com/odyseeteam/transcoder
 
-go 1.20
+go 1.22
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
 	github.com/alecthomas/kong v0.2.17
-	github.com/aws/aws-sdk-go v1.44.217
+	github.com/aws/aws-sdk-go v1.45.24
 	github.com/brk0v/directio v0.0.0-20190225130936-69406e757cf7
 	github.com/c2h5oh/datasize v0.0.0-20220606134207-859f65c6625b
 	github.com/docker/go-connections v0.5.0
@@ -17,11 +17,11 @@ require (
 	github.com/karrick/godirwalk v1.17.0
 	github.com/lbryio/lbry.go/v2 v2.7.2-0.20230307181431-a01aa6dc0629
 	github.com/lib/pq v1.10.7
-	github.com/nikooo777/lbry-blobs-downloader v1.2.0
+	github.com/nikooo777/lbry-blobs-downloader v1.2.2
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/panjf2000/ants/v2 v2.5.0
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.14.0
+	github.com/prometheus/client_golang v1.16.0
 	github.com/redis/go-redis/v9 v9.4.0
 	github.com/rubenv/sql-migrate v1.4.0
 	github.com/shopspring/decimal v1.3.1
@@ -69,11 +69,10 @@ require (
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
-	github.com/go-sql-driver/mysql v1.7.0 // indirect
-	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
+	github.com/go-sql-driver/mysql v1.7.1 // indirect
+	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gofrs/uuid v4.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/pprof v0.0.0-20211214055906-6f57359322fd // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
@@ -84,8 +83,8 @@ require (
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
-	github.com/lbryio/chainquery v1.9.1-0.20230308044402-068c29e02865 // indirect
-	github.com/lbryio/reflector.go v1.1.3-0.20230309181259-456fe53e0174 // indirect
+	github.com/lbryio/chainquery v1.9.1-0.20230515181855-2fcba3115cfe // indirect
+	github.com/lbryio/reflector.go v1.1.3-0.20231011190137-4d81a43a8fab // indirect
 	github.com/lbryio/types v0.0.0-20220224142228-73610f6654a6 // indirect
 	github.com/lyoshenka/bencode v0.0.0-20180323155644-b7abd7672df5 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -95,19 +94,18 @@ require (
 	github.com/moby/sys/sequential v0.5.0 // indirect
 	github.com/moby/term v0.5.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.2.0 // indirect
+	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/opencontainers/runc v1.1.5 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
-	github.com/prometheus/common v0.37.0 // indirect
-	github.com/prometheus/procfs v0.8.0 // indirect
+	github.com/prometheus/common v0.42.0 // indirect
+	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/qtls-go1-19 v0.2.1 // indirect
-	github.com/quic-go/qtls-go1-20 v0.1.1 // indirect
-	github.com/quic-go/quic-go v0.33.0 // indirect
+	github.com/quic-go/qtls-go1-20 v0.3.4 // indirect
+	github.com/quic-go/quic-go v0.39.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20220401102855-e56b59f40436 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
@@ -125,7 +123,8 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/ybbus/jsonrpc/v2 v2.1.7 // indirect
-	go.uber.org/atomic v1.10.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+	go.uber.org/mock v0.3.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a // indirect
@@ -147,7 +146,7 @@ require (
 
 replace github.com/floostack/transcoder => github.com/anbsky/transcoder v1.2.1
 
-replace github.com/draganm/miniotest v0.1.0 => github.com/anbsky/miniotest v0.1.2
+replace github.com/draganm/miniotest v0.1.0 => github.com/anbsky/miniotest v0.1.3
 
 replace github.com/lbryio/lbry.go/v3 => github.com/anbsky/lbry.go/v3 v3.0.6
 

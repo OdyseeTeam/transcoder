@@ -5,7 +5,7 @@
 
 ## Development
 
-Currently requires go 1.20 due to the `quic` package subdependency.
+Requires go 1.22.
 
 ## Building
 

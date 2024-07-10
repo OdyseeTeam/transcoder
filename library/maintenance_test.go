@@ -123,8 +123,8 @@ func (s *maintenanceSuite) TestRetireVideos() {
 			context.Background(),
 			"UPDATE videos SET accessed_at = $2 where tid = $1",
 			stream.TID(),
-			time.Now().AddDate(0, 0, -rand.Intn(30)),
-		) // #nosec G404
+			time.Now().AddDate(0, 0, -rand.Intn(30)), // #nosec G404
+		)
 		s.Require().NoError(err)
 	}
 
