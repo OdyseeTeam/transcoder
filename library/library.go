@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/odyseeteam/transcoder/library/db"
-	"github.com/odyseeteam/transcoder/pkg/logging"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
+	"github.com/OdyseeTeam/transcoder/library/db"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 
 	"github.com/c2h5oh/datasize"
 	"github.com/panjf2000/ants/v2"

@@ -3,9 +3,9 @@ package manager
 import (
 	"testing"
 
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/mfr"
 	"github.com/Pallinder/go-randomdata"
-	"github.com/odyseeteam/transcoder/pkg/logging"
-	"github.com/odyseeteam/transcoder/pkg/mfr"
 
 	"github.com/stretchr/testify/suite"
 )

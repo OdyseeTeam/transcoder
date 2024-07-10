@@ -3,8 +3,8 @@ package retriever
 import (
 	"os"
 
-	"github.com/odyseeteam/transcoder/pkg/dispatcher"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
+	"github.com/OdyseeTeam/transcoder/pkg/dispatcher"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 )
 
 type downloadTask struct {

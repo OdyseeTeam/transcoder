@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OdyseeTeam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 	"github.com/Pallinder/go-randomdata"
-	"github.com/odyseeteam/transcoder/library"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
 
 	"github.com/karrick/godirwalk"
 	"github.com/stretchr/testify/suite"

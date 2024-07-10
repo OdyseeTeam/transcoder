@@ -1,4 +1,4 @@
-module github.com/odyseeteam/transcoder
+module github.com/OdyseeTeam/transcoder
 
 go 1.22
 

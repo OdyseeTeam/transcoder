@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OdyseeTeam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
 	randomdata "github.com/Pallinder/go-randomdata"
-	"github.com/odyseeteam/transcoder/library"
-	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
 
 	"github.com/fasthttp/router"
 	"github.com/prometheus/client_golang/prometheus"

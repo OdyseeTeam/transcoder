@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/odyseeteam/transcoder/library/db"
-	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
+	"github.com/OdyseeTeam/transcoder/library/db"
+	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

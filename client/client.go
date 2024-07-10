@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odyseeteam/transcoder/library"
-	"github.com/odyseeteam/transcoder/pkg/logging"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
-	"github.com/odyseeteam/transcoder/pkg/timer"
+	"github.com/OdyseeTeam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
+	"github.com/OdyseeTeam/transcoder/pkg/timer"
 
 	"github.com/karlseguin/ccache/v2"
 	"github.com/karrick/godirwalk"

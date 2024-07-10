@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OdyseeTeam/transcoder/internal/metrics"
+	"github.com/OdyseeTeam/transcoder/ladder"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
 	"github.com/karrick/godirwalk"
-	"github.com/odyseeteam/transcoder/internal/metrics"
-	"github.com/odyseeteam/transcoder/ladder"
-	"github.com/odyseeteam/transcoder/pkg/logging"
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"

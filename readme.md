@@ -1,6 +1,6 @@
 # Transcoder Server/Worker for Odysee
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/odyseeteam/transcoder)](https://goreportcard.com/report/github.com/odyseeteam/transcoder)
+[![Go Report Card](https://goreportcard.com/badge/github.com/OdyseeTeam/transcoder)](https://goreportcard.com/report/github.com/OdyseeTeam/transcoder)
 ![Test Status](https://github.com/OdyseeTeam/transcoder/workflows/Test/badge.svg)
 
 ## Development

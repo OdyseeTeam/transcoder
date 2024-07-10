@@ -1,7 +1,7 @@
 package encoder
 
 import (
-	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
 	"go.uber.org/zap"
 )
 

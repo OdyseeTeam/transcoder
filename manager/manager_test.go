@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OdyseeTeam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/library/db"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
+	"github.com/OdyseeTeam/transcoder/pkg/mfr"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 	"github.com/Pallinder/go-randomdata"
-	"github.com/odyseeteam/transcoder/library"
-	"github.com/odyseeteam/transcoder/library/db"
-	"github.com/odyseeteam/transcoder/pkg/logging"
-	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
-	"github.com/odyseeteam/transcoder/pkg/mfr"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
 	"github.com/stretchr/testify/suite"
 )
 

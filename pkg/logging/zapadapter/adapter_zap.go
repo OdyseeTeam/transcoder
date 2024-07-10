@@ -3,7 +3,7 @@ package zapadapter
 import (
 	"context"
 
-	"github.com/odyseeteam/transcoder/pkg/logging"
+	"github.com/OdyseeTeam/transcoder/pkg/logging"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

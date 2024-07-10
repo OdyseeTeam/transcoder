@@ -3,7 +3,7 @@ package tasks
 import (
 	"encoding/json"
 
-	"github.com/odyseeteam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/library"
 )
 
 type TranscodingRequest struct {

@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/odyseeteam/transcoder/library"
-	db "github.com/odyseeteam/transcoder/library/db"
+	"github.com/OdyseeTeam/transcoder/library"
+	db "github.com/OdyseeTeam/transcoder/library/db"
 )
 
 type channelList struct {

@@ -1,6 +1,6 @@
 package encoder
 
-import "github.com/odyseeteam/transcoder/pkg/dispatcher"
+import "github.com/OdyseeTeam/transcoder/pkg/dispatcher"
 
 type encodeTask [2]string
 

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/odyseeteam/transcoder/ladder"
-	"github.com/odyseeteam/transcoder/pkg/logging/zapadapter"
-	"github.com/odyseeteam/transcoder/pkg/resolve"
+	"github.com/OdyseeTeam/transcoder/ladder"
+	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"

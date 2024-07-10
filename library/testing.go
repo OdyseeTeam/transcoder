@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/OdyseeTeam/transcoder/library/db"
+	"github.com/OdyseeTeam/transcoder/pkg/migrator"
 	"github.com/Pallinder/go-randomdata"
-	"github.com/odyseeteam/transcoder/library/db"
-	"github.com/odyseeteam/transcoder/pkg/migrator"
 
 	"github.com/stretchr/testify/require"
 )
