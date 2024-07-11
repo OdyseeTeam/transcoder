@@ -181,6 +181,15 @@ func startWorker() {
 		log.Fatal("unable to read config", err)
 	}
 
+	if !CLI.Debug {
+		encoder.SetLogger(logging.Create("encoder", logging.Prod))
+		manager.SetLogger(logging.Create("claim", logging.Prod))
+		storage.SetLogger(logging.Create("storage", logging.Prod))
+		ladder.SetLogger(logging.Create("ladder", logging.Prod))
+		mfr.SetLogger(logging.Create("mfr", logging.Prod))
+		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+	}
+
 	s3opts := cfg.GetStringMapString("s3")
 
 	if CLI.Worker.StreamsDir != "" {
