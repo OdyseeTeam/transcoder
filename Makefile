@@ -17,9 +17,14 @@ transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 
 conductor_image:
 	docker buildx build -f docker/Dockerfile-conductor -t odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) --platform linux/amd64 .
+	docker tag odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) odyseeteam/transcoder-conductor:latest
 
 cworker_image:
 	docker buildx build -f docker/Dockerfile-cworker -t odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) --platform linux/amd64 .
+	docker tag odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) odyseeteam/transcoder-cworker:latest
+
+ffmpeg_image:
+	docker buildx build -f docker/Dockerfile-ffmpeg -t odyseeteam/transcoder-ffmpeg:7.0 --platform linux/amd64 .
 
 test_down:
 	docker-compose down

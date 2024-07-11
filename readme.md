@@ -15,10 +15,23 @@ To build the x86 Linux binary, which is used both for `conductor` (controller pa
 make transcoder
 ```
 
-#### Building docker images
+#### Docker images
 
 ```
 make conductor_image cworker_image
+```
+
+This will build and tag images with a version tag, as well as the `latest`. To push latest images:
+
+```
+docker push odyseeteam/transcoder-conductor:latest
+docker push odyseeteam/transcoder-cworker:latest
+```
+
+`cworker` image is using ffmpeg image as a base. To update or rebuild it, see [its dockerfile](./docker/Dockerfile-ffmpeg) and run:
+
+```
+make ffmpeg_image
 ```
 
 ## Versioning

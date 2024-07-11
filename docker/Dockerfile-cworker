@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM odyseeteam/transcoder-ffmpeg:6.1 AS ffmpeg
+FROM odyseeteam/transcoder-ffmpeg:7.0 AS ffmpeg
 FROM odyseeteam/transcoder-gensprite:22.10.0 AS spritegen
 FROM odyseeteam/transcoder-gensprite:22.10.0
 
