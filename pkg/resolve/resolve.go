@@ -19,6 +19,8 @@ import (
 	"github.com/nikooo777/lbry-blobs-downloader/shared"
 )
 
+const downloaderConcurrency = 3
+
 var (
 	odyseeAPI  = "https://api.na-backend.odysee.com/api/v1/proxy"
 	blobServer = "blobcache-eu.lbry.com"
@@ -155,7 +157,7 @@ func (c *ResolvedStream) Download(dstDir string) (*os.File, int64, error) {
 	}
 
 	tmpBlobsPath := "tmp_" + c.SDHash
-	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath, 3)
+	sdBlob, err := downloader.DownloadStream(c.SDHash, false, downloader.HTTP, tmpBlobsPath, downloaderConcurrency)
 	// This is needed to cleanup after downloader fails midway
 	defer os.RemoveAll(path.Join(os.TempDir(), c.streamFileName()+".tmp"))
 	if err != nil {

@@ -145,7 +145,7 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		runMtr.Inc()
 		dl, err := retriever.Retrieve(payload.URL, r.options.StreamsDir)
 		if err != nil {
-			log.Error("download failed", "err", err)
+			log.With("url", payload.URL).Error("download failed", "err", err)
 			errMtr.WithLabelValues(metrics.StageDownloading).Inc()
 			spentMtr.Add(time.Since(timer).Seconds())
 			runMtr.Dec()

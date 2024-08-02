@@ -99,6 +99,7 @@ func startConductor() {
 		ladder.SetLogger(logging.Create("ladder", logging.Prod))
 		mfr.SetLogger(logging.Create("mfr", logging.Prod))
 		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+		resolve.SetLogger(logging.Create("resolve", logging.Prod))
 	}
 
 	s3cfg := cfg.GetStringMapString("s3")
@@ -188,6 +189,7 @@ func startWorker() {
 		ladder.SetLogger(logging.Create("ladder", logging.Prod))
 		mfr.SetLogger(logging.Create("mfr", logging.Prod))
 		dispatcher.SetLogger(logging.Create("dispatcher", logging.Prod))
+		resolve.SetLogger(logging.Create("resolve", logging.Prod))
 	}
 
 	s3opts := cfg.GetStringMapString("s3")
