@@ -27,8 +27,9 @@ const (
 )
 
 type StorageOp struct {
-	Op  int
-	TID string
+	Op   int
+	TID  string
+	Args []string
 }
 
 type DummyStorage struct {
@@ -45,13 +46,18 @@ func NewDummyStorage(name, endpoint string) *DummyStorage {
 	}
 }
 
-func (s *DummyStorage) Delete(streamTID string) error {
-	s.Ops = append(s.Ops, StorageOp{OpDelete, streamTID})
+func (s *DummyStorage) Delete(tid string) error {
+	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid})
+	return nil
+}
+
+func (s *DummyStorage) DeleteFragments(tid string, fragments []string) error {
+	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid, Args: fragments})
 	return nil
 }
 
 func (s *DummyStorage) Put(stream *Stream, _ bool) error {
-	s.Ops = append(s.Ops, StorageOp{OpGetFragment, stream.TID()})
+	s.Ops = append(s.Ops, StorageOp{Op: OpGetFragment, TID: stream.TID()})
 	return nil
 }
 
@@ -110,7 +116,6 @@ func (s *maintenanceSuite) TestRetireVideos() {
 		s.Require().NoError(err)
 
 		if i%3 == 0 {
-			// Mark these as
 			_, err = s.DB.ExecContext(
 				context.Background(),
 				"UPDATE videos SET storage = $2 where tid = $1",
@@ -136,7 +141,7 @@ func (s *maintenanceSuite) TestRetireVideos() {
 	err = r.Scan(&initialCount)
 	s.Require().NoError(err)
 
-	sizeToKeep = uint64(rand.Int63n(1000000 * 50)) // #nosec G404
+	sizeToKeep = uint64(rand.Int63n(1000000 * 50)) // #nosec G404 G115
 	totalSizeAfterRetire, retiredSize, err := lib.RetireVideos("storage1", sizeToKeep)
 	s.NoError(err)
 	s.Equal(totalSize, totalSizeAfterRetire)
@@ -153,4 +158,7 @@ func (s *maintenanceSuite) TestRetireVideos() {
 
 	s.GreaterOrEqual(len(dummyStorage.Ops), 10)
 	s.EqualValues(initialCount-afterCount, len(dummyStorage.Ops))
+	for _, op := range dummyStorage.Ops {
+		s.Len(op.Args, len(PopulatedHLSPlaylistFiles))
+	}
 }

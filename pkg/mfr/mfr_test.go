@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
+
 	"github.com/stretchr/testify/suite"
 )
 

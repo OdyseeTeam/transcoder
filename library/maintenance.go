@@ -17,18 +17,27 @@ func SpawnLibraryCleaning(lib *Library, storageName string, maxSize uint64) chan
 		"max_remote_size", toGB(maxSize),
 	)
 
-	retireTicker := time.NewTicker(1 * time.Hour)
+	running := make(chan struct{}, 1)
+	ticker := time.NewTicker(1 * time.Hour)
+
+	running <- struct{}{}
+	go func() {
+		defer func() { <-running }()
+		retireVideos(lib, storageName, maxSize)
+	}()
 
 	go func() {
-		for {
+		for range ticker.C {
 			select {
-			case <-retireTicker.C:
-				retireVideos(lib, storageName, maxSize)
+			case running <- struct{}{}:
+				go func() {
+					defer func() { <-running }()
+					retireVideos(lib, storageName, maxSize)
+				}()
 			case <-stopChan:
 				logger.Info("stopping library maintenance")
 				return
 			default:
-				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
@@ -58,6 +67,10 @@ func retireVideos(lib *Library, storageName string, maxSize uint64) {
 
 func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) (totalSize uint64, furloughedSize uint64, err error) {
 	for _, v := range videos {
+		if v.Size < 0 {
+			logger.Warnw("invalid video size", "tid", v.TID, "size", v.Size)
+			continue
+		}
 		totalSize += uint64(v.Size)
 	}
 	if maxSize >= totalSize {
@@ -66,14 +79,29 @@ func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) 
 
 	weight := func(v db.Video) int64 { return v.AccessedAt.Unix() }
 	sort.Slice(videos, func(i, j int) bool { return weight(videos[i]) < weight(videos[j]) })
-	for _, s := range videos {
-		err := call(s)
-		if err != nil {
-			logger.Warnw("failed to execute function for video", "sd_hash", s.SDHash, "err", err)
+	allStart := time.Now()
+	for _, v := range videos {
+		if v.Size < 0 {
 			continue
 		}
-		furloughedSize += uint64(s.Size)
-		logger.Debugf("processed: %v, left: %v", furloughedSize, totalSize-furloughedSize)
+		err := call(v)
+		if err != nil {
+			logger.Warnw("failed to execute function for video", "sd_hash", v.SDHash, "err", err)
+			continue
+		}
+		furloughedSize += uint64(v.Size)
+		remainingSize := totalSize - maxSize - furloughedSize
+
+		furloughedGB := float64(furloughedSize) / float64(1<<30)
+		remainingGB := float64(remainingSize) / float64(1<<30)
+		speed := furloughedGB / time.Since(allStart).Seconds() * 60 * 60
+		remainingHours := remainingGB / (furloughedGB / time.Since(allStart).Seconds()) / 60 / 60
+		donePct := float64(furloughedSize) / float64(totalSize-maxSize) * float64(100)
+		logger.Infof(
+			"maintenance: %.1f h, %.4f%% , %.2f GB/h, %.2f GB, remaining: %.2f GB, %.1f h",
+			time.Since(allStart).Hours(), donePct, speed, furloughedGB, remainingGB, remainingHours,
+		)
+
 		if maxSize >= totalSize-furloughedSize {
 			break
 		}

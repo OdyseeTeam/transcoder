@@ -18,11 +18,11 @@ import (
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 	"github.com/OdyseeTeam/transcoder/pkg/retriever"
 	"github.com/OdyseeTeam/transcoder/storage"
-	"go.etcd.io/etcd/api/v3/version"
 
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	redis "github.com/redis/go-redis/v9"
+	"go.etcd.io/etcd/api/v3/version"
 )
 
 const (

@@ -7,9 +7,11 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/OdyseeTeam/transcoder/library"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -185,14 +187,14 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 	return err
 }
 
-func (s *S3Driver) Delete(streamTID string) error {
+func (s *S3Driver) Delete(tid string) error {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
 	client := s3.New(s.session)
 	bucket := aws.String(s.bucket)
 	objects, err := client.ListObjectsWithContext(ctx, &s3.ListObjectsInput{
 		Bucket:  bucket,
-		Prefix:  aws.String(streamTID),
-		MaxKeys: aws.Int64(500),
+		Prefix:  aws.String(tid),
+		MaxKeys: aws.Int64(1000),
 	})
 	cancelFn()
 	if err != nil {
@@ -228,7 +230,7 @@ func (s *S3Driver) Delete(streamTID string) error {
 				Quiet:   aws.Bool(false),
 			},
 		}
-		ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
+		ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 		_, err = client.DeleteObjectsWithContext(ctx, delInput)
 		cancelFn()
 		if err != nil {
@@ -237,10 +239,74 @@ func (s *S3Driver) Delete(streamTID string) error {
 	}
 
 	if *objects.IsTruncated {
-		return s.Delete(streamTID)
+		return s.Delete(tid)
 	}
 
 	return nil
+}
+
+func (s *S3Driver) DeleteFragments(tid string, fragments []string) error {
+	workerCount := 120
+	batchSize := 20
+	client := s3.New(s.session)
+
+	// Split objects into batches
+	batches := make(chan []*s3.ObjectIdentifier, len(fragments)/batchSize+1)
+	for i := 0; i < len(fragments); i += batchSize {
+		end := i + batchSize
+		if end > len(fragments) {
+			end = len(fragments)
+		}
+		batch := []*s3.ObjectIdentifier{}
+		for _, f := range fragments[i:end] {
+			key := fmt.Sprintf("%s/%s", tid, f)
+			batch = append(batch, &s3.ObjectIdentifier{Key: &key})
+		}
+		batches <- batch
+	}
+	close(batches)
+
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for batch := range batches {
+				if err := s.deleteBatch(client, batch); err != nil {
+					select {
+					case errChan <- err:
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	select {
+	case err := <-errChan:
+		return err
+	default:
+		return nil
+	}
+}
+
+func (s *S3Driver) deleteBatch(client *s3.S3, batch []*s3.ObjectIdentifier) error {
+	delInput := &s3.DeleteObjectsInput{
+		Bucket: aws.String(s.bucket),
+		Delete: &s3.Delete{
+			Objects: batch,
+			Quiet:   aws.Bool(false),
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+	_, err := client.DeleteObjectsWithContext(ctx, delInput)
+	return err
 }
 
 func (s *S3Driver) GetFragment(streamTID, name string) (StreamFragment, error) {

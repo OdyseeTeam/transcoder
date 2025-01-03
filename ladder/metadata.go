@@ -8,7 +8,6 @@ import (
 
 	"github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
-
 	"github.com/pkg/errors"
 )
 

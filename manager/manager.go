@@ -12,11 +12,11 @@ import (
 	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
 	"github.com/OdyseeTeam/transcoder/pkg/mfr"
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
+
 	"github.com/fasthttp/router"
+	"github.com/karlseguin/ccache/v2"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
-
-	"github.com/karlseguin/ccache/v2"
 )
 
 const (
@@ -55,7 +55,7 @@ type VideoManager struct {
 }
 
 // NewManager creates a video library manager with a pool for future transcoding requests.
-func NewManager(lib *library.Library, minHits int) *VideoManager {
+func NewManager(lib *library.Library, minHits uint) *VideoManager {
 	m := &VideoManager{
 		lib:      lib,
 		pool:     NewPool(),

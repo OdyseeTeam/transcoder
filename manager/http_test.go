@@ -13,8 +13,8 @@ import (
 
 	"github.com/OdyseeTeam/transcoder/library"
 	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
-	randomdata "github.com/Pallinder/go-randomdata"
 
+	randomdata "github.com/Pallinder/go-randomdata"
 	"github.com/fasthttp/router"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"

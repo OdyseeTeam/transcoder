@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	ljsonrpc "github.com/lbryio/lbry.go/v2/extras/jsonrpc"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,8 +58,8 @@ func TestTranscodingRequestDownload(t *testing.T) {
 
 	fi, err := os.Stat(f.Name())
 	require.NoError(t, err)
-	assert.Equal(t, int64(c.Value.GetStream().GetSource().Size), fi.Size())
-	assert.Equal(t, int64(c.Value.GetStream().GetSource().Size), n)
+	assert.EqualValues(t, c.Value.GetStream().GetSource().Size, fi.Size())
+	assert.EqualValues(t, c.Value.GetStream().GetSource().Size, n)
 
 	require.NoError(t, os.Remove(f.Name()))
 	require.NoError(t, os.Remove(dstPath))

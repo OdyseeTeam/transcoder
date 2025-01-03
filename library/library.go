@@ -31,7 +31,8 @@ type Storage interface {
 	Name() string
 	GetURL(tid string) string
 	Put(stream *Stream, _ bool) error
-	Delete(streamTID string) error
+	Delete(tid string) error
+	DeleteFragments(tid string, fragments []string) error
 	// GetFragment(sdHash, name string) (storage.StreamFragment, error)
 }
 
@@ -133,22 +134,42 @@ func (lib *Library) RetireVideos(storageName string, maxSize uint64) (uint64, ui
 	return tailVideos(items, maxSize, lib.Retire)
 }
 
-func (lib *Library) Retire(v db.Video) error {
-	ll := lib.log.With("tid", v.TID, "sd_hash", v.SDHash)
+func (lib *Library) Retire(video db.Video) error {
+	var deleted bool
 
-	err := lib.storage.Delete(v.TID)
-	if err != nil {
-		ll.Warn("failed to delete remote video", "err", err)
-		return err
+	ll := lib.log.With("tid", video.TID, "sd_hash", video.SDHash)
+
+	if video.Manifest.Valid {
+		manifest := &Manifest{}
+		err := json.Unmarshal(video.Manifest.RawMessage, manifest)
+		if err != nil { // nolint:gocritic
+			ll.Warn("failed to parse video manifest", "err", err)
+		} else if len(manifest.Files) == 0 {
+			ll.Warn("empty video manifest", "err", err)
+		} else {
+			err = lib.storage.DeleteFragments(video.TID, manifest.Files)
+			if err != nil {
+				ll.Warn("failed to delete fragments for remote video", "err", err)
+			} else {
+				deleted = true
+			}
+		}
+	}
+	if !deleted {
+		err := lib.storage.Delete(video.TID)
+		if err != nil {
+			ll.Warn("failed to delete remote video", "err", err)
+			return err
+		}
 	}
 
-	err = lib.db.DeleteVideo(context.Background(), v.TID)
+	err := lib.db.DeleteVideo(context.Background(), video.TID)
 	if err != nil {
 		ll.Warn("failed to delete video record", "err", err)
 		return err
 	}
 
-	ll.Info("video retired", "url", v.URL, "size", v.Size, "age", v.CreatedAt, "accessed", v.AccessedAt)
+	ll.Info("video retired", "url", video.URL, "size", video.Size, "age", video.CreatedAt, "accessed", video.AccessedAt)
 	return nil
 }
 

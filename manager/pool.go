@@ -6,6 +6,7 @@ import (
 
 	"github.com/OdyseeTeam/transcoder/pkg/mfr"
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 

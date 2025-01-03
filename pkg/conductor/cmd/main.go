@@ -132,7 +132,10 @@ func startConductor() {
 
 	adQueue := cfg.GetStringMapString("adaptivequeue")
 	minHits, _ := strconv.Atoi(adQueue["minhits"])
-	mgr := manager.NewManager(lib, minHits)
+	if minHits < 0 {
+		log.Fatal("min hits cannot be below zero")
+	}
+	mgr := manager.NewManager(lib, uint(minHits))
 
 	httpStopChan, _ := mgr.StartHttpServer(manager.HttpServerConfig{
 		ManagerToken: libCfg["managertoken"],

@@ -1,6 +1,14 @@
 linters-settings:
   errcheck:
     check-type-assertions: true
+  gci:
+    sections:
+      - standard
+      - prefix(github.com/OdyseeTeam)
+      - prefix(github.com/lbryio)
+      - default
+    custom-order: true
+    no-lex-order: true
   goconst:
     min-len: 2
     min-occurrences: 3
@@ -9,6 +17,7 @@ linters:
   disable-all: true
   enable:
     - dupl
+    - gci
     - gocritic
     - goconst
     - gocyclo

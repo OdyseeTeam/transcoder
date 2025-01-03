@@ -5,8 +5,8 @@ import (
 
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
 	"github.com/OdyseeTeam/transcoder/pkg/mfr"
-	"github.com/Pallinder/go-randomdata"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -74,7 +74,7 @@ func (s *poolSuite) TestPool() {
 	total := 0
 	for e := range pool.Out() {
 		s.Require().NotNil(e, "pool is exhausted with %v hits", total)
-		total += int(e.Hits())
+		total += int(e.Hits()) // #nosec G115
 		if total >= sampleSize {
 			break
 		}

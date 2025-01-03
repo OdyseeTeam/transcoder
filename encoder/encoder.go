@@ -13,10 +13,10 @@ import (
 	"github.com/OdyseeTeam/transcoder/internal/metrics"
 	"github.com/OdyseeTeam/transcoder/ladder"
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
-	"github.com/karrick/godirwalk"
 
 	ffmpegt "github.com/floostack/transcoder"
 	"github.com/floostack/transcoder/ffmpeg"
+	"github.com/karrick/godirwalk"
 	"github.com/pkg/errors"
 )
 

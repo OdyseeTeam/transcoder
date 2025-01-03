@@ -12,8 +12,8 @@ import (
 
 	"github.com/OdyseeTeam/transcoder/library/db"
 	"github.com/OdyseeTeam/transcoder/pkg/migrator"
-	"github.com/Pallinder/go-randomdata"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,6 +119,7 @@ func GenerateDummyStream() *Stream {
 			SDHash:       randomdata.Alphanumeric(96),
 			TranscodedAt: time.Now(),
 			Size:         int64(randomdata.Number(10000, 5000000)),
+			Files:        PopulatedHLSPlaylistFiles,
 		},
 	}
 	s.Manifest.TID = s.generateTID()

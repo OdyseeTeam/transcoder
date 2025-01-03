@@ -2,6 +2,7 @@ package migrator
 
 import (
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
+
 	"go.uber.org/zap"
 )
 

@@ -19,6 +19,8 @@ import (
 var (
 	minioAccessKey = "s3-test"
 	minioSecretKey = randomdata.Alphanumeric(24)
+
+	fragments = []string{library.MasterPlaylistName, "stream_0.m3u8", "stream_1.m3u8", "stream_2.m3u8", "stream_3.m3u8"}
 )
 
 type s3Container struct {
@@ -29,8 +31,7 @@ type s3Container struct {
 type s3suite struct {
 	suite.Suite
 	s3container *s3Container
-	sdHash      string
-	streamsPath string
+	s3driver    *S3Driver
 }
 
 func TestS3suite(t *testing.T) {
@@ -42,16 +43,8 @@ func (s *s3suite) SetupSuite() {
 
 	s.s3container, err = setupS3(context.Background())
 	s.Require().NoError(err)
-}
 
-func (s *s3suite) SetupTest() {
-	s.streamsPath = s.T().TempDir()
-	s.sdHash = randomdata.Alphanumeric(96)
-	library.PopulateHLSPlaylist(s.T(), s.streamsPath, s.sdHash)
-}
-
-func (s *s3suite) TestPutDelete() {
-	s3drv, err := InitS3Driver(
+	s3driver, err := InitS3Driver(
 		S3Configure().
 			Name("test").
 			Endpoint(s.s3container.URI).
@@ -62,13 +55,16 @@ func (s *s3suite) TestPutDelete() {
 			DisableSSL(),
 	)
 	s.Require().NoError(err)
+	s.s3driver = s3driver
+}
 
-	stream := library.InitStream(path.Join(s.streamsPath, s.sdHash), "")
-	err = stream.GenerateManifest("url", "channel", s.sdHash)
-	s.Require().NoError(err)
+func (s *s3suite) SetupTest() {
 
-	err = s3drv.Put(stream, false)
-	s.Require().NoError(err)
+}
+
+func (s *s3suite) TestPut() {
+	s3drv := s.s3driver
+	stream := s.putStream()
 
 	sf, err := s3drv.GetFragment(stream.TID(), library.MasterPlaylistName)
 	s.Require().NoError(err)
@@ -83,18 +79,52 @@ func (s *s3suite) TestPutDelete() {
 
 	err = s3drv.Put(stream, true)
 	s.NoError(err)
+}
 
-	err = s3drv.Delete(stream.TID())
+func (s *s3suite) TestDelete() {
+	s3drv := s.s3driver
+	stream := s.putStream()
+
+	err := s3drv.Delete(stream.TID())
 	s.Require().NoError(err)
 
-	deletedPieces := []string{"", library.MasterPlaylistName, "stream_0.m3u8", "stream_1.m3u8", "stream_2.m3u8", "stream_3.m3u8"}
-	for _, n := range deletedPieces {
+	for _, n := range fragments {
 		p, err := s3drv.GetFragment(stream.TID(), n)
 		s.NotNil(err)
 		awsErr := err.(awserr.Error)
 		s.Equal("NoSuchKey", awsErr.Code())
 		s.Nil(p)
 	}
+}
+
+func (s *s3suite) TestDeleteFragments() {
+	s3drv := s.s3driver
+	stream := s.putStream()
+
+	err := s3drv.DeleteFragments(stream.TID(), fragments)
+	s.Require().NoError(err)
+
+	for _, n := range fragments {
+		p, err := s3drv.GetFragment(stream.TID(), n)
+		s.NotNil(err)
+		awsErr := err.(awserr.Error)
+		s.Equal("NoSuchKey", awsErr.Code())
+		s.Nil(p)
+	}
+}
+
+func (s *s3suite) putStream() *library.Stream {
+	streamsPath := s.T().TempDir()
+	sdHash := randomdata.Alphanumeric(96)
+	library.PopulateHLSPlaylist(s.T(), streamsPath, sdHash)
+
+	stream := library.InitStream(path.Join(streamsPath, sdHash), "")
+	err := stream.GenerateManifest("url", "channel", sdHash)
+	s.Require().NoError(err)
+
+	err = s.s3driver.Put(stream, false)
+	s.Require().NoError(err)
+	return stream
 }
 
 type TestLogConsumer struct {

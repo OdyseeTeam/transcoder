@@ -12,6 +12,7 @@ import (
 	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
 	"github.com/OdyseeTeam/transcoder/pkg/mfr"
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
+
 	"github.com/Pallinder/go-randomdata"
 	"github.com/stretchr/testify/suite"
 )

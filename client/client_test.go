@@ -15,8 +15,8 @@ import (
 
 	"github.com/OdyseeTeam/transcoder/library"
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
-	"github.com/Pallinder/go-randomdata"
 
+	"github.com/Pallinder/go-randomdata"
 	"github.com/karrick/godirwalk"
 	"github.com/stretchr/testify/suite"
 )
