@@ -24,7 +24,7 @@ cworker_image:
 	docker tag odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) odyseeteam/transcoder-cworker:latest
 
 ffmpeg_image:
-	docker buildx build -f docker/Dockerfile-ffmpeg -t odyseeteam/transcoder-ffmpeg:7.0 --platform linux/amd64 .
+	docker buildx build -f docker/Dockerfile-ffmpeg -t odyseeteam/transcoder-ffmpeg:git --platform linux/amd64 .
 
 test_down:
 	docker-compose down
