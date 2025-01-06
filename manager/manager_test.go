@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/OdyseeTeam/transcoder/library"
 	"github.com/OdyseeTeam/transcoder/library/db"
@@ -22,11 +23,11 @@ type managerSuite struct {
 	library.LibraryTestHelper
 }
 
-func isLevel5(key string) bool {
+func isLevel5(_ string) bool {
 	return rand.Intn(2) == 0 // #nosec G404
 }
 
-func isChannelEnabled(key string) bool {
+func isChannelEnabled(_ string) bool {
 	return rand.Intn(2) == 0 // #nosec G404
 }
 
@@ -49,7 +50,7 @@ func (s *managerSuite) TestVideo() {
 
 	_, err = lib.AddChannel("@BretWeinstein#f", db.ChannelPriorityHigh)
 	s.Require().NoError(err)
-	_, err = lib.AddChannel("@davidpakman#7", "")
+	_, err = lib.AddChannel("@veritasium:f", "")
 	s.Require().NoError(err)
 	_, err = lib.AddChannel("@specialoperationstest#3", "")
 	s.Require().NoError(err)
@@ -62,7 +63,7 @@ func (s *managerSuite) TestVideo() {
 		"@BretWeinstein#f/EvoLens87#1",
 	}
 	urlsEnabled := []string{
-		"@davidpakman#7/vaccination-delays-and-more-biden-picks#8",
+		"@veritasium#f/on-these-questions,-smarter-people-do#e",
 		"@specialoperationstest#3/fear-of-death-inspirational#a",
 	}
 	urlsLevel5 := []string{
@@ -85,37 +86,37 @@ func (s *managerSuite) TestVideo() {
 	for _, u := range urlsPriority {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrTranscodingQueued, err)
+		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsEnabled {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrTranscodingQueued, err)
+		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsLevel5 {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrTranscodingQueued, err)
+		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsNotEnabled {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrTranscodingForbidden, err)
+		s.Equal(resolve.ErrTranscodingForbidden, err, u)
 	}
 
 	for _, u := range urlsDisabled {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrTranscodingForbidden, err)
+		s.Equal(resolve.ErrTranscodingForbidden, err, u)
 	}
 
 	for _, u := range urlsNoChannel {
 		v, err := mgr.Video(u)
 		s.Empty(v)
-		s.Equal(resolve.ErrNoSigningChannel, err)
+		s.Equal(resolve.ErrNoSigningChannel, err, u)
 	}
 
 	for _, u := range urlsNotFound {
@@ -125,14 +126,22 @@ func (s *managerSuite) TestVideo() {
 	}
 
 	expectedUrls := []string{urlsPriority[0], urlsEnabled[0], urlsLevel5[0], urlsNotEnabled[0], urlsEnabled[1]}
-	receivedUrls := []string{}
-	for r := range mgr.Requests() {
-		receivedUrls = append(receivedUrls, strings.TrimPrefix(r.URI, "lbry://"))
-		if len(receivedUrls) == len(expectedUrls) {
-			mgr.pool.Stop()
-			break
+	receivedUrls := func() []string {
+		requestsChan := mgr.Requests()
+		timeout := time.After(15 * time.Second)
+		defer mgr.pool.Stop()
+		urls := []string{}
+		for len(urls) <= 5 {
+			select {
+			case r := <-requestsChan:
+				urls = append(urls, strings.TrimPrefix(r.URI, "lbry://"))
+			case <-timeout:
+				return urls
+			}
 		}
-	}
+		return urls
+	}()
+
 	sort.Strings(expectedUrls)
 	sort.Strings(receivedUrls)
 	s.Equal(expectedUrls, receivedUrls)
