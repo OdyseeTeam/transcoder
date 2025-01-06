@@ -81,40 +81,7 @@ func (s *encoderSuite) TestEncode() {
 
 	s.Require().GreaterOrEqual(progress, 98.5)
 
-	s.Equal(1080, res.Ladder.Tiers[0].Height)
-	s.Equal(720, res.Ladder.Tiers[1].Height)
-	s.Equal(360, res.Ladder.Tiers[2].Height)
-	s.Equal(144, res.Ladder.Tiers[3].Height)
-
-	outFiles := map[string]string{
-		"master.m3u8": `
-#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
-v0.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
-v1.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
-v2.m3u8
-
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,(AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
-v3.m3u8`,
-		"v0.m3u8":       "v0_s000000.ts",
-		"v1.m3u8":       "v1_s000000.ts",
-		"v2.m3u8":       "v2_s000000.ts",
-		"v3.m3u8":       "v3_s000000.ts",
-		"v0_s000000.ts": "",
-		"v1_s000000.ts": "",
-		"v2_s000000.ts": "",
-		"v3_s000000.ts": "",
-	}
-	for f, str := range outFiles {
-		cont, err := os.ReadFile(path.Join(s.out, f))
-		s.NoError(err)
-		s.Regexp(strings.TrimSpace(str), string(cont))
-	}
+	matchTranscodedOutput(s.T(), s.out, res)
 }
 
 func TestTweakRealStreams(t *testing.T) {
@@ -176,5 +143,42 @@ func TestTweakRealStreams(t *testing.T) {
 				assert.Equal(t, tc.expectedTiers[i].Framerate, tier.Framerate, tier)
 			}
 		})
+	}
+}
+
+func matchTranscodedOutput(t *testing.T, streamPath string, res *Result) {
+	assert.Equal(t, 1080, res.Ladder.Tiers[0].Height)
+	assert.Equal(t, 720, res.Ladder.Tiers[1].Height)
+	assert.Equal(t, 360, res.Ladder.Tiers[2].Height)
+	assert.Equal(t, 144, res.Ladder.Tiers[3].Height)
+
+	outFiles := map[string]string{
+		"master.m3u8": `
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
+v0.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
+v1.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
+v2.m3u8
+
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+v3.m3u8`,
+		"v0.m3u8":       "v0_s000000.ts",
+		"v1.m3u8":       "v1_s000000.ts",
+		"v2.m3u8":       "v2_s000000.ts",
+		"v3.m3u8":       "v3_s000000.ts",
+		"v0_s000000.ts": "",
+		"v1_s000000.ts": "",
+		"v2_s000000.ts": "",
+		"v3_s000000.ts": "",
+	}
+	for f, str := range outFiles {
+		cont, err := os.ReadFile(path.Join(streamPath, f))
+		require.NoError(t, err)
+		assert.Regexp(t, strings.TrimSpace(str), string(cont))
 	}
 }
