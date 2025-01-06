@@ -17,9 +17,9 @@ jobs:
         with:
           fetch-depth: 0
       - run: |
-          docker-compose up -d minio db redis &&
-          docker-compose up -d cworker conductor &&
-          docker-compose up minio-prepare
+          docker compose up -d minio db redis &&
+          docker compose up -d cworker conductor &&
+          docker compose up minio-prepare
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
