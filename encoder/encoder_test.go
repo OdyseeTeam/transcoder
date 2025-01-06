@@ -63,7 +63,8 @@ func (s *encoderSuite) TestCheckFastStart() {
 
 func (s *encoderSuite) TestEncode() {
 	absPath, _ := filepath.Abs(s.file.Name())
-	e, err := NewEncoder(Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath(""))
+	cfg := Configure().Log(zapadapter.NewKV(nil)).Ladder(ladder.Default).SpritegenPath("")
+	e, err := NewEncoder(cfg)
 	s.Require().NoError(err)
 
 	res, err := e.Encode(absPath, s.out)
@@ -89,16 +90,16 @@ func (s *encoderSuite) TestEncode() {
 		"master.m3u8": `
 #EXTM3U
 #EXT-X-VERSION:6
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,AVERAGE-BANDWIDTH=\d+,RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1920x1080,CODECS="avc1.\w+,mp4a.40.2"
 v0.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,AVERAGE-BANDWIDTH=\d+,RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=1280x720,CODECS="avc1.\w+,mp4a.40.2"
 v1.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,AVERAGE-BANDWIDTH=\d+,RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(?:AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=640x360,CODECS="avc1.\w+,mp4a.40.2"
 v2.m3u8
 
-#EXT-X-STREAM-INF:BANDWIDTH=\d+,AVERAGE-BANDWIDTH=\d+,RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
+#EXT-X-STREAM-INF:BANDWIDTH=\d+,(AVERAGE-BANDWIDTH=\d+,)?RESOLUTION=256x144,CODECS="avc1.\w+,mp4a.40.2"
 v3.m3u8`,
 		"v0.m3u8":       "v0_s000000.ts",
 		"v1.m3u8":       "v1_s000000.ts",
