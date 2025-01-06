@@ -74,10 +74,10 @@ func main() {
 		startConductor()
 	case "worker":
 		startWorker()
-	case "migrate-up":
-		migrateUp()
-	case "migrate-down":
-		migrateDown()
+	// case "migrate-up":
+	// 	migrateUp()
+	// case "migrate-down":
+	// 	migrateDown()
 	case "validate-streams":
 		validateStreams()
 	default:
@@ -198,14 +198,12 @@ func startWorker() {
 	s3opts := cfg.GetStringMapString("s3")
 
 	if CLI.Worker.StreamsDir != "" {
-		err = os.MkdirAll(CLI.Worker.StreamsDir, os.ModePerm)
-		if err != nil {
+		if err := makeWorkDir(CLI.Worker.StreamsDir); err != nil {
 			log.Fatal(err)
 		}
 	}
 	if CLI.Worker.OutputDir != "" {
-		err = os.MkdirAll(CLI.Worker.OutputDir, os.ModePerm)
-		if err != nil {
+		if err := makeWorkDir(CLI.Worker.OutputDir); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -372,10 +370,12 @@ func startMetricsServer(bind string, stopChan chan struct{}) error {
 	return nil
 }
 
-func migrateUp() {
-
-}
-
-func migrateDown() {
-
+func makeWorkDir(path string) error {
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to clean up work dir: %w", err)
+	}
+	if err := os.MkdirAll(path, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create work dir: %w", err)
+	}
+	return nil
 }
