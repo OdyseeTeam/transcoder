@@ -54,7 +54,6 @@ func retireVideos(lib *Library, storageName string, maxSize uint64) {
 	totalSize, retiredSize, err := lib.RetireVideos(storageName, maxSize)
 	ll := logger.With("total_gb", toGB(totalSize), "retired_gb", toGB(retiredSize))
 	LibraryBytes.Set(float64(totalSize))
-	LibraryRetiredBytes.Add(float64(retiredSize))
 	switch {
 	case err != nil:
 		ll.Infow("error retiring videos", "err", err)
@@ -84,11 +83,17 @@ func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) 
 		if v.Size < 0 {
 			continue
 		}
+
+		start := time.Now()
 		err := call(v)
 		if err != nil {
 			logger.Warnw("failed to execute function for video", "sd_hash", v.SDHash, "err", err)
 			continue
 		}
+
+		LibraryRetiredGB.Add(float64(v.Size) / float64(1<<30))
+		LibraryRetiredDuration.Add(float64(time.Since(start).Seconds()))
+
 		furloughedSize += uint64(v.Size)
 		remainingSize := totalSize - maxSize - furloughedSize
 

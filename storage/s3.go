@@ -7,9 +7,11 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/OdyseeTeam/transcoder/internal/config"
 	"github.com/OdyseeTeam/transcoder/library"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -28,85 +30,42 @@ func (discardAt) WriteAt(p []byte, off int64) (int, error) {
 	return len(p), nil
 }
 
-type S3Configuration struct {
-	name, endpoint, region,
-	accessKey, secretKey, bucket string
-	disableSSL, createBucket bool
+func InitS3Drivers(storageConfigs config.Storages) (map[string]library.Storage, error) {
+	storages := map[string]library.Storage{}
+	for _, v := range storageConfigs {
+		s, err := InitS3Driver(v)
+		if err != nil {
+			return nil, err
+		}
+		storages[v.Name] = s
+	}
+	return storages, nil
 }
 
-func S3Configure() *S3Configuration {
-	return &S3Configuration{region: "us-east-1"}
-}
-
-// Name is storage type name (for internal use)
-func (c *S3Configuration) Name(n string) *S3Configuration {
-	c.name = n
-	return c
-}
-
-// Endpoint is S3 HTTP API server address.
-func (c *S3Configuration) Endpoint(e string) *S3Configuration {
-	c.endpoint = e
-	return c
-}
-
-// Region is a bucked region setting.
-func (c *S3Configuration) Region(r string) *S3Configuration {
-	c.region = r
-	return c
-}
-
-// Bucket is a bucket name for storing data.
-func (c *S3Configuration) Bucket(b string) *S3Configuration {
-	c.bucket = b
-	return c
-}
-
-// DisableSSL will use plain HTTP for accessing S3.
-func (c *S3Configuration) DisableSSL() *S3Configuration {
-	c.disableSSL = true
-	return c
-}
-
-// CreateBucket will attempt to create a configured bucket at initialization.
-// Should be skipped for wasabi storage.
-func (c *S3Configuration) CreateBucket() *S3Configuration {
-	c.createBucket = true
-	return c
-}
-
-// Credentials set access key and secret key for accessing S3 bucket.
-func (c *S3Configuration) Credentials(accessKey, secretKey string) *S3Configuration {
-	c.accessKey = accessKey
-	c.secretKey = secretKey
-	return c
-}
-
-func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
-	if cfg.name == "" {
+func InitS3Driver(cfg config.S3Config) (*S3Driver, error) {
+	if cfg.Name == "" {
 		return nil, errors.New("storage name must me configured")
 	}
 	s3cfg := &aws.Config{
-		Credentials:      credentials.NewStaticCredentials(cfg.accessKey, cfg.secretKey, ""),
-		Endpoint:         aws.String(cfg.endpoint),
-		Region:           aws.String(cfg.region),
+		Credentials:      credentials.NewStaticCredentials(cfg.Key, cfg.Secret, ""),
+		Endpoint:         aws.String(cfg.Endpoint),
+		Region:           aws.String(cfg.Region),
 		S3ForcePathStyle: aws.Bool(true),
-		DisableSSL:       aws.Bool(cfg.disableSSL),
 	}
 	sess, err := session.NewSession(s3cfg)
 	if err != nil {
 		return nil, err
 	}
 	s := &S3Driver{
-		S3Configuration: cfg,
-		session:         sess,
+		config:  cfg,
+		session: sess,
 	}
 
-	if cfg.createBucket {
-		logger.Infow("creating s3 bucket", "name", cfg.bucket)
+	if cfg.CreateBucket {
+		logger.Infow("creating s3 bucket", "name", cfg.Bucket)
 		client := s3.New(sess)
 		_, err := client.CreateBucket(&s3.CreateBucketInput{
-			Bucket: aws.String(s.bucket),
+			Bucket: aws.String(cfg.Bucket),
 			ACL:    aws.String("public-read"),
 		})
 		if err != nil {
@@ -122,16 +81,16 @@ func InitS3Driver(cfg *S3Configuration) (*S3Driver, error) {
 }
 
 type S3Driver struct {
-	*S3Configuration
+	config  config.S3Config
 	session *session.Session
 }
 
 func (s *S3Driver) Name() string {
-	return s.name
+	return s.config.Name
 }
 
-func (s *S3Driver) GetURL(streamTID string) string {
-	return fmt.Sprintf("%s/%s/%s", s.endpoint, s.bucket, streamTID)
+func (s *S3Driver) GetURL(item string) string {
+	return strings.Join([]string{s.config.Endpoint, s.config.Bucket, item}, "/")
 }
 
 func (s *S3Driver) Put(stream *library.Stream, overwrite bool) error {
@@ -142,7 +101,7 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 	if !overwrite {
 		dl := s3manager.NewDownloader(s.session)
 		_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
-			Bucket: aws.String(s.bucket),
+			Bucket: aws.String(s.config.Bucket),
 			Key:    aws.String(s3FileKey(stream.TID(), library.MasterPlaylistName)),
 		})
 		if err == nil {
@@ -169,9 +128,9 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 			default:
 				ctype = "text/plain"
 			}
-			logger.Debugw("uploading", "key", s3FileKey(stream.TID(), name), "ctype", ctype, "size", fi.Size(), "bucket", s.bucket)
+			logger.Debugw("uploading", "key", s3FileKey(stream.TID(), name), "ctype", ctype, "size", fi.Size(), "bucket", s.config.Bucket)
 			_, err = ul.UploadWithContext(ctx, &s3manager.UploadInput{
-				Bucket:      aws.String(s.bucket),
+				Bucket:      aws.String(s.config.Bucket),
 				Key:         aws.String(s3FileKey(stream.TID(), name)),
 				ContentType: aws.String(ctype),
 				Body:        f,
@@ -190,7 +149,7 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 func (s *S3Driver) Delete(tid string) error {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
 	client := s3.New(s.session)
-	bucket := aws.String(s.bucket)
+	bucket := aws.String(s.config.Bucket)
 	objects, err := client.ListObjectsWithContext(ctx, &s3.ListObjectsInput{
 		Bucket:  bucket,
 		Prefix:  aws.String(tid),
@@ -297,7 +256,7 @@ func (s *S3Driver) DeleteFragments(tid string, fragments []string) error {
 
 func (s *S3Driver) deleteBatch(client *s3.S3, batch []*s3.ObjectIdentifier) error {
 	delInput := &s3.DeleteObjectsInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.config.Bucket),
 		Delete: &s3.Delete{
 			Objects: batch,
 			Quiet:   aws.Bool(false),
@@ -312,7 +271,7 @@ func (s *S3Driver) deleteBatch(client *s3.S3, batch []*s3.ObjectIdentifier) erro
 func (s *S3Driver) GetFragment(streamTID, name string) (StreamFragment, error) {
 	client := s3.New(s.session)
 	obj, err := client.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.config.Bucket),
 		Key:    aws.String(s3FileKey(streamTID, name)),
 	})
 	if err != nil {
