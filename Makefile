@@ -1,25 +1,22 @@
-CC=x86_64-linux-musl-gcc
-CXX=x86_64-linux-musl-g++
-GOARCH=amd64
-GOOS=linux
-LDFLAGS=-ldflags "-linkmode external -extldflags -static"
-GO_BUILD=go build
-BUILD_DIR=dist
-LOCAL_ARCH=$(shell uname)
-VERSION := $(shell git describe --tags --match 'v*'|sed -e 's/v//')
+LOCAL_ARCH ?= $(shell uname)
+VERSION ?= $(shell git describe --tags --match 'v*'|sed -e 's/v//')
 TRANSCODER_VERSION ?= $(shell git describe --tags --match 'transcoder-v*'|sed 's/transcoder-v\([0-9.]*\).*/\1/')
+BUILD_DIR ?= dist
+GOOS ?= linux
+GOARCH ?= amd64
+GO_BUILD ?= go build
 
-transcoder: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
+transcoder:
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=0 \
   	$(GO_BUILD) -o $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder \
 	  -ldflags "-s -w -X github.com/OdyseeTeam/transcoder/internal/version.Version=$(TRANSCODER_VERSION)" \
 	  ./pkg/conductor/cmd/
 
-conductor_image:
+conductor_image: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	docker buildx build -f docker/Dockerfile-conductor -t odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) --platform linux/amd64 .
 	docker tag odyseeteam/transcoder-conductor:$(TRANSCODER_VERSION) odyseeteam/transcoder-conductor:latest
 
-cworker_image:
+cworker_image: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 	docker buildx build -f docker/Dockerfile-cworker -t odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) --platform linux/amd64 .
 	docker tag odyseeteam/transcoder-cworker:$(TRANSCODER_VERSION) odyseeteam/transcoder-cworker:latest
 
@@ -30,9 +27,12 @@ test_down:
 	docker-compose down
 
 test_prepare:
-	docker-compose up -d minio db redis
-	docker-compose up -d cworker conductor
-	docker-compose up minio-prepare
+	make transcoder
+	make conductor_image
+	make cworker_image
+	docker compose -p transcoder up -d minio db redis
+	docker compose -p transcoder up -d cworker conductor
+	docker compose -p transcoder up minio-prepare
 
 test: test_prepare
 	go test -covermode=count -coverprofile=coverage.out ./...

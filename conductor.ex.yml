@@ -2,6 +2,7 @@ Storages:
   - Name: local
     Type: S3
     Endpoint: http://minio:9000
+    Region: us-east-1
     Bucket: transcoded
     Key: ody
     Secret: odyseetes3
@@ -10,6 +11,7 @@ Storages:
   - Name: remote
     Type: S3
     Endpoint: https://s3.wasabisys.com
+    Region: us-east-1
     Bucket: production-videos
     Key: AKIAXXXXXXXXXXXXXXXX
     Secret: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
