@@ -41,8 +41,9 @@ func (s *librarySuite) TestAddChannel() {
 func (s *librarySuite) TestAddGetVideo() {
 	var err error
 
-	lib := New(Config{DB: s.DB, Storage: NewDummyStorage("storage1", "https://storage.host"), Log: zapadapter.NewKV(nil)})
-	newStream := GenerateDummyStream()
+	dummyStorage := NewDummyStorage("dummy1", "https://storage.host")
+	lib := New(Config{DB: s.DB, Storages: map[string]Storage{dummyStorage.Name(): dummyStorage}, Log: zapadapter.NewKV(nil)})
+	newStream := GenerateDummyStream(dummyStorage)
 
 	url, err := lib.GetVideoURL(newStream.SDHash())
 	s.ErrorIs(err, ErrStreamNotFound)

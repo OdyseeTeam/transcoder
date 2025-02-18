@@ -6,6 +6,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/OdyseeTeam/transcoder/internal/config"
 	"github.com/OdyseeTeam/transcoder/library"
 
 	randomdata "github.com/Pallinder/go-randomdata"
@@ -44,16 +45,15 @@ func (s *s3suite) SetupSuite() {
 	s.s3container, err = setupS3(context.Background())
 	s.Require().NoError(err)
 
-	s3driver, err := InitS3Driver(
-		S3Configure().
-			Name("test").
-			Endpoint(s.s3container.URI).
-			Region("us-east-1").
-			Credentials(minioAccessKey, minioSecretKey).
-			Bucket("storage-s3-test").
-			CreateBucket(). // This should be skipped for production/wasabi
-			DisableSSL(),
-	)
+	s3driver, err := InitS3Driver(config.S3Config{
+		Name:         "test",
+		Endpoint:     s.s3container.URI,
+		Region:       "us-east-1",
+		Key:          minioAccessKey,
+		Secret:       minioSecretKey,
+		Bucket:       "storage-s3-test",
+		CreateBucket: true,
+	})
 	s.Require().NoError(err)
 	s.s3driver = s3driver
 }

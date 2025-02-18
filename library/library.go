@@ -22,14 +22,10 @@ const (
 )
 
 var ErrStreamNotFound = errors.New("stream not found")
-var storageURLs = map[string]string{
-	"wasabi": "https://s3.wasabisys.com/t-na2.odycdn.com",
-	"legacy": "https://na-storage-1.transcoder.odysee.com/t-na",
-}
 
 type Storage interface {
 	Name() string
-	GetURL(tid string) string
+	GetURL(item string) string
 	Put(stream *Stream, _ bool) error
 	Delete(tid string) error
 	DeleteFragments(tid string, fragments []string) error
@@ -37,22 +33,22 @@ type Storage interface {
 }
 
 type Library struct {
-	db      *db.Queries
-	storage Storage
-	log     logging.KVLogger
+	db       *db.Queries
+	storages map[string]Storage
+	log      logging.KVLogger
 }
 
 type Config struct {
-	Storage Storage
-	DB      db.DBTX
-	Log     logging.KVLogger
+	Storages map[string]Storage
+	DB       db.DBTX
+	Log      logging.KVLogger
 }
 
 func New(config Config) *Library {
 	return &Library{
-		db:      db.New(config.DB),
-		log:     config.Log,
-		storage: config.Storage,
+		db:       db.New(config.DB),
+		log:      config.Log,
+		storages: config.Storages,
 	}
 }
 
@@ -137,7 +133,12 @@ func (lib *Library) RetireVideos(storageName string, maxSize uint64) (uint64, ui
 func (lib *Library) Retire(video db.Video) error {
 	var deleted bool
 
-	ll := lib.log.With("tid", video.TID, "sd_hash", video.SDHash)
+	ll := lib.log.With("tid", video.TID, "sd_hash", video.SDHash, "storage", video.Storage)
+
+	storage, ok := lib.storages[video.Storage]
+	if !ok {
+		return fmt.Errorf("storage %s not found", video.Storage)
+	}
 
 	if video.Manifest.Valid {
 		manifest := &Manifest{}
@@ -147,7 +148,7 @@ func (lib *Library) Retire(video db.Video) error {
 		} else if len(manifest.Files) == 0 {
 			ll.Warn("empty video manifest", "err", err)
 		} else {
-			err = lib.storage.DeleteFragments(video.TID, manifest.Files)
+			err = storage.DeleteFragments(video.TID, manifest.Files)
 			if err != nil {
 				ll.Warn("failed to delete fragments for remote video", "err", err)
 			} else {
@@ -156,7 +157,7 @@ func (lib *Library) Retire(video db.Video) error {
 		}
 	}
 	if !deleted {
-		err := lib.storage.Delete(video.TID)
+		err := storage.Delete(video.TID)
 		if err != nil {
 			ll.Warn("failed to delete remote video", "err", err)
 			return err
@@ -173,7 +174,7 @@ func (lib *Library) Retire(video db.Video) error {
 	return nil
 }
 
-// RetireVideos deletes older videos from S3, keeping total size of remote videos at maxSize.
+// ValidateStreams removes broken streams from the database.
 func (lib *Library) ValidateStreams(storageName string, offset, limit int32, remove bool) ([]string, []string, error) {
 	broken := []string{}
 	valid := []string{}
@@ -219,7 +220,7 @@ func (lib *Library) ValidateStreams(storageName string, offset, limit int32, rem
 	defer p.Release()
 
 	for _, v := range items {
-		url := fmt.Sprintf("%s/%s", storageURLs[v.Storage], v.Path)
+		url := lib.storages[v.Storage].GetURL(v.Path)
 		tids[url] = v.TID
 		wg.Add(1)
 		_ = p.Invoke(url)

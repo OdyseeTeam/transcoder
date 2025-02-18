@@ -85,7 +85,7 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 		"path", path,
 	)
 
-	location, err := h.manager.Video(videoURL)
+	location, err := h.manager.GetVideoURL(videoURL)
 
 	if err != nil {
 		var (
@@ -117,37 +117,6 @@ func (h httpVideoHandler) handleVideo(ctx *fasthttp.RequestCtx) {
 			statusMessage = err.Error()
 		}
 		ctx.SetBodyString(statusMessage)
-		return
-	}
-
-	switch err {
-	case nil:
-		break
-	case resolve.ErrNoSigningChannel, resolve.ErrChannelNotEnabled:
-		ctx.SetStatusCode(http.StatusForbidden)
-		ll.Debug("transcoding disabled")
-		return
-	case resolve.ErrTranscodingQueued:
-		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Debug("trancoding queued")
-		return
-	case resolve.ErrTranscodingForbidden:
-		ctx.SetStatusCode(http.StatusForbidden)
-		ctx.Response.SetBodyString(err.Error())
-		ll.Debug(err.Error())
-		return
-	case resolve.ErrTranscodingUnderway:
-		ctx.SetStatusCode(http.StatusAccepted)
-		ll.Debug("trancoding underway")
-		return
-	case resolve.ErrClaimNotFound:
-		ctx.SetStatusCode(http.StatusNotFound)
-		ll.Info("claim not found")
-		return
-	default:
-		ctx.SetStatusCode(http.StatusInternalServerError)
-		ll.Errorw("internal error", "error", err)
-		fmt.Fprint(ctx, err.Error())
 		return
 	}
 

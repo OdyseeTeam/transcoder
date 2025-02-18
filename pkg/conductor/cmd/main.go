@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
 	"syscall"
 
 	"github.com/OdyseeTeam/transcoder/encoder"
+	"github.com/OdyseeTeam/transcoder/internal/config"
 	"github.com/OdyseeTeam/transcoder/internal/version"
 	"github.com/OdyseeTeam/transcoder/ladder"
 	"github.com/OdyseeTeam/transcoder/library"
@@ -29,7 +28,6 @@ import (
 	"github.com/fasthttp/router"
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/viper"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"go.uber.org/zap"
@@ -55,8 +53,7 @@ var CLI struct {
 		Offset  int32  `optional:"" help:"Starting stream index"`
 		Limit   int32  `optional:"" help:"Stream count" default:"999999999"`
 	} `cmd:"" help:"Verify a list of streams supplied by stdin"`
-	Redis string `optional:"" help:"Redis server address"`
-	Debug bool   `optional:"" help:"Enable debug logging" default:"false"`
+	Debug bool `optional:"" help:"Enable debug logging" default:"false"`
 }
 
 func main() {
@@ -87,7 +84,7 @@ func main() {
 
 func startConductor() {
 	log := logger.Sugar()
-	cfg, err := readConfig("conductor")
+	cfg, err := config.ReadConductorConfig()
 	if err != nil {
 		log.Fatal("unable to read config", err)
 	}
@@ -102,53 +99,43 @@ func startConductor() {
 		resolve.SetLogger(logging.Create("resolve", logging.Prod))
 	}
 
-	s3cfg := cfg.GetStringMapString("s3")
-	libCfg := cfg.GetStringMapString("library")
-
-	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
+	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(cfg.Library.DSN).AppName("library"), ldb.MigrationsFS)
 	if err != nil {
 		log.Fatal("library db initialization failed", err)
 	}
 
-	s3storage, err := storage.InitS3Driver(
-		storage.S3Configure().
-			Endpoint(s3cfg["endpoint"]).
-			Credentials(s3cfg["key"], s3cfg["secret"]).
-			Bucket(s3cfg["bucket"]).
-			Name(s3cfg["name"]),
-	)
+	cleanStopChans := []chan struct{}{}
+
+	storages, err := storage.InitS3Drivers(cfg.Storages)
 	if err != nil {
-		log.Fatal("s3 driver initialization failed", err)
+		log.Fatal(err)
 	}
-	log.Infow("s3 storage configured", "endpoint", s3cfg["endpoint"], "bucket", s3cfg["bucket"])
 
 	lib := library.New(library.Config{
-		DB:      libDB,
-		Storage: s3storage,
-		Log:     zapadapter.NewKV(nil),
+		DB:       libDB,
+		Storages: storages,
+		Log:      zapadapter.NewKV(nil),
 	})
 
-	cleanStopChan := library.SpawnLibraryCleaning(lib, s3storage.Name(), library.StringToSize(s3cfg["maxsize"]))
+	for _, scfg := range cfg.Storages {
+		log.Infow("s3 storage configured", "name", scfg.Name, "endpoint", scfg.Endpoint)
+		if scfg.MaxSize != "" {
+			ch := library.SpawnLibraryCleaning(lib, scfg.Name, library.StringToSize(scfg.MaxSize))
+			cleanStopChans = append(cleanStopChans, ch)
+		}
+	}
 
-	adQueue := cfg.GetStringMapString("adaptivequeue")
-	minHits, _ := strconv.Atoi(adQueue["minhits"])
-	if minHits < 0 {
+	if cfg.AdaptiveQueue.MinHits < 0 {
 		log.Fatal("min hits cannot be below zero")
 	}
-	mgr := manager.NewManager(lib, uint(minHits))
+	mgr := manager.NewManager(lib, uint(cfg.AdaptiveQueue.MinHits)) // nolint:gosec
 
 	httpStopChan, _ := mgr.StartHttpServer(manager.HttpServerConfig{
-		ManagerToken: libCfg["managertoken"],
+		ManagerToken: cfg.Library.ManagerToken,
 		Bind:         CLI.Conductor.HttpBind,
 	})
 
-	var redisURI string
-	if CLI.Redis != "" {
-		redisURI = CLI.Redis
-	} else {
-		redisURI = cfg.GetString("redis")
-	}
-	redisOpts, err := asynq.ParseRedisURI(redisURI)
+	redisOpts, err := asynq.ParseRedisURI(cfg.Redis)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -167,11 +154,11 @@ func startConductor() {
 	close(httpStopChan)
 
 	cnd.Stop()
-
 	log.Infof("conductor stopped")
 
-	close(cleanStopChan)
-	log.Infof("storage cleanup shut down")
+	for _, ch := range cleanStopChans {
+		close(ch)
+	}
 
 	mgr.Pool().Stop()
 	log.Infof("manager shut down")
@@ -180,7 +167,7 @@ func startConductor() {
 func startWorker() {
 	log := logger.Sugar()
 
-	cfg, err := readConfig("worker")
+	cfg, err := config.ReadWorkerConfig()
 	if err != nil {
 		log.Fatal("unable to read config", err)
 	}
@@ -195,8 +182,6 @@ func startWorker() {
 		resolve.SetLogger(logging.Create("resolve", logging.Prod))
 	}
 
-	s3opts := cfg.GetStringMapString("s3")
-
 	if CLI.Worker.StreamsDir != "" {
 		if err := makeWorkDir(CLI.Worker.StreamsDir); err != nil {
 			log.Fatal(err)
@@ -208,19 +193,11 @@ func startWorker() {
 		}
 	}
 
-	s3cfg := storage.S3Configure().
-		Endpoint(s3opts["endpoint"]).
-		Credentials(s3opts["key"], s3opts["secret"]).
-		Bucket(s3opts["bucket"]).
-		Name(s3opts["name"])
-	if s3opts["createbucket"] == "true" {
-		s3cfg = s3cfg.CreateBucket()
-	}
-	s3storage, err := storage.InitS3Driver(s3cfg)
+	storage, err := storage.InitS3Driver(cfg.Storage)
 	if err != nil {
 		log.Fatal("s3 driver initialization failed", err)
 	}
-	log.Infow("s3 storage configured", "endpoint", s3opts["endpoint"])
+	log.Infow("s3 storage configured", "name", cfg.Storage.Name, "endpoint", cfg.Storage.Endpoint)
 
 	enc, err := encoder.NewEncoder(encoder.Configure().
 		Log(zapadapter.NewKV(log.Desugar())),
@@ -234,25 +211,19 @@ func startWorker() {
 		resolve.SetBlobServer(CLI.Worker.BlobServer)
 	}
 
-	if cfg.GetString("edgetoken") == "" {
+	if cfg.EdgeToken == "" {
 		log.Warn("edge token not set")
 	} else {
-		resolve.SetEdgeToken(cfg.GetString("edgetoken"))
+		resolve.SetEdgeToken(cfg.EdgeToken)
 	}
 
-	var redisURI string
-	if CLI.Redis != "" {
-		redisURI = CLI.Redis
-	} else {
-		redisURI = cfg.GetString("redis")
-	}
-	redisOpts, err := asynq.ParseRedisURI(redisURI)
+	redisOpts, err := asynq.ParseRedisURI(cfg.Redis)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	runner, err := tasks.NewEncoderRunner(
-		s3storage, enc, tasks.NewResultWriter(redisOpts),
+		storage, enc, tasks.NewResultWriter(redisOpts),
 		tasks.WithLogger(zapadapter.NewKV(log.Desugar())),
 		tasks.WithOutputDir(CLI.Worker.OutputDir),
 		tasks.WithStreamsDir(CLI.Worker.StreamsDir),
@@ -278,7 +249,7 @@ func startWorker() {
 
 func validateStreams() {
 	log := logger.Sugar()
-	cfg, err := readConfig("conductor")
+	cfg, err := config.ReadConductorConfig()
 	if err != nil {
 		log.Fatal("unable to read config", err)
 	}
@@ -293,30 +264,20 @@ func validateStreams() {
 		library.SetLogger(logging.Create("library", logging.Prod))
 	}
 
-	s3cfg := cfg.GetStringMapString("s3")
-	libCfg := cfg.GetStringMapString("library")
-
-	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(libCfg["dsn"]).AppName("library"), ldb.MigrationsFS)
+	libDB, err := migrator.ConnectDB(migrator.DefaultDBConfig().DSN(cfg.Library.DSN).AppName("library"), ldb.MigrationsFS)
 	if err != nil {
 		log.Fatal("library db initialization failed", err)
 	}
 
-	s3storage, err := storage.InitS3Driver(
-		storage.S3Configure().
-			Endpoint(s3cfg["endpoint"]).
-			Credentials(s3cfg["key"], s3cfg["secret"]).
-			Bucket(s3cfg["bucket"]).
-			Name(s3cfg["name"]),
-	)
+	storages, err := storage.InitS3Drivers(cfg.Storages)
 	if err != nil {
-		log.Fatal("s3 driver initialization failed", err)
+		log.Fatal(storages)
 	}
-	log.Infow("s3 storage configured", "endpoint", s3cfg["endpoint"], "bucket", s3cfg["bucket"])
 
 	lib := library.New(library.Config{
-		DB:      libDB,
-		Storage: s3storage,
-		Log:     zapadapter.NewKV(nil),
+		DB:       libDB,
+		Storages: storages,
+		Log:      zapadapter.NewKV(nil),
 	})
 	valid, broken, err := lib.ValidateStreams(
 		CLI.ValidateStreams.Storage, CLI.ValidateStreams.Offset, CLI.ValidateStreams.Limit, CLI.ValidateStreams.Remove)
@@ -324,21 +285,6 @@ func validateStreams() {
 		log.Fatal("failed to validate streams:", err)
 	}
 	fmt.Printf("%v streams checked, %v valid, %v broken\n", len(valid)+len(broken), len(valid), len(broken))
-}
-
-func readConfig(name string) (*viper.Viper, error) {
-	cfg := viper.New()
-	cfg.SetConfigName(name)
-
-	ex, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
-
-	cfg.AddConfigPath(filepath.Dir(ex))
-	cfg.AddConfigPath(".")
-
-	return cfg, cfg.ReadInConfig()
 }
 
 func startMetricsServer(bind string, stopChan chan struct{}) error {

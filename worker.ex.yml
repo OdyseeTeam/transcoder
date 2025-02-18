@@ -1,5 +1,6 @@
-S3:
+Storage:
   Name: local
+  Type: S3
   Endpoint: http://minio:9000
   Bucket: transcoded
   Key: ody

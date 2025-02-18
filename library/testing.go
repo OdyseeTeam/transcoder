@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -60,6 +61,55 @@ type LibraryTestHelper struct {
 	DBCleanup migrator.TestDBCleanup
 }
 
+const (
+	OpDelete = iota
+	OpGetFragment
+	OpPut
+)
+
+type StorageOp struct {
+	Op   int
+	TID  string
+	Args []string
+}
+
+type DummyStorage struct {
+	Ops            []StorageOp
+	ReturnName     string
+	name, endpoint string
+}
+
+func NewDummyStorage(name, endpoint string) *DummyStorage {
+	return &DummyStorage{
+		Ops:      []StorageOp{},
+		name:     name,
+		endpoint: endpoint,
+	}
+}
+
+func (s *DummyStorage) Delete(tid string) error {
+	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid})
+	return nil
+}
+
+func (s *DummyStorage) DeleteFragments(tid string, fragments []string) error {
+	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid, Args: fragments})
+	return nil
+}
+
+func (s *DummyStorage) Put(stream *Stream, _ bool) error {
+	s.Ops = append(s.Ops, StorageOp{Op: OpGetFragment, TID: stream.TID()})
+	return nil
+}
+
+func (s *DummyStorage) Name() string {
+	return s.name
+}
+
+func (s *DummyStorage) GetURL(item string) string {
+	return fmt.Sprintf("%s/%s", s.endpoint, item)
+}
+
 func (h *LibraryTestHelper) SetupLibraryDB() error {
 	db, dbCleanup, err := migrator.CreateTestDB(db.MigrationsFS)
 	if err != nil {
@@ -109,10 +159,10 @@ func PopulateHLSPlaylist(t *testing.T, dstPath, sdHash string) {
 	require.NoError(t, err)
 }
 
-func GenerateDummyStream() *Stream {
+func GenerateDummyStream(storage Storage) *Stream {
 	s := &Stream{
 		LocalPath:     "/tmp/stream",
-		RemoteStorage: "storage1",
+		RemoteStorage: storage.Name(),
 		Manifest: &Manifest{
 			URL:          randomdata.SillyName(),
 			ChannelURL:   randomdata.SillyName(),

@@ -1,5 +1,3 @@
-version: '3.7'
-
 services:
   conductor:
     image: odyseeteam/transcoder-conductor:24.2.3

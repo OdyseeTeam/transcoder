@@ -84,43 +84,43 @@ func (s *managerSuite) TestVideo() {
 	}
 
 	for _, u := range urlsPriority {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsEnabled {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsLevel5 {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrTranscodingQueued, err, u)
 	}
 
 	for _, u := range urlsNotEnabled {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrTranscodingForbidden, err, u)
 	}
 
 	for _, u := range urlsDisabled {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrTranscodingForbidden, err, u)
 	}
 
 	for _, u := range urlsNoChannel {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrNoSigningChannel, err, u)
 	}
 
 	for _, u := range urlsNotFound {
-		v, err := mgr.Video(u)
+		v, err := mgr.GetVideoURL(u)
 		s.Empty(v)
 		s.Equal(resolve.ErrClaimNotFound, err)
 	}
@@ -154,7 +154,7 @@ func (s *managerSuite) TestRequests() {
 	lib := library.New(library.Config{DB: s.DB, Log: zapadapter.NewKV(nil)})
 	mgr := NewManager(lib, 0)
 
-	mgr.Video("@specialoperationstest#3/fear-of-death-inspirational#a")
+	mgr.GetVideoURL("@specialoperationstest#3/fear-of-death-inspirational#a")
 	out := mgr.Requests()
 	r1 = <-out
 

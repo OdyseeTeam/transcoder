@@ -39,6 +39,8 @@ type HttpServerConfig struct {
 	Bind         string
 }
 
+type ResolverFunc func(string) (*TranscodingRequest, error)
+
 type VideoLibrary interface {
 	GetURL(sdHash string) (string, error)
 	GetAllChannels() ([]db.Channel, error)
@@ -52,6 +54,7 @@ type VideoManager struct {
 	pool     *Pool
 	cache    *ccache.Cache
 	channels *channelList
+	resolver ResolverFunc
 }
 
 // NewManager creates a video library manager with a pool for future transcoding requests.
@@ -108,7 +111,7 @@ func NewManager(lib *library.Library, minHits uint) *VideoManager {
 		return true
 	})
 
-	m.pool.AddQueue("common", uint(minHits), func(key string, value interface{}, queue *mfr.Queue) bool {
+	m.pool.AddQueue("common", minHits, func(key string, value interface{}, queue *mfr.Queue) bool {
 		r := value.(*TranscodingRequest)
 		if m.channels.GetPriority(r) == db.ChannelPriorityDisabled {
 			return false
@@ -122,6 +125,10 @@ func NewManager(lib *library.Library, minHits uint) *VideoManager {
 	go m.pool.Start()
 
 	return m
+}
+
+func (m *VideoManager) SetResolver(rf ResolverFunc) {
+	m.resolver = rf
 }
 
 func (m *VideoManager) Pool() *Pool {
@@ -143,20 +150,20 @@ func (m *VideoManager) Library() *library.Library {
 
 // Video checks if video exists in the library or waiting in one of the queues.
 // If neither, it adds claim to the pool for later processing.
-func (m *VideoManager) Video(uri string) (string, error) {
+func (m *VideoManager) GetVideoURL(uri string) (string, error) {
 	uri = strings.TrimPrefix(uri, "lbry://")
-	tr, err := m.ResolveStream(uri)
+	tcRequest, err := m.ResolveStream(uri)
 	if err != nil {
 		return "", err
 	}
 
-	if m.channels.GetPriority(tr) == db.ChannelPriorityDisabled {
+	if m.channels.GetPriority(tcRequest) == db.ChannelPriorityDisabled {
 		return "", resolve.ErrTranscodingForbidden
 	}
 
-	vloc, err := m.lib.GetVideoURL(tr.SDHash)
+	vloc, err := m.lib.GetVideoURL(tcRequest.SDHash)
 	if err != nil {
-		return "", m.pool.Admit(tr.SDHash, tr)
+		return "", m.pool.Admit(tcRequest.SDHash, tcRequest)
 	}
 
 	return vloc, nil
@@ -216,7 +223,14 @@ func (m *VideoManager) StartHttpServer(config HttpServerConfig) (chan struct{}, 
 }
 
 func (m *VideoManager) ResolveStream(uri string) (*TranscodingRequest, error) {
-	item, err := m.cache.Fetch(fmt.Sprintf("claim:%v", uri), 300*time.Second, func() (interface{}, error) {
+	if m.resolver == nil {
+		return m.defaultResolve(uri)
+	}
+	return m.resolver(uri)
+}
+
+func (m *VideoManager) defaultResolve(uri string) (*TranscodingRequest, error) {
+	item, err := m.cache.Fetch(fmt.Sprintf("claim:%v", uri), 300*time.Second, func() (any, error) {
 		return resolve.ResolveStream(uri)
 	})
 	if err != nil {

@@ -1,10 +1,20 @@
-S3:
-  Name: local
-  Endpoint: http://minio:9000
-  Bucket: transcoded
-  Key: ody
-  Secret: odyseetes3
-  MaxSize: 1TB
+Storages:
+  - Name: local
+    Type: S3
+    Endpoint: http://minio:9000
+    Bucket: transcoded
+    Key: ody
+    Secret: odyseetes3
+    MaxSize: 1TB
+    CreateBucket: true
+  - Name: remote
+    Type: S3
+    Endpoint: https://s3.wasabisys.com
+    Bucket: production-videos
+    Key: AKIAXXXXXXXXXXXXXXXX
+    Secret: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    MaxSize: 5TB
+    CreateBucket: false
 
 AdaptiveQueue:
   MinHits: 1

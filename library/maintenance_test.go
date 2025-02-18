@@ -2,7 +2,6 @@ package library
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -18,55 +17,6 @@ import (
 type maintenanceSuite struct {
 	suite.Suite
 	LibraryTestHelper
-}
-
-const (
-	OpDelete = iota
-	OpGetFragment
-	OpPut
-)
-
-type StorageOp struct {
-	Op   int
-	TID  string
-	Args []string
-}
-
-type DummyStorage struct {
-	Ops            []StorageOp
-	ReturnName     string
-	name, endpoint string
-}
-
-func NewDummyStorage(name, endpoint string) *DummyStorage {
-	return &DummyStorage{
-		Ops:      []StorageOp{},
-		name:     name,
-		endpoint: endpoint,
-	}
-}
-
-func (s *DummyStorage) Delete(tid string) error {
-	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid})
-	return nil
-}
-
-func (s *DummyStorage) DeleteFragments(tid string, fragments []string) error {
-	s.Ops = append(s.Ops, StorageOp{Op: OpDelete, TID: tid, Args: fragments})
-	return nil
-}
-
-func (s *DummyStorage) Put(stream *Stream, _ bool) error {
-	s.Ops = append(s.Ops, StorageOp{Op: OpGetFragment, TID: stream.TID()})
-	return nil
-}
-
-func (s *DummyStorage) Name() string {
-	return s.name
-}
-
-func (s *DummyStorage) GetURL(tid string) string {
-	return fmt.Sprintf("%s/%s", s.endpoint, tid)
 }
 
 func (s *maintenanceSuite) SetupTest() {
@@ -107,11 +57,11 @@ func (s *maintenanceSuite) TestRetireVideos() {
 	var totalSize, sizeToKeep, sizeRemote uint64
 	var initialCount, afterCount int64
 
-	dummyStorage := NewDummyStorage("", "")
-	lib := New(Config{DB: s.DB, Storage: dummyStorage, Log: zapadapter.NewKV(nil)})
+	dummyStorage := NewDummyStorage("dummy1", "")
+	lib := New(Config{DB: s.DB, Storages: map[string]Storage{dummyStorage.Name(): dummyStorage}, Log: zapadapter.NewKV(nil)})
 
 	for i := range [100]int{} {
-		stream := GenerateDummyStream()
+		stream := GenerateDummyStream(dummyStorage)
 		err := lib.AddRemoteStream(*stream)
 		s.Require().NoError(err)
 
@@ -142,7 +92,7 @@ func (s *maintenanceSuite) TestRetireVideos() {
 	s.Require().NoError(err)
 
 	sizeToKeep = uint64(rand.Int63n(1000000 * 50)) // #nosec G404 G115
-	totalSizeAfterRetire, retiredSize, err := lib.RetireVideos("storage1", sizeToKeep)
+	totalSizeAfterRetire, retiredSize, err := lib.RetireVideos(dummyStorage.Name(), sizeToKeep)
 	s.NoError(err)
 	s.Equal(totalSize, totalSizeAfterRetire)
 	s.InDelta(sizeToKeep, totalSizeAfterRetire-retiredSize, 5000000)

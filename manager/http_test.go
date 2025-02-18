@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,7 +13,9 @@ import (
 	"testing"
 
 	"github.com/OdyseeTeam/transcoder/library"
+	db "github.com/OdyseeTeam/transcoder/library/db"
 	"github.com/OdyseeTeam/transcoder/pkg/logging/zapadapter"
+	"github.com/OdyseeTeam/transcoder/pkg/resolve"
 
 	randomdata "github.com/Pallinder/go-randomdata"
 	"github.com/fasthttp/router"
@@ -54,29 +57,65 @@ func (s *httpSuite) TestPromHttp() {
 	s.HTTPBodyContains(promhttp.Handler().ServeHTTP, http.MethodGet, "/metrics", nil, "transcoding_queue_hits")
 }
 
-func (s *httpSuite) TestAdmin() {
-	router := router.New()
+func (s *httpSuite) TestHandleVideoGet() {
+	router, client := s.createServer()
 
-	ln := fasthttputil.NewInmemoryListener()
-	server := &fasthttp.Server{
-		Handler:            router.Handler,
-		Name:               "tower",
-		MaxRequestBodySize: 10 * 1024 * 1024 * 1024,
-	}
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return ln.Dial()
-			},
-		},
+	storage1 := library.NewDummyStorage("dummy1", "http://dummy1.s3.com")
+	storage2 := library.NewDummyStorage("dummy1", "http://dummy1.s3.com")
+	storages := []library.Storage{storage1, storage2}
+
+	lib := library.New(library.Config{
+		Storages: map[string]library.Storage{storage1.Name(): storage1, storage2.Name(): storage2},
+		DB:       s.DB,
+		Log:      zapadapter.NewKV(nil),
+	})
+
+	resolves := map[string]string{}
+
+	for range 15 {
+		stream := library.GenerateDummyStream(storages[rand.Intn(len(storages))]) // nolint:gosec
+		s.T().Logf("adding stream %s", stream.Manifest.URL)
+		resolves[stream.Manifest.URL] = stream.Manifest.SDHash
+		err := lib.AddRemoteStream(*stream)
+		s.Require().NoError(err)
 	}
 
-	go func() {
-		err := server.Serve(ln)
-		if err != nil {
-			s.FailNow("failed to serve: %v", err)
+	mgr := NewManager(lib, 0)
+	mgr.SetResolver(func(uri string) (*TranscodingRequest, error) {
+		if sdHash, ok := resolves[uri]; ok {
+			rs := resolve.ResolvedStream{
+				URI:        uri,
+				SDHash:     sdHash,
+				ChannelURI: "",
+			}
+			s.T().Logf("found stream %s", uri)
+			return &TranscodingRequest{ResolvedStream: rs}, nil
 		}
-	}()
+		s.T().Logf("stream %s not found", uri)
+		return nil, resolve.ErrClaimNotFound
+	})
+
+	CreateRoutes(router, mgr, zapadapter.NewKV(nil), nil)
+	queries := db.New(s.DB)
+	videos, err := queries.GetAllVideos(context.Background())
+	s.Require().NoError(err)
+	for _, v := range videos {
+		reqUrl := fmt.Sprintf("http://localhost/api/v2/video/%s", v.URL)
+		s.T().Logf("req url: %s", reqUrl)
+		req, err := http.NewRequest(http.MethodGet, reqUrl, nil)
+		s.Require().NoError(err)
+		resp, err := client.Do(req)
+		s.Require().NoError(err)
+		s.Require().Equal(http.StatusSeeOther, resp.StatusCode)
+		loc := resp.Header.Get("Location")
+		s.Require().NotEmpty(v.Storage, v.TID)
+		s.Equal(fmt.Sprintf("remote://%s/%s/", v.Storage, v.TID), loc)
+	}
+}
+
+func (s *httpSuite) TestAdmin() {
+	router, client := s.createServer()
+
 	token := "test-token"
 	lib := library.New(library.Config{DB: s.DB, Log: zapadapter.NewKV(nil)})
 	mgr := NewManager(lib, 0)
@@ -140,4 +179,34 @@ func (s *httpSuite) TestAdmin() {
 		})
 	}
 
+}
+
+func (s *httpSuite) createServer() (*router.Router, *http.Client) {
+	router := router.New()
+
+	ln := fasthttputil.NewInmemoryListener()
+	server := &fasthttp.Server{
+		Handler:            router.Handler,
+		Name:               "tower",
+		MaxRequestBodySize: 10 * 1024 * 1024 * 1024,
+	}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return ln.Dial()
+			},
+		},
+	}
+
+	go func() {
+		err := server.Serve(ln)
+		if err != nil {
+			s.FailNow("failed to serve: %v", err)
+		}
+	}()
+
+	return router, client
 }
