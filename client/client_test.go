@@ -21,6 +21,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// To regenerate:
+//
+//	go run ./tccli transcode "lbry://@specialoperationstest#3/fear-of-death-inspirational#a"
+//	mv fear-of-death-inspirational/*.m3u8 client/testdata/known-stream
 var streamURL = "@specialoperationstest#3/fear-of-death-inspirational#a"
 var streamSDHash = "f12fb044f5805334a473bf9a81363d89bd1cb54c4065ac05be71a599a6c51efc6c6afb257208326af304324094105774"
 
