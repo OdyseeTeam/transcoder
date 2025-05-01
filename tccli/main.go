@@ -79,7 +79,7 @@ func main() {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
 			outPath = inPath + "_out"
 		} else {
-			tmpDir, err := os.MkdirTemp(".", "")
+			tmpDir, err := os.MkdirTemp("./", "")
 			if err != nil {
 				panic(err)
 			}

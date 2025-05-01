@@ -5,7 +5,7 @@
 
 ## Development
 
-Requires go 1.22.
+Requires go 1.24.
 
 ## Building
 
@@ -41,6 +41,17 @@ This project is using [SemVer](https://semver.org) YY.MM.MINOR[.MICRO] for `clie
 ```
 git tag transcoder-v24.2.0
 ```
+
+## Tools
+
+To download a regular stream and produce a transcoded copy locally:
+
+```
+docker run -v $(pwd):$(pwd) -w $(pwd) odyseeteam/transcoder-tccli transcode "lbry://@specialoperationstest#3/fear-of-dea
+th-inspirational#a"
+```
+
+Check `./tccli/main.go` for more commands.
 
 ## Contributing
 

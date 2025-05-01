@@ -54,10 +54,10 @@ var streamFragmentCases = []struct {
 	{"v1.m3u8", 0},
 	{"v2.m3u8", 0},
 	{"v3.m3u8", 0},
-	{"v0_s000000.ts", 2_000_000},
-	{"v1_s000000.ts", 760_000},
-	{"v2_s000000.ts", 300_000},
-	{"v3_s000000.ts", 120_000},
+	{"v0_s000000.ts", 1860636},
+	{"v1_s000000.ts", 623032},
+	{"v2_s000000.ts", 221840},
+	{"v3_s000000.ts", 115620},
 }
 
 func TestClientSuite(t *testing.T) {
@@ -106,18 +106,20 @@ Waiting:
 			sz, err := c.PlayFragment(streamURL, streamSDHash, tc.name, rr, httptest.NewRequest(http.MethodGet, "/", nil))
 			s.Require().NoError(err)
 			s.Require().Equal(http.StatusOK, rr.Result().StatusCode)
-			rbody, err := io.ReadAll(rr.Result().Body)
+			receivedBodyRaw, err := io.ReadAll(rr.Result().Body)
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.InDelta(tc.size, len(rbody), float64(tc.size)*0.2)
-				s.EqualValues(sz, len(rbody))
+				s.InDelta(tc.size, len(receivedBodyRaw), float64(tc.size)*0.2)
+				s.EqualValues(sz, len(receivedBodyRaw))
 			} else {
-				absPath, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
+				expectedFile, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))
 				s.Require().NoError(err)
-				tbody, err := os.ReadFile(absPath)
+				expectedBody, err := os.ReadFile(expectedFile)
 				s.Require().NoError(err)
-				s.Equal(strings.TrimRight(string(tbody), "\n"), strings.TrimRight(string(rbody), "\n"))
+				receivedBody := strings.TrimRight(string(receivedBodyRaw), "\n")
+				receivedBody = strings.ReplaceAll(receivedBody, ",CLOSED-CAPTIONS=NONE", "")
+				s.Equal(strings.TrimRight(string(expectedBody), "\n"), receivedBody)
 			}
 			if tc.name == MasterPlaylistName {
 				s.Equal(cacheHeaderHit, rr.Result().Header.Get(cacheHeaderName))

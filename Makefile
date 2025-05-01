@@ -23,8 +23,14 @@ cworker_image: $(BUILD_DIR)/$(GOOS)_$(GOARCH)/transcoder
 ffmpeg_image:
 	docker buildx build -f docker/Dockerfile-ffmpeg -t odyseeteam/transcoder-ffmpeg:git --platform linux/amd64 .
 
-test_down:
+tccli_image:
+	docker buildx build -f docker/Dockerfile-tccli -t odyseeteam/transcoder-tccli:latest --platform linux/amd64 .
+
+test_clean:
 	docker-compose down
+	docker volume rm -f transcoder_minio-data
+	docker volume rm -f transcoder_redis-data
+	docker volume rm -f transcoder_db-data
 
 test_prepare:
 	make transcoder
