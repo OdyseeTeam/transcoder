@@ -29,5 +29,5 @@ func NewPool(encoder Encoder, parallel int) pool {
 // It works slightly different from encoder.Encode but the result should eventually be the same.
 // For how to obtain encoding progress, see poolSuite.TestEncode.
 func (p pool) Encode(in, out string) *dispatcher.Result {
-	return p.Dispatcher.Dispatch(encodeTask{in, out})
+	return p.Dispatch(encodeTask{in, out})
 }

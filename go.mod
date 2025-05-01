@@ -1,6 +1,6 @@
 module github.com/OdyseeTeam/transcoder
 
-go 1.23
+go 1.24
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0

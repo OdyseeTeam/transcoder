@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -96,7 +95,7 @@ type streamLocation struct {
 func Configure() *Configuration {
 	return &Configuration{
 		remoteServer: defaultRemoteServer,
-		cacheSize:    int64(math.Pow(1024, 3)),
+		cacheSize:    1024 * 1024 * 1024,
 		itemsToPrune: 100,
 		httpClient: &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {

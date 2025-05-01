@@ -27,11 +27,10 @@ type ArgumentSet struct {
 }
 
 var hlsDefaultArguments = map[string]string{
-	"preset":       preset,
-	"sc_threshold": "0",
-	"c:v":          "libx264",
-	"pix_fmt":      "yuv420p",
-	// "crf":                  constantRateFactor,
+	"preset":               preset,
+	"sc_threshold":         "0",
+	"c:v":                  "libx264",
+	"pix_fmt":              "yuv420p",
 	"c:a":                  "aac",
 	"ac":                   "2",
 	"ar":                   "44100",
@@ -63,6 +62,7 @@ func (a *ArgumentSet) GetStrArguments() []string {
 		ladArgs = append(ladArgs,
 			"-map", "v:0",
 			"-filter:v:"+s, "scale=-2:"+strconv.Itoa(tier.Height),
+			"-crf:v:"+s, strconv.Itoa(tier.CRF),
 			"-b:v:"+s, vRate,
 			"-maxrate:v:"+s, vRate,
 			"-bufsize:v:"+s, vRate,

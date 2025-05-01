@@ -46,7 +46,7 @@ func NewPool(parallel int) pool {
 // It will block if all workers are busy.
 // Duplicate urls are not checked for.
 func (p pool) Retrieve(url, out string) *dispatcher.Result {
-	return p.Dispatcher.Dispatch(downloadTask{url, out})
+	return p.Dispatch(downloadTask{url, out})
 }
 
 func (w worker) Work(t dispatcher.Task) error {
