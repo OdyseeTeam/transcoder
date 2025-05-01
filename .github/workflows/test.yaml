@@ -27,7 +27,7 @@ jobs:
           make test_prepare
       - name: Run tests
         run: go test -covermode=count -coverprofile=coverage.out ./...
-  golangci:
+  lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
