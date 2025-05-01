@@ -27,6 +27,7 @@ type ArgumentSet struct {
 }
 
 var hlsDefaultArguments = map[string]string{
+	"threads":              "2",
 	"preset":               preset,
 	"sc_threshold":         "0",
 	"c:v":                  "libx264",
