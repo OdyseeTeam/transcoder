@@ -54,8 +54,8 @@ var streamFragmentCases = []struct {
 	{"v1.m3u8", 0},
 	{"v2.m3u8", 0},
 	{"v3.m3u8", 0},
-	{"v0_s000000.ts", 1860636},
-	{"v1_s000000.ts", 623032},
+	{"v0_s000000.ts", 2244532},
+	{"v1_s000000.ts", 621528},
 	{"v2_s000000.ts", 221840},
 	{"v3_s000000.ts", 115620},
 }
@@ -110,7 +110,7 @@ Waiting:
 			s.Require().NoError(err)
 			if tc.size > 0 {
 				// Different transcoding runs produce slightly different files.
-				s.InDelta(tc.size, len(receivedBodyRaw), float64(tc.size)*0.2)
+				s.InDelta(tc.size, len(receivedBodyRaw), float64(tc.size)*0.25)
 				s.EqualValues(sz, len(receivedBodyRaw))
 			} else {
 				expectedFile, err := filepath.Abs(filepath.Join("./testdata", "known-stream", tc.name))

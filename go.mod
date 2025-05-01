@@ -151,4 +151,4 @@ replace github.com/lbryio/lbry.go/v3 => github.com/anbsky/lbry.go/v3 v3.0.6
 
 replace github.com/btcsuite/btcd => github.com/lbryio/lbrycrd.go v0.0.0-20200203050410-e1076f12bf19
 
-// replace github.com/nikooo777/lbry-blobs-downloader => ../lbry-blobs-downloader
+replace github.com/nikooo777/lbry-blobs-downloader => github.com/anbsky/lbry-blobs-downloader v1.4.2
