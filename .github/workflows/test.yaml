@@ -22,7 +22,7 @@ jobs:
       - uses: FedericoCarboni/setup-ffmpeg@v3
         id: setup-ffmpeg
         with:
-          ffmpeg-version: "6.1.0"
+          ffmpeg-version: release
       - run: |
           make test_prepare
       - name: Run tests
