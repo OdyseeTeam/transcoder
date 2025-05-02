@@ -46,6 +46,7 @@ type ResolvedStream struct {
 	URI, Name, ClaimID, SDHash, ChannelURI,
 	ChannelClaimID, NormalizedName string
 	ChannelSupportAmount int64
+	ReleaseTime          time.Time
 }
 
 func (wc *WriteCounter) Write(p []byte) (int, error) {
@@ -78,11 +79,17 @@ func ResolveStream(uri string) (*ResolvedStream, error) {
 		return nil, ErrNoSigningChannel
 	}
 
-	src := claim.Value.GetStream().GetSource()
-	if src == nil {
+	stream := claim.Value.GetStream()
+	if stream == nil {
+		return nil, errors.New("claim doesn't have a stream")
+	}
+	releaseTime := time.Unix(stream.GetReleaseTime(), 0)
+
+	streamSource := stream.GetSource()
+	if streamSource == nil {
 		return nil, errors.New("stream doesn't have source data")
 	}
-	h := hex.EncodeToString(src.SdHash)
+	h := hex.EncodeToString(streamSource.SdHash)
 
 	ch := strings.Replace(strings.ToLower(claim.SigningChannel.CanonicalURL), "#", ":", 1)
 	sup, _ := strconv.ParseFloat(claim.SigningChannel.Meta.SupportAmount, 64)
@@ -96,6 +103,7 @@ func ResolveStream(uri string) (*ResolvedStream, error) {
 		ChannelURI:           ch,
 		ChannelClaimID:       claim.SigningChannel.ClaimID,
 		ChannelSupportAmount: int64(math.Floor(sup)),
+		ReleaseTime:          releaseTime,
 	}
 	return r, nil
 }

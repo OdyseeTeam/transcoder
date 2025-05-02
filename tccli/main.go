@@ -118,7 +118,7 @@ func main() {
 		ls := library.InitStream(CLI.Genstream.Path, "wasabi")
 		err = ls.GenerateManifest(
 			rr.URI, rr.ChannelURI, rr.SDHash,
-			library.WithTimestamp(time.Now()),
+			library.WithTranscodedAt(time.Now()),
 			library.WithWorkerName("manual"),
 		)
 		if err != nil {

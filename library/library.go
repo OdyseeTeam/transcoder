@@ -14,7 +14,7 @@ import (
 	"github.com/c2h5oh/datasize"
 	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
-	"github.com/tabbed/pqtype"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const (
@@ -77,21 +77,24 @@ func (lib *Library) AddRemoteStream(stream Stream) error {
 	if stream.Manifest == nil {
 		return errors.New("cannot add remote stream, manifest is missing")
 	}
-	m := stream.Manifest
-	bm, err := json.Marshal(m)
+	manifest := stream.Manifest
+	bm, err := json.Marshal(manifest)
 	if err != nil {
 		return errors.Wrap(err, "cannot marshal stream manifest")
 	}
 	p := db.AddVideoParams{
-		TID:      m.TID,
-		URL:      m.URL,
-		SDHash:   m.SDHash,
-		Channel:  m.ChannelURL,
+		TID:      manifest.TID,
+		URL:      manifest.URL,
+		SDHash:   manifest.SDHash,
+		Channel:  manifest.ChannelURL,
 		Storage:  stream.RemoteStorage,
-		Path:     m.TID,
+		Path:     manifest.TID,
 		Size:     stream.Size(),
 		Checksum: sql.NullString{String: stream.Checksum(), Valid: true},
 		Manifest: pqtype.NullRawMessage{RawMessage: bm, Valid: true},
+	}
+	if !manifest.ReleasedAt.IsZero() {
+		p.ReleasedAt = sql.NullTime{Time: manifest.ReleasedAt, Valid: true}
 	}
 	_, err = lib.db.AddVideo(context.Background(), p)
 	return err

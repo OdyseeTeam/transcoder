@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OdyseeTeam/transcoder/encoder"
+	"github.com/OdyseeTeam/transcoder/internal/version"
 	"github.com/OdyseeTeam/transcoder/library"
 	"github.com/OdyseeTeam/transcoder/pkg/conductor/metrics"
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
@@ -22,7 +23,6 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/pkg/errors"
 	redis "github.com/redis/go-redis/v9"
-	"go.etcd.io/etcd/api/v3/version"
 )
 
 const (
@@ -193,9 +193,10 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 		stream = library.InitStream(encodedPath, r.storage.Name())
 		err = stream.GenerateManifest(
 			payload.URL, resolved.ChannelURI, payload.SDHash,
-			library.WithTimestamp(time.Now()),
+			library.WithTranscodedAt(time.Now()),
 			library.WithWorkerName(r.options.Name),
 			library.WithVersion(version.Version),
+			library.WithReleasedAt(resolved.ReleaseTime),
 		)
 		if err != nil {
 			log.Error("failed to fill manifest", "err", err)
