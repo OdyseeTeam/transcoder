@@ -56,6 +56,8 @@ var PopulatedHLSPlaylistFiles = []string{
 	"s3_000071.ts", "s3_000072.ts", "s3_000073.ts", "s3_000074.ts", "s3_000075.ts", "s3_000076.ts", "s3_000077.ts",
 	"stream_0.m3u8", "stream_1.m3u8", "stream_2.m3u8", "stream_3.m3u8"}
 
+var DummyReleasedAt = time.Unix(1745861002, 0).UTC()
+
 type LibraryTestHelper struct {
 	DB        *sql.DB
 	DBCleanup migrator.TestDBCleanup
@@ -165,6 +167,7 @@ func GenerateDummyStream(storage Storage) *Stream {
 		RemoteStorage: storage.Name(),
 		Manifest: &Manifest{
 			URL:          randomdata.SillyName(),
+			ReleasedAt:   DummyReleasedAt,
 			ChannelURL:   randomdata.SillyName(),
 			SDHash:       randomdata.Alphanumeric(96),
 			TranscodedAt: time.Now(),
