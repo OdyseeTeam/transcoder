@@ -79,7 +79,7 @@ func main() {
 			inPath = strings.TrimPrefix(CLI.Transcode.URL, "file://")
 			outPath = inPath + "_out"
 		} else {
-			tmpDir, err := os.MkdirTemp(".", "")
+			tmpDir, err := os.MkdirTemp("./", "")
 			if err != nil {
 				panic(err)
 			}
@@ -118,7 +118,7 @@ func main() {
 		ls := library.InitStream(CLI.Genstream.Path, "wasabi")
 		err = ls.GenerateManifest(
 			rr.URI, rr.ChannelURI, rr.SDHash,
-			library.WithTimestamp(time.Now()),
+			library.WithTranscodedAt(time.Now()),
 			library.WithWorkerName("manual"),
 		)
 		if err != nil {

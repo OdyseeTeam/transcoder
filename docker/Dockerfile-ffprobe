@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 FROM odyseeteam/transcoder-ffmpeg:git AS ffmpeg
-FROM alpine:3.19
+FROM alpine:3.21
 
 COPY --from=ffmpeg /build/ffprobe /usr/local/bin/
 

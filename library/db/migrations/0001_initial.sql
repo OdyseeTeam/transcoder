@@ -10,9 +10,9 @@ CREATE TYPE channel_priority AS ENUM (
 CREATE TABLE videos (
     id SERIAL NOT NULL PRIMARY KEY,
 
-    created_at timestamp NOT NULL DEFAULT NOW(),
-    updated_at timestamp,
-    accessed_at timestamp,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    accessed_at TIMESTAMP,
     access_count integer DEFAULT 0,
 
     tid text NOT NULL UNIQUE CHECK (tid <> ''),
@@ -31,7 +31,7 @@ CREATE TABLE videos (
 CREATE TABLE channels (
     id SERIAL NOT NULL PRIMARY KEY,
 
-    created_at timestamp NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
     url text NOT NULL UNIQUE CHECK (url <> ''),
     claim_id text NOT NULL UNIQUE CHECK (claim_id <> ''),

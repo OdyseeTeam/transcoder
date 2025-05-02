@@ -35,14 +35,14 @@ func TestStream(t *testing.T) {
 
 		stream1 := InitStream(path.Join(dir, sdHash), "")
 		require.NoError(t,
-			stream1.GenerateManifest(randomdata.SillyName(), randomdata.SillyName(), sdHash, WithTimestamp(ts)),
+			stream1.GenerateManifest(randomdata.SillyName(), randomdata.SillyName(), sdHash, WithTranscodedAt(ts)),
 		)
 
 		stream2 := InitStream(path.Join(dir, sdHash), "")
 		require.NoError(t,
-			stream2.GenerateManifest(stream1.URL(), stream1.Manifest.ChannelURL, stream1.SDHash(), WithTimestamp(ts)),
+			stream2.GenerateManifest(stream1.URL(), stream1.Manifest.ChannelURL, stream1.SDHash(), WithTranscodedAt(ts)),
 		)
-		err := stream1.GenerateManifest(randomdata.SillyName(), randomdata.SillyName(), sdHash, WithTimestamp(ts))
+		err := stream1.GenerateManifest(randomdata.SillyName(), randomdata.SillyName(), sdHash, WithTranscodedAt(ts))
 		require.NoError(t, err)
 
 		assert.Equal(t, stream1.Manifest.TID, stream2.Manifest.TID)
@@ -61,7 +61,7 @@ func TestStream(t *testing.T) {
 		require.NoError(t,
 			stream.GenerateManifest(
 				url, channelURL, sdHash,
-				WithTimestamp(ts),
+				WithTranscodedAt(ts),
 				WithVersion(version),
 				WithWorkerName(workerName),
 			),

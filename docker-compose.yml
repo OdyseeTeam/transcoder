@@ -17,12 +17,7 @@ services:
     depends_on:
       - redis
       - db
-    deploy:
-      restart_policy:
-        condition: on-failure
-        delay: 3s
-        max_attempts: 3
-        window: 120s
+    restart: unless-stopped
   cworker:
     image: odyseeteam/transcoder-cworker:latest
     platform: linux/amd64
@@ -34,9 +29,12 @@ services:
     # build:
     #   context: .
     #   dockerfile: docker/Dockerfile-worker
-    depends_on: ["redis"]
+    depends_on:
+      - redis
+      - minio
     volumes:
       - ${PWD}/worker.ex.yml:/app/worker.yml
+    restart: unless-stopped
   # asynqmon:
   #   image: hibiken/asynqmon:latest
   #   container_name: asynqmon
@@ -93,6 +91,7 @@ services:
       - minio-data:/data
     entrypoint: >
       /bin/sh -c "
+      sleep 3;
       /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
       /usr/bin/mc mb myminio/transcoded;
       /usr/bin/mc anonymous set download myminio/transcoded;

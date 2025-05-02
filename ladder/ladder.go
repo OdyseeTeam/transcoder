@@ -26,6 +26,7 @@ type Tier struct {
 	Framerate     decimal.Decimal `yaml:",omitempty"`
 	KeepFramerate bool            `yaml:"keep_framerate"`
 	BitrateCutoff int             `yaml:"bitrate_cutoff"`
+	CRF           int
 }
 
 func Load(yamlLadder []byte) (Ladder, error) {
@@ -66,6 +67,9 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 		if t.Height == h {
 			origResSeen = true
 		}
+		if t.CRF == 0 {
+			t.CRF = DefaultCRF
+		}
 		newLadder.Tiers = append(newLadder.Tiers, t)
 	}
 
@@ -75,6 +79,7 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 			Width:        w,
 			VideoBitrate: nsRate(w, h),
 			AudioBitrate: "128k",
+			CRF:          DefaultCRF,
 		}}, newLadder.Tiers...)
 	}
 

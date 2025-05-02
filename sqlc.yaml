@@ -1,15 +1,18 @@
 version: "2"
-packages:
-  - path: "library/db"
+sql:
+  - schema: "library/db/migrations/"
+    queries: "library/db/queries.sql"
     name: "db"
     engine: "postgresql"
-    schema: "library/db/migrations/"
-    queries: "library/db/queries.sql"
-rename:
-  url: "URL"
-  sd_hash: "SDHash"
-  ulid: "ULID"
-  tid: "TID"
-overrides:
-  - column: "videos.size"
-    go_type: "int64"
+    gen:
+      go:
+        package: db
+        out: library/db
+        rename:
+          url: "URL"
+          sd_hash: "SDHash"
+          ulid: "ULID"
+          tid: "TID"
+        overrides:
+          - column: "videos.size"
+            go_type: "int64"

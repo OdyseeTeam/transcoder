@@ -31,7 +31,7 @@ func ValidateStream(baseURL string, failFast bool, skipSegments bool) (*Validati
 			url := strings.Join(p, "/")
 			if path.Ext(p[len(p)-1]) == ".ts" {
 				if skipSegments {
-					return nil, SkipSegment
+					return nil, ErrSkipSegment
 				}
 				r, err = http.Head(url) // #nosec G107
 			} else {

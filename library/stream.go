@@ -42,6 +42,7 @@ type Stream struct {
 
 type Manifest struct {
 	URL        string
+	ReleasedAt time.Time
 	ChannelURL string `yaml:",omitempty" json:"channel_url"`
 	SDHash     string
 
@@ -61,9 +62,15 @@ type Manifest struct {
 
 type StreamWalker func(fi fs.FileInfo, fullPath, name string) error
 
-func WithTimestamp(ts time.Time) func(*Manifest) {
+func WithTranscodedAt(ts time.Time) func(*Manifest) {
 	return func(m *Manifest) {
 		m.TranscodedAt = ts
+	}
+}
+
+func WithReleasedAt(ts time.Time) func(*Manifest) {
+	return func(m *Manifest) {
+		m.ReleasedAt = ts
 	}
 }
 

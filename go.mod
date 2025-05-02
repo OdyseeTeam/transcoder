@@ -1,6 +1,6 @@
 module github.com/OdyseeTeam/transcoder
 
-go 1.23
+go 1.24
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
@@ -26,11 +26,11 @@ require (
 	github.com/rubenv/sql-migrate v1.4.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/viper v1.15.0
+	github.com/sqlc-dev/pqtype v0.3.0
 	github.com/stretchr/testify v1.9.0
 	github.com/tabbed/pqtype v0.1.1
 	github.com/testcontainers/testcontainers-go v0.21.0
 	github.com/valyala/fasthttp v1.36.0
-	go.etcd.io/etcd/api/v3 v3.5.6
 	go.uber.org/goleak v1.1.12
 	go.uber.org/zap v1.21.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -56,7 +56,6 @@ require (
 	github.com/containerd/containerd v1.7.13 // indirect
 	github.com/containerd/continuity v0.4.2 // indirect
 	github.com/containerd/log v0.1.0 // indirect
-	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -150,3 +149,5 @@ replace github.com/draganm/miniotest v0.1.0 => github.com/anbsky/miniotest v0.1.
 replace github.com/lbryio/lbry.go/v3 => github.com/anbsky/lbry.go/v3 v3.0.6
 
 replace github.com/btcsuite/btcd => github.com/lbryio/lbrycrd.go v0.0.0-20200203050410-e1076f12bf19
+
+replace github.com/nikooo777/lbry-blobs-downloader => github.com/anbsky/lbry-blobs-downloader v1.4.2

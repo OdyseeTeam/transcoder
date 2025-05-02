@@ -12,7 +12,7 @@ import (
 type StreamGetter func(path ...string) (io.ReadCloser, error)
 type StreamProcessor func(fgName string, r io.ReadCloser) error
 
-var SkipSegment = errors.New("skip fragment")
+var ErrSkipSegment = errors.New("skip fragment")
 
 // WalkStream parses an HLS playlist, calling `getFn` to load and `processFn`
 // for the master playlist located in `baseURI`, subplaylists and all segments contained within.
@@ -65,7 +65,7 @@ func WalkStream(baseURI string, getFn StreamGetter, processFn StreamProcessor) e
 				continue
 			}
 			r, err := getFn(baseURI, seg.URI)
-			if errors.Is(err, SkipSegment) {
+			if errors.Is(err, ErrSkipSegment) {
 				continue
 			}
 			if err != nil {

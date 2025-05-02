@@ -99,7 +99,7 @@ func Minio() (*S3Options, Teardown, error) {
 		}
 		return nil
 	}); err != nil {
-		return nil, nil, fmt.Errorf("Could not connect to docker: %w", err)
+		return nil, nil, fmt.Errorf("could not connect to docker: %w", err)
 	}
 
 	opts := &S3Options{

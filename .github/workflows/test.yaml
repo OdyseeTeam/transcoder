@@ -18,26 +18,23 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
       - uses: FedericoCarboni/setup-ffmpeg@v3
         id: setup-ffmpeg
         with:
-          ffmpeg-version: "6.1.0"
+          ffmpeg-version: release
       - run: |
           make test_prepare
       - name: Run tests
         run: go test -covermode=count -coverprofile=coverage.out ./...
-  golangci:
+  lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
           cache: false
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.63
-          args: -v
+        uses: golangci/golangci-lint-action@v7

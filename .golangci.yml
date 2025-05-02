@@ -1,36 +1,52 @@
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-  gci:
-    sections:
-      - standard
-      - prefix(github.com/OdyseeTeam)
-      - prefix(github.com/lbryio)
-      - default
-    custom-order: true
-    no-lex-order: true
-  goconst:
-    min-len: 2
-    min-occurrences: 3
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - dupl
-    - gci
-    - gocritic
     - goconst
+    - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - gosimple
-    - govet
     - gosec
+    - govet
     - ineffassign
     - misspell
-    - staticcheck
     - sqlclosecheck
+    - staticcheck
     - unused
-
-run:
-  timeout: 10m
+  settings:
+    errcheck:
+      check-type-assertions: true
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - prefix(github.com/OdyseeTeam)
+        - prefix(github.com/lbryio)
+        - default
+      custom-order: true
+      no-lex-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
