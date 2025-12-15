@@ -25,6 +25,9 @@ indent_size = 2
 [*.yaml]
 indent_size = 2
 
+[*.mmd]
+indent_size = 2
+
 [**/admin/js/vendor/**]
 indent_style = ignore
 indent_size = ignore

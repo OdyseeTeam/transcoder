@@ -27,6 +27,7 @@ type Tier struct {
 	KeepFramerate bool            `yaml:"keep_framerate"`
 	BitrateCutoff int             `yaml:"bitrate_cutoff"`
 	CRF           int
+	AudioChannels int
 }
 
 func Load(yamlLadder []byte) (Ladder, error) {
@@ -42,7 +43,8 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 		Tiers:    []Tier{},
 		Metadata: md,
 	}
-	vrate, _ := strconv.Atoi(md.VideoStream.GetBitRate())
+	originalBitrate, _ := strconv.Atoi(md.VideoStream.GetBitRate())
+	originalAudioChannels := md.AudioStream.Cha
 	var vert, origResSeen bool
 	w := md.VideoStream.GetWidth()
 	h := md.VideoStream.GetHeight()
@@ -50,8 +52,8 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 		vert = true
 	}
 	for _, t := range x.Tiers {
-		if t.BitrateCutoff >= vrate {
-			logger.Debugw("video bitrate lower than the cut-off", "bitrate", vrate, "cutoff", t.BitrateCutoff)
+		if t.BitrateCutoff >= originalBitrate {
+			logger.Debugw("video bitrate lower than cut-off", "bitrate", originalBitrate, "cutoff", t.BitrateCutoff)
 			if t.Height == h {
 				origResSeen = true
 			}
@@ -87,13 +89,13 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 	return newLadder, nil
 }
 
-func (x Ladder) ArgumentSet(out string) *ArgumentSet {
+func (x Ladder) ArgumentSet(output string) *ArgumentSet {
 	d := map[string]string{}
 	for k, v := range hlsDefaultArguments {
 		d[k] = v
 	}
 	return &ArgumentSet{
-		Output:    out,
+		Output:    output,
 		Arguments: d,
 		Ladder:    x,
 		Metadata:  x.Metadata,

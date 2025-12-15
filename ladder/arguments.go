@@ -33,7 +33,6 @@ var hlsDefaultArguments = map[string]string{
 	"c:v":                  "libx264",
 	"pix_fmt":              "yuv420p",
 	"c:a":                  "aac",
-	"ac":                   "2",
 	"ar":                   "44100",
 	"f":                    "hls",
 	"hls_time":             hlsTime,

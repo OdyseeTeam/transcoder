@@ -246,12 +246,25 @@ func (e encoder) checkFastStart(input string) (bool, error) {
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	cmd.Run()
-	result := strings.Fields(out.String())
+	err := cmd.Run()
+	if err != nil {
+		return false, fmt.Errorf("ffmpeg execution failed: %w", err)
+	}
+
+	outputLines := strings.Split(out.String(), "\n")
 	var seenMdat bool
-	for _, l := range result {
-		if strings.Contains(l, "moov") && !seenMdat {
-			return true, nil
+
+	for _, line := range outputLines {
+		if strings.Contains(line, "mdat") {
+			seenMdat = true
+		}
+		if strings.Contains(line, "moov") {
+			if !seenMdat {
+				// moov appears before mdat -> fast start
+				return true, nil
+			}
+			// moov after mdat -> not fast start
+			return false, nil
 		}
 	}
 	return false, nil

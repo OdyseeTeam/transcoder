@@ -1,0 +1,84 @@
+---
+title: Transcoder
+---
+flowchart TD
+
+PL{{"Player
+[Service]
+Serves platform media"}}:::externalServiceClass
+
+subgraph client[" "]
+  direction LR
+
+  CL["Client
+  [Package]
+  Provides transcoder interface"]
+
+  LC[("Local Cache
+  [Disk]
+  Caches streams locally
+  ")]:::databaseClass
+end
+
+RC{{"Remote Cache
+[Service]
+Caches transcoded streams"}}:::externalServiceClass
+
+CC["Conductor
+[Service]
+Manages transcoding results"]:::serviceClass
+
+W["Worker
+[Service]
+Transcodes streams"]:::serviceClass
+
+SDB[("Streams Database
+[Postgres]
+Stores transcoded stream details
+")]:::databaseClass
+
+S3{{"Storage
+[S3]
+Stores transcoded stream data"}}:::externalServiceClass
+
+RFL{{"Reflector
+[Service]
+Stores blob data
+"}}:::externalServiceClass
+
+Legend["ℹ️ Notes
+
+**Services** are standalone deployed entities, code for which resides inside transcoder repo, except for external services.
+**Package** names correspond to Go packages in transcoder codebase.
+Some small packages and systems are omitted for brewity.
+"]
+
+PL -- "Requests stream from" --> CL
+
+CL -- "4️⃣️ If does not exist, default to blob stream" --x PL
+
+CL -- "1️⃣ Check if cached" --> LC
+CL -- "2️⃣ Check if exists" --> CC
+CL -- "3️⃣ If exists, fetch stream fragments" --> RC
+
+RC -- "Fetches stream fragments [HTTPS] from" --> S3
+
+CC -- "Checks if stream exists in" --> SDB
+
+CC <-. "Sends transcoding request and receives result [asynq] to" .-> W
+
+W -- "Requests blobs [HTTP] from" --> RFL
+
+W -- "Stores transcoded media [S3] in" --> S3
+
+CC -- "Saves transcoded stream details to" --> SDB
+
+CC -- "Purges old transcoded streams" --o S3
+
+classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px,color:#000
+classDef databaseClass fill:#326ce5,stroke:#fff,stroke-width:2px,color:#fff
+classDef queueClass fill:#018506,stroke:#fff,stroke-width:2px,color:#fff
+classDef serviceClass fill:#D7EDC5,stroke:#2d5016,stroke-width:2px
+classDef externalServiceClass fill:#E8E8E8,stroke:#999,stroke-width:2px,stroke-dasharray: 2 5,color:#666
+classDef oapiClass fill:#D7EDC5,stroke:#2d5016,stroke-width:4px
+style Legend fill:#f9f9f9,stroke:#ccc,stroke-width:1px,text-align:left,color:#666

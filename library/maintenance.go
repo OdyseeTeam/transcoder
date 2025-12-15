@@ -79,7 +79,7 @@ func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) 
 	weight := func(v db.Video) int64 { return v.AccessedAt.Unix() }
 	sort.Slice(videos, func(i, j int) bool { return weight(videos[i]) < weight(videos[j]) })
 	allStart := time.Now()
-	for _, v := range videos {
+	for n, v := range videos {
 		if v.Size < 0 {
 			continue
 		}
@@ -103,8 +103,9 @@ func tailVideos(videos []db.Video, maxSize uint64, call func(v db.Video) error) 
 		remainingHours := remainingGB / (furloughedGB / time.Since(allStart).Seconds()) / 60 / 60
 		donePct := float64(furloughedSize) / float64(totalSize-maxSize) * float64(100)
 		logger.Infof(
-			"maintenance: %.1f h, %.4f%% , %.2f GB/h, %.2f GB, remaining: %.2f GB, %.1f h",
+			"maintenance: %.1f h, %.4f%% , %.2f GB/h, %.2f GB, remaining: %.2f GB, %.1f h, %d/%d videos",
 			time.Since(allStart).Hours(), donePct, speed, furloughedGB, remainingGB, remainingHours,
+			n+1, len(videos),
 		)
 
 		if maxSize >= totalSize-furloughedSize {
