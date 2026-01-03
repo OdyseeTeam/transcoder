@@ -5,7 +5,7 @@
 
 ## Development
 
-Requires go 1.24.
+Requires go 1.25.
 
 ## Building
 

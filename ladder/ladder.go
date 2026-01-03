@@ -44,7 +44,6 @@ func (x Ladder) Tweak(md *Metadata) (Ladder, error) {
 		Metadata: md,
 	}
 	originalBitrate, _ := strconv.Atoi(md.VideoStream.GetBitRate())
-	originalAudioChannels := md.AudioStream.Cha
 	var vert, origResSeen bool
 	w := md.VideoStream.GetWidth()
 	h := md.VideoStream.GetHeight()

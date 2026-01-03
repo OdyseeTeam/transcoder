@@ -14,12 +14,12 @@ import (
 	"github.com/OdyseeTeam/transcoder/internal/config"
 	"github.com/OdyseeTeam/transcoder/library"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 var ErrStreamExists = errors.New("stream already exists")
@@ -46,33 +46,37 @@ func InitS3Driver(cfg config.S3Config) (*S3Driver, error) {
 	if cfg.Name == "" {
 		return nil, errors.New("storage name must me configured")
 	}
-	s3cfg := &aws.Config{
-		Credentials:      credentials.NewStaticCredentials(cfg.Key, cfg.Secret, ""),
-		Endpoint:         aws.String(cfg.Endpoint),
-		Region:           aws.String(cfg.Region),
-		S3ForcePathStyle: aws.Bool(true),
-	}
-	sess, err := session.NewSession(s3cfg)
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.Key, cfg.Secret, "")),
+		awsconfig.WithRegion(cfg.Region),
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(cfg.Endpoint)
+		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+		o.UsePathStyle = true
+	})
+
 	s := &S3Driver{
-		config:  cfg,
-		session: sess,
+		config: cfg,
+		client: client,
+		awsCfg: awsCfg,
 	}
 
 	if cfg.CreateBucket {
 		logger.Infow("creating s3 bucket", "name", cfg.Bucket)
-		client := s3.New(sess)
-		_, err := client.CreateBucket(&s3.CreateBucketInput{
+		_, err := client.CreateBucket(context.Background(), &s3.CreateBucketInput{
 			Bucket: aws.String(cfg.Bucket),
-			ACL:    aws.String("public-read"),
+			ACL:    types.BucketCannedACLPublicRead,
 		})
 		if err != nil {
-			if awsErr, ok := err.(awserr.Error); ok {
-				if awsErr.Code() != "BucketAlreadyOwnedByYou" {
-					return nil, err
-				}
+			var bucketExists *types.BucketAlreadyOwnedByYou
+			if !errors.As(err, &bucketExists) {
+				return nil, err
 			}
 		}
 	}
@@ -81,8 +85,9 @@ func InitS3Driver(cfg config.S3Config) (*S3Driver, error) {
 }
 
 type S3Driver struct {
-	config  config.S3Config
-	session *session.Session
+	config config.S3Config
+	client *s3.Client
+	awsCfg aws.Config
 }
 
 func (s *S3Driver) Name() string {
@@ -94,23 +99,22 @@ func (s *S3Driver) GetURL(item string) string {
 }
 
 func (s *S3Driver) Put(stream *library.Stream, overwrite bool) error {
-	return s.PutWithContext(aws.BackgroundContext(), stream, overwrite)
+	return s.PutWithContext(context.Background(), stream, overwrite)
 }
 
 func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, overwrite bool) error {
 	if !overwrite {
-		dl := s3manager.NewDownloader(s.session)
-		_, err := dl.Download(discardAt{}, &s3.GetObjectInput{
+		dl := manager.NewDownloader(s.client)
+		_, err := dl.Download(ctx, discardAt{}, &s3.GetObjectInput{
 			Bucket: aws.String(s.config.Bucket),
 			Key:    aws.String(s3FileKey(stream.TID(), library.MasterPlaylistName)),
 		})
 		if err == nil {
 			return ErrStreamExists
 		}
-
 	}
 
-	ul := s3manager.NewUploader(s.session)
+	ul := manager.NewUploader(s.client)
 	err := stream.Walk(
 		func(fi fs.FileInfo, fullPath, name string) error {
 			var ctype string
@@ -129,12 +133,12 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 				ctype = "text/plain"
 			}
 			logger.Debugw("uploading", "key", s3FileKey(stream.TID(), name), "ctype", ctype, "size", fi.Size(), "bucket", s.config.Bucket)
-			_, err = ul.UploadWithContext(ctx, &s3manager.UploadInput{
+			_, err = ul.Upload(ctx, &s3.PutObjectInput{
 				Bucket:      aws.String(s.config.Bucket),
 				Key:         aws.String(s3FileKey(stream.TID(), name)),
 				ContentType: aws.String(ctype),
 				Body:        f,
-				ACL:         aws.String("public-read"),
+				ACL:         types.ObjectCannedACLPublicRead,
 			})
 			if err != nil {
 				return err
@@ -148,56 +152,55 @@ func (s *S3Driver) PutWithContext(ctx context.Context, stream *library.Stream, o
 
 func (s *S3Driver) Delete(tid string) error {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
-	client := s3.New(s.session)
 	bucket := aws.String(s.config.Bucket)
-	objects, err := client.ListObjectsWithContext(ctx, &s3.ListObjectsInput{
+	objects, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:  bucket,
 		Prefix:  aws.String(tid),
-		MaxKeys: aws.Int64(1000),
+		MaxKeys: aws.Int32(1000),
 	})
 	cancelFn()
 	if err != nil {
 		return err
 	}
 
-	delObjects := []*s3.ObjectIdentifier{}
+	delObjects := []types.ObjectIdentifier{}
 	for _, o := range objects.Contents {
-		delObjects = append(delObjects, &s3.ObjectIdentifier{Key: o.Key})
+		delObjects = append(delObjects, types.ObjectIdentifier{Key: o.Key})
 		if len(delObjects) >= 100 {
 			delInput := &s3.DeleteObjectsInput{
 				Bucket: bucket,
-				Delete: &s3.Delete{
+				Delete: &types.Delete{
 					Objects: delObjects,
 					Quiet:   aws.Bool(false),
 				},
 			}
 			ctx, cancelFn := context.WithTimeout(context.Background(), 600*time.Second)
-			_, err = client.DeleteObjectsWithContext(ctx, delInput)
+			_, err = s.client.DeleteObjects(ctx, delInput)
 			cancelFn()
 			if err != nil {
 				return err
 			}
-			delObjects = []*s3.ObjectIdentifier{}
+			delObjects = []types.ObjectIdentifier{}
 		}
 	}
 
 	if len(delObjects) > 0 {
 		delInput := &s3.DeleteObjectsInput{
 			Bucket: bucket,
-			Delete: &s3.Delete{
+			Delete: &types.Delete{
 				Objects: delObjects,
 				Quiet:   aws.Bool(false),
 			},
 		}
 		ctx, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
-		_, err = client.DeleteObjectsWithContext(ctx, delInput)
+		_, err = s.client.DeleteObjects(ctx, delInput)
 		cancelFn()
 		if err != nil {
 			return err
 		}
 	}
 
-	if *objects.IsTruncated {
+	if objects.IsTruncated != nil && *objects.IsTruncated {
 		return s.Delete(tid)
 	}
 
@@ -207,19 +210,17 @@ func (s *S3Driver) Delete(tid string) error {
 func (s *S3Driver) DeleteFragments(tid string, fragments []string) error {
 	workerCount := 120
 	batchSize := 20
-	client := s3.New(s.session)
 
-	// Split objects into batches
-	batches := make(chan []*s3.ObjectIdentifier, len(fragments)/batchSize+1)
+	batches := make(chan []types.ObjectIdentifier, len(fragments)/batchSize+1)
 	for i := 0; i < len(fragments); i += batchSize {
 		end := i + batchSize
 		if end > len(fragments) {
 			end = len(fragments)
 		}
-		batch := []*s3.ObjectIdentifier{}
+		batch := []types.ObjectIdentifier{}
 		for _, f := range fragments[i:end] {
 			key := fmt.Sprintf("%s/%s", tid, f)
-			batch = append(batch, &s3.ObjectIdentifier{Key: &key})
+			batch = append(batch, types.ObjectIdentifier{Key: &key})
 		}
 		batches <- batch
 	}
@@ -233,7 +234,7 @@ func (s *S3Driver) DeleteFragments(tid string, fragments []string) error {
 		go func() {
 			defer wg.Done()
 			for batch := range batches {
-				if err := s.deleteBatch(client, batch); err != nil {
+				if err := s.deleteBatch(batch); err != nil {
 					select {
 					case errChan <- err:
 					default:
@@ -254,23 +255,22 @@ func (s *S3Driver) DeleteFragments(tid string, fragments []string) error {
 	}
 }
 
-func (s *S3Driver) deleteBatch(client *s3.S3, batch []*s3.ObjectIdentifier) error {
+func (s *S3Driver) deleteBatch(batch []types.ObjectIdentifier) error {
 	delInput := &s3.DeleteObjectsInput{
 		Bucket: aws.String(s.config.Bucket),
-		Delete: &s3.Delete{
+		Delete: &types.Delete{
 			Objects: batch,
 			Quiet:   aws.Bool(false),
 		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	_, err := client.DeleteObjectsWithContext(ctx, delInput)
+	_, err := s.client.DeleteObjects(ctx, delInput)
 	return err
 }
 
 func (s *S3Driver) GetFragment(streamTID, name string) (StreamFragment, error) {
-	client := s3.New(s.session)
-	obj, err := client.GetObject(&s3.GetObjectInput{
+	obj, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(s.config.Bucket),
 		Key:    aws.String(s3FileKey(streamTID, name)),
 	})

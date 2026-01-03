@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"testing"
@@ -10,7 +11,7 @@ import (
 	"github.com/OdyseeTeam/transcoder/library"
 
 	randomdata "github.com/Pallinder/go-randomdata"
-	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/suite"
 	testcontainers "github.com/testcontainers/testcontainers-go"
@@ -91,8 +92,8 @@ func (s *s3suite) TestDelete() {
 	for _, n := range fragments {
 		p, err := s3drv.GetFragment(stream.TID(), n)
 		s.NotNil(err)
-		awsErr := err.(awserr.Error)
-		s.Equal("NoSuchKey", awsErr.Code())
+		var noSuchKey *types.NoSuchKey
+		s.True(errors.As(err, &noSuchKey))
 		s.Nil(p)
 	}
 }
@@ -107,8 +108,8 @@ func (s *s3suite) TestDeleteFragments() {
 	for _, n := range fragments {
 		p, err := s3drv.GetFragment(stream.TID(), n)
 		s.NotNil(err)
-		awsErr := err.(awserr.Error)
-		s.Equal("NoSuchKey", awsErr.Code())
+		var noSuchKey *types.NoSuchKey
+		s.True(errors.As(err, &noSuchKey))
 		s.Nil(p)
 	}
 }

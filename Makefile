@@ -27,7 +27,7 @@ tccli_image:
 	docker buildx build -f docker/Dockerfile-tccli -t odyseeteam/transcoder-tccli:latest --platform linux/amd64 .
 
 test_clean:
-	docker-compose down
+	docker compose down
 	docker volume rm -f transcoder_minio-data
 	docker volume rm -f transcoder_redis-data
 	docker volume rm -f transcoder_db-data
@@ -42,9 +42,6 @@ test_prepare:
 
 test: test_prepare
 	go test -covermode=count -coverprofile=coverage.out ./...
-
-towerz:
-	docker run --rm -v "$(PWD)":/usr/src/transcoder -w /usr/src/transcoder --platform linux/amd64 golang:1.16.10 make tower
 
 .PHONY: tccli
 tccli:
