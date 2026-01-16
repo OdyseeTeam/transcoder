@@ -246,10 +246,7 @@ func (e encoder) checkFastStart(input string) (bool, error) {
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	err := cmd.Run()
-	if err != nil {
-		return false, fmt.Errorf("ffmpeg execution failed: %w", err)
-	}
+	_ = cmd.Run() // ffmpeg exits non-zero when no output specified
 
 	outputLines := strings.Split(out.String(), "\n")
 	var seenMdat bool

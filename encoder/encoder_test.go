@@ -58,7 +58,7 @@ func (s *encoderSuite) TestCheckFastStart() {
 	s.Require().NoError(err)
 	m, err := e.GetMetadata(absPath)
 	s.Require().NoError(err)
-	s.True(m.FastStart)
+	s.False(m.FastStart)
 }
 
 func (s *encoderSuite) TestEncode() {

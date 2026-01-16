@@ -92,9 +92,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       sleep 3;
-      /usr/bin/mc config host add myminio http://minio:9000 ody odyseetes3;
-      /usr/bin/mc mb myminio/transcoded;
-      /usr/bin/mc anonymous set download myminio/transcoded;
+      /usr/bin/mc alias set myminio http://minio:9000 ody odyseetes3;
+      /usr/bin/mc mb --ignore-existing myminio/transcoded;
       /usr/bin/mc anonymous set public myminio/transcoded;
       exit 0;
       "
