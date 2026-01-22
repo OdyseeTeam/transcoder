@@ -2,6 +2,8 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/OdyseeTeam/transcoder)](https://goreportcard.com/report/github.com/OdyseeTeam/transcoder)
 ![Test Status](https://github.com/OdyseeTeam/transcoder/workflows/Test/badge.svg)
+[![Docker conductor](https://img.shields.io/docker/v/odyseeteam/transcoder-conductor?label=conductor)](https://hub.docker.com/r/odyseeteam/transcoder-conductor)
+[![Docker cworker](https://img.shields.io/docker/v/odyseeteam/transcoder-cworker?label=cworker)](https://hub.docker.com/r/odyseeteam/transcoder-cworker)
 
 ## Development
 
@@ -17,15 +19,12 @@ make transcoder
 
 #### Docker images
 
+Docker images are automatically built and pushed to Docker Hub when a new `transcoder-v*` tag is pushed. The CI workflow builds both `odyseeteam/transcoder-conductor` and `odyseeteam/transcoder-cworker` images.
+
+To build images locally:
+
 ```
 make conductor_image cworker_image
-```
-
-This will build and tag images with a version tag, as well as the `latest`. To push latest images:
-
-```
-docker push odyseeteam/transcoder-conductor:latest
-docker push odyseeteam/transcoder-cworker:latest
 ```
 
 `cworker` image is using ffmpeg image as a base. To update or rebuild it, see [its dockerfile](./docker/Dockerfile-ffmpeg) and run:
