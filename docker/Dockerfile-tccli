@@ -6,8 +6,8 @@ FROM alpine:3.23 AS gather
 
 WORKDIR /build
 
-ADD https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-arm64-static.tar.xz ./
-RUN tar -xf ffmpeg-git-arm64-static.tar.xz && mv ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe ./
+ADD https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz ./
+RUN tar -xf ffmpeg-git-amd64-static.tar.xz && mv ffmpeg-*-static/ffmpeg ffmpeg-*-static/ffprobe ./
 
 RUN chmod a+x ffmpeg ffprobe
 

@@ -24,8 +24,8 @@ jobs:
           VERSION=$(echo "${{ github.ref_name }}" | sed 's/transcoder-v//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Build binary
-        run: make transcoder
+      - name: Build binaries
+        run: make transcoder tccli
         env:
           TRANSCODER_VERSION: ${{ steps.version.outputs.version }}
 
@@ -59,3 +59,14 @@ jobs:
           tags: |
             odyseeteam/transcoder-cworker:${{ steps.version.outputs.version }}
             odyseeteam/transcoder-cworker:latest
+
+      - name: Build and push tccli
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile-tccli
+          platforms: linux/amd64
+          push: true
+          tags: |
+            odyseeteam/transcoder-tccli:${{ steps.version.outputs.version }}
+            odyseeteam/transcoder-tccli:latest
