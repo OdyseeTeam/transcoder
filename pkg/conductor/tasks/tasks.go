@@ -14,6 +14,7 @@ import (
 	"github.com/OdyseeTeam/transcoder/encoder"
 	"github.com/OdyseeTeam/transcoder/internal/version"
 	"github.com/OdyseeTeam/transcoder/library"
+	"github.com/OdyseeTeam/transcoder/pkg/conductor/diskmon"
 	"github.com/OdyseeTeam/transcoder/pkg/conductor/metrics"
 	"github.com/OdyseeTeam/transcoder/pkg/logging"
 	"github.com/OdyseeTeam/transcoder/pkg/resolve"
@@ -46,6 +47,7 @@ type EncoderRunnerOptions struct {
 	StreamsDir, OutputDir string
 	Name                  string
 	Logger                logging.KVLogger
+	DiskPressure          diskmon.Config
 }
 
 type RedisResultWriter struct {
@@ -74,6 +76,12 @@ func WithOutputDir(dir string) func(options *EncoderRunnerOptions) {
 func WithName(name string) func(options *EncoderRunnerOptions) {
 	return func(options *EncoderRunnerOptions) {
 		options.Name = name
+	}
+}
+
+func WithDiskPressure(cfg diskmon.Config) func(options *EncoderRunnerOptions) {
+	return func(options *EncoderRunnerOptions) {
+		options.DiskPressure = cfg
 	}
 }
 
@@ -136,6 +144,14 @@ func (r *EncoderRunner) Run(ctx context.Context, t *asynq.Task) error {
 	errMtr := metrics.ErrorsCount
 
 	var resolved *resolve.ResolvedStream
+
+	if r.options.DiskPressure.Enabled {
+		err := diskmon.WaitForDiskSpace(ctx, r.options.DiskPressure, log)
+		if err != nil {
+			log.Error("disk pressure wait failed", "err", err)
+			return fmt.Errorf("disk pressure wait failed: %w", err)
+		}
+	}
 
 	{
 		timer := time.Now()

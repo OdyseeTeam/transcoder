@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/OdyseeTeam/transcoder/encoder"
 	"github.com/OdyseeTeam/transcoder/internal/config"
@@ -14,6 +15,7 @@ import (
 	ldb "github.com/OdyseeTeam/transcoder/library/db"
 	"github.com/OdyseeTeam/transcoder/manager"
 	"github.com/OdyseeTeam/transcoder/pkg/conductor"
+	"github.com/OdyseeTeam/transcoder/pkg/conductor/diskmon"
 	"github.com/OdyseeTeam/transcoder/pkg/conductor/metrics"
 	"github.com/OdyseeTeam/transcoder/pkg/conductor/tasks"
 	"github.com/OdyseeTeam/transcoder/pkg/dispatcher"
@@ -222,11 +224,58 @@ func startWorker() {
 		log.Fatal(err)
 	}
 
-	runner, err := tasks.NewEncoderRunner(
-		storage, enc, tasks.NewResultWriter(redisOpts),
+	runnerOpts := []func(*tasks.EncoderRunnerOptions){
 		tasks.WithLogger(zapadapter.NewKV(log.Desugar())),
 		tasks.WithOutputDir(CLI.Worker.OutputDir),
 		tasks.WithStreamsDir(CLI.Worker.StreamsDir),
+	}
+
+	if cfg.DiskPressure.Enabled {
+		diskCfg := diskmon.Config{
+			Enabled:   true,
+			Path:      cfg.DiskPressure.Path,
+			Threshold: cfg.DiskPressure.Threshold,
+		}
+
+		if diskCfg.Path == "" {
+			diskCfg.Path = CLI.Worker.StreamsDir
+		}
+		if diskCfg.Path == "" {
+			diskCfg.Path = os.TempDir()
+			log.Infow("disk pressure path not configured, using OS temp directory", "path", diskCfg.Path)
+		}
+
+		if diskCfg.Threshold <= 0 || diskCfg.Threshold > 100 {
+			diskCfg.Threshold = 90
+		}
+
+		var checkInterval time.Duration
+		var parseErr error
+		checkInterval, parseErr = time.ParseDuration(cfg.DiskPressure.CheckInterval)
+		if parseErr != nil || checkInterval <= 0 {
+			checkInterval = 10 * time.Second
+		}
+		diskCfg.CheckInterval = checkInterval
+
+		var maxWait time.Duration
+		maxWait, parseErr = time.ParseDuration(cfg.DiskPressure.MaxWait)
+		if parseErr != nil || maxWait <= 0 {
+			maxWait = 5 * time.Minute
+		}
+		diskCfg.MaxWait = maxWait
+
+		log.Infow("disk pressure protection enabled",
+			"path", diskCfg.Path,
+			"threshold", diskCfg.Threshold,
+			"check_interval", diskCfg.CheckInterval,
+			"max_wait", diskCfg.MaxWait,
+		)
+		runnerOpts = append(runnerOpts, tasks.WithDiskPressure(diskCfg))
+	}
+
+	runner, err := tasks.NewEncoderRunner(
+		storage, enc, tasks.NewResultWriter(redisOpts),
+		runnerOpts...,
 	)
 	if err != nil {
 		log.Fatal(err)

@@ -18,9 +18,18 @@ type ConductorConfig struct {
 }
 
 type WorkerConfig struct {
-	Storage   S3Config
-	Redis     string
-	EdgeToken string
+	Storage      S3Config
+	Redis        string
+	EdgeToken    string
+	DiskPressure DiskPressure
+}
+
+type DiskPressure struct {
+	Enabled       bool
+	Path          string
+	Threshold     int
+	CheckInterval string
+	MaxWait       string
 }
 
 type S3Config struct {

@@ -36,6 +36,7 @@ require (
 	github.com/valyala/fasthttp v1.68.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.27.1
+	golang.org/x/sys v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 	logur.dev/logur v0.17.0
 )
@@ -162,7 +163,6 @@ require (
 	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect

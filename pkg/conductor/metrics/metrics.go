@@ -56,6 +56,19 @@ var (
 	ErrorsCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "errors_count",
 	}, []string{LabelStage})
+
+	DiskUsagePercent = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "transcoder_worker_disk_usage_percent",
+		Help: "Current disk usage percentage on the monitored path",
+	})
+	DiskWaitTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "transcoder_worker_disk_wait_total",
+		Help: "Number of times a job had to wait for disk space",
+	})
+	DiskWaitTimeoutTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "transcoder_worker_disk_wait_timeout_total",
+		Help: "Number of times disk wait timed out",
+	})
 )
 
 func RegisterConductorMetrics() {
@@ -72,6 +85,7 @@ func RegisterWorkerMetrics() {
 			SpentSeconds, StageRunning,
 			InputBytes, OutputBytes,
 			ErrorsCount,
+			DiskUsagePercent, DiskWaitTotal, DiskWaitTimeoutTotal,
 		)
 	})
 }
