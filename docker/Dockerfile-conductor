@@ -1,4 +1,4 @@
-FROM alpine:3.21
+FROM alpine:3.23
 EXPOSE 8080
 
 RUN apk add --no-cache libc6-compat

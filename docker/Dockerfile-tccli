@@ -2,7 +2,7 @@
 
 # FROM odyseeteam/transcoder-gensprite:latest AS spritegen
 
-FROM alpine:3.21 AS gather
+FROM alpine:3.23 AS gather
 
 WORKDIR /build
 
@@ -11,7 +11,7 @@ RUN tar -xf ffmpeg-git-arm64-static.tar.xz && mv ffmpeg-*-static/ffmpeg ffmpeg-*
 
 RUN chmod a+x ffmpeg ffprobe
 
-FROM alpine:3.21 AS build
+FROM alpine:3.23 AS build
 
 EXPOSE 8080
 

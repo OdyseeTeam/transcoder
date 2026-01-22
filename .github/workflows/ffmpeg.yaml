@@ -1,0 +1,33 @@
+name: FFmpeg Image
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'docker/Dockerfile-ffmpeg'
+
+jobs:
+  build-and-push:
+    name: Build and push ffmpeg image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ffmpeg
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile-ffmpeg
+          platforms: linux/amd64
+          push: true
+          tags: odyseeteam/transcoder-ffmpeg:git
