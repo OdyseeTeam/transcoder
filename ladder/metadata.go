@@ -17,6 +17,7 @@ type Metadata struct {
 	FastStart   bool
 	VideoStream transcoder.Streams
 	AudioStream transcoder.Streams
+	HasAudio    bool
 }
 
 type FPS struct {
@@ -35,11 +36,12 @@ func WrapMeta(fmeta *ffmpeg.Metadata) (*Metadata, error) {
 		return nil, errors.New("no video stream found")
 	}
 	m.VideoStream = vs
-	as := m.videoStream()
-	if as == nil {
-		return nil, errors.New("no audio stream found")
+
+	as := m.audioStream()
+	if as != nil {
+		m.AudioStream = as
+		m.HasAudio = true
 	}
-	m.AudioStream = as
 
 	f, err := m.determineFramerate()
 	if err != nil {
@@ -54,7 +56,7 @@ func (m *Metadata) videoStream() transcoder.Streams {
 	return GetVideoStream(m.FMeta)
 }
 
-func (m *Metadata) audioStream() transcoder.Streams { // nolint:unused
+func (m *Metadata) audioStream() transcoder.Streams {
 	for _, s := range m.FMeta.GetStreams() {
 		if s.GetCodecType() == "audio" {
 			return s

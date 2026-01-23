@@ -32,9 +32,6 @@ var hlsDefaultArguments = map[string]string{
 	"sc_threshold":         "0",
 	"c:v":                  "libx264",
 	"pix_fmt":              "yuv420p",
-	"c:a":                  "aac",
-	"ac":                   "2",
-	"ar":                   "44100",
 	"f":                    "hls",
 	"hls_time":             hlsTime,
 	"hls_playlist_type":    "vod",
@@ -44,7 +41,13 @@ var hlsDefaultArguments = map[string]string{
 	"hls_segment_filename": "v%v_s%06d.ts",
 }
 
-// GetStrArguments serializes ffmpeg arguments in a format sutable for `ffmpeg.Transcoder.Start“.
+var hlsAudioArguments = map[string]string{
+	"c:a": "aac",
+	"ac":  "2",
+	"ar":  "44100",
+}
+
+// GetStrArguments serializes ffmpeg arguments in a format sutable for `ffmpeg.Transcoder.Start".
 func (a *ArgumentSet) GetStrArguments() []string {
 	strArgs := []string{}
 
@@ -56,9 +59,21 @@ func (a *ArgumentSet) GetStrArguments() []string {
 		args[k] = v
 	}
 
+	if a.Metadata.HasAudio {
+		for k, v := range hlsAudioArguments {
+			if _, exists := args[k]; !exists {
+				args[k] = v
+			}
+		}
+	}
+
 	for n, tier := range a.Ladder.Tiers {
 		s := strconv.Itoa(n)
-		args[argVarStreamMap] += fmt.Sprintf("v:%s,a:%s ", s, s)
+		if a.Metadata.HasAudio {
+			args[argVarStreamMap] += fmt.Sprintf("v:%s,a:%s ", s, s)
+		} else {
+			args[argVarStreamMap] += fmt.Sprintf("v:%s ", s)
+		}
 		vRate := strconv.Itoa(tier.VideoBitrate)
 		ladArgs = append(ladArgs,
 			"-map", "v:0",
@@ -82,7 +97,9 @@ func (a *ArgumentSet) GetStrArguments() []string {
 				"-r:v:"+s, a.Metadata.FPS.String(),
 				"-g:v:"+s, strconv.Itoa(a.Metadata.FPS.Int()*2)) // nolint:goconst
 		}
-		ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
+		if a.Metadata.HasAudio {
+			ladArgs = append(ladArgs, "-map", "a:0", "-b:a:"+s, tier.AudioBitrate)
+		}
 	}
 
 	for k, v := range args {

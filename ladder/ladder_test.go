@@ -262,3 +262,39 @@ func generateMeta(w, h, br int, fr string) ffmpeg.Metadata {
 	}
 	return meta
 }
+
+func generateMetaVideoOnly(w, h, br int, fr string) ffmpeg.Metadata {
+	meta := ffmpeg.Metadata{
+		Format:  ffmpeg.Format{BitRate: strconv.Itoa(br * 1000)},
+		Streams: []ffmpeg.Streams{{CodecType: "video", BitRate: strconv.Itoa(br * 1000), Index: 0, Width: w, Height: h, AvgFrameRate: fr}},
+	}
+	return meta
+}
+
+func TestTweakVideoOnly(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
+	ladder, err := Load(defaultLadderYaml)
+	require.NoError(err)
+
+	meta := generateMetaVideoOnly(640, 360, 5000, "30/1")
+	m, err := WrapMeta(&meta)
+	require.NoError(err)
+	assert.False(m.HasAudio)
+
+	newLadder, err := ladder.Tweak(m)
+	require.NoError(err)
+	require.Equal(2, len(newLadder.Tiers))
+
+	argSet := newLadder.ArgumentSet("/usr/out")
+	args := strings.Join(argSet.GetStrArguments(), " ")
+
+	assert.Contains(args, "-var_stream_map v:0 v:1")
+	assert.Contains(args, "-map v:0 -filter:v:0 scale=-2:360")
+	assert.Contains(args, "-map v:0 -filter:v:1 scale=-2:144")
+	assert.NotContains(args, "-map a:0")
+	assert.NotContains(args, "-c:a aac")
+	assert.NotContains(args, "-ac 2")
+	assert.NotContains(args, "-ar 44100")
+}
